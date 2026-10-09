@@ -15,7 +15,7 @@ La prioridad es **no perder oportunidades ni compromisos** y ahorrar trabajo man
 ## 2. Estado actual y materiales
 
 - Nombre de trabajo: **Asistente Comercial Bético**.
-- Identidad visual elegida: escudo histórico del Real Betis de 1941 y colores indicados por el usuario: Pantone **355 C (verde)**, **131 C (naranja)** y **201 C (rojo)**. Los valores de pantalla son aproximaciones y deben validarse antes de una implementación final.
+- Identidad visual: nueva paleta corporativa naranja, oscura y cálida. Naranja principal `#CB7721`, naranja oscuro `#AD6218`, naranja claro `#F0A24F`, texto oscuro `#231F20`, fondo claro `#FFFFFF`, superficies `#F5F2EE`, fondo oscuro `#171415`, paneles oscuros `#252122`, bordes claros `#DED9D3` y bordes oscuros `#4E4745`. El logo usa `#CB800B`, distinto del naranja de interfaz.
 - Existe un **esquema HTML** de las ocho áreas y sus costes: `asistente-comercial-esquema.html`.
 - Existe un **prototipo navegable HTML/CSS/JS**: `asistente-comercial-betico-prototipo.html`, con información ficticia, filtros/navegación y consultas de IA simuladas.
 - No se ha integrado realmente Gmail, OpenAI ni MySQL. Tampoco se ha implementado la aplicación de producción.
@@ -267,3 +267,6 @@ Más cuentas/usuarios, roles, panel avanzado, integraciones con calendario/Airta
 - `asistente-comercial-esquema.html`: explicación visual de las ocho áreas y los costes.
 - `asistente-comercial-betico-prototipo.html`: boceto de la aplicación en HTML/CSS/JavaScript.
 - `asistente-comercial-betico-proyecto.md`: este documento maestro.
+- `docs/reglas-seguridad-trabajo-con-ia.md`: reglas de trabajo seguro con IA.
+- `docs/agente-asistente-comercial-openai.md`: identidad, instrucciones, límites y herramientas previstas para el agente.
+- `docs/configuracion-cuenta-google-oauth.md`: registro completo de la configuración y prueba de Gmail OAuth.

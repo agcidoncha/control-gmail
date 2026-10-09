@@ -1,0 +1,13 @@
+# Credenciales OAuth y capturas descargadas desde Google Cloud
+OAuth client created/
+
+# Archivos del sistema macOS
+.DS_Store
+
+# Configuración local y compilación
+.env
+.env.*
+!.env.example
+dist/
+node_modules/
+.data/
