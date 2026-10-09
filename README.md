@@ -40,6 +40,8 @@ Aplicación local para ayudar a cada comercial a revisar sus propios correos de 
 
 La configuración detallada de Google está en [`docs/configuracion-cuenta-google-oauth.md`](docs/configuracion-cuenta-google-oauth.md).
 
+La preparación del contenedor y el despliegue futuro en Cloud Run están descritos en [`docs/despliegue-cloud-run.md`](docs/despliegue-cloud-run.md). El contenedor no debe usarse todavía con usuarios reales porque el almacenamiento local de tokens debe migrarse antes a una solución persistente.
+
 ## Arquitectura
 
 La descripción de responsabilidades, privacidad y evolución a producción está en [`docs/arquitectura-backend.md`](docs/arquitectura-backend.md).

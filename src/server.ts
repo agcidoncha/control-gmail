@@ -267,7 +267,8 @@ app.get<{ Querystring: { code?: string; state?: string; error?: string } }>(
 
 export async function startServer() {
   const port = Number(process.env.PORT ?? 3000);
-  await app.listen({ port, host: '127.0.0.1' });
+  const host = process.env.HOST ?? '127.0.0.1';
+  await app.listen({ port, host });
 }
 
 if (process.env.NODE_ENV !== 'test') {
