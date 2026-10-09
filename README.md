@@ -52,7 +52,7 @@ Especificación del agente: [`docs/agente-asistente-comercial-openai.md`](docs/a
 
 ## Antes de producción
 
-- Sustituir los ficheros locales de usuarios y tokens por almacenamiento persistente gestionado y un gestor de secretos.
+- Activar `DATA_STORE=firestore` y usar Secret Manager antes de conectar usuarios reales en remoto.
 - Usar HTTPS y actualizar el redirect URI de Google.
 - Revisar la verificación OAuth y la política de usuarios de prueba.
 - Añadir auditoría de accesos sin guardar contenido de correo en los logs.

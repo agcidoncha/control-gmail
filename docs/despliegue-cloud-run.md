@@ -4,7 +4,7 @@
 
 El proyecto ya tiene un `Dockerfile`, escucha en el puerto proporcionado por `PORT` y puede enlazar con `0.0.0.0`, que es necesario para Cloud Run.
 
-Todavía no está listo para usuarios reales: los usuarios y tokens se guardan en `.data/`, que no debe tratarse como almacenamiento persistente dentro de un contenedor. Antes de producción hay que migrar ese almacenamiento a una base de datos y un gestor de secretos.
+El backend admite `DATA_STORE=firestore` para no depender de `.data/` dentro del contenedor. Para usuarios reales hay que activar Firestore, configurar las credenciales automáticas del servicio y usar Secret Manager para las claves.
 
 ## Construcción local
 
@@ -22,13 +22,13 @@ Para una prueba real, las variables deben introducirse desde el entorno seguro d
 3. Crear un repositorio privado de imágenes.
 4. Construir y publicar la imagen desde Cloud Build.
 5. Desplegar el servicio con `PORT=8080`, `NODE_ENV=production` y `HOST=0.0.0.0`.
-6. Configurar `SESSION_SECRET`, `TOKEN_ENCRYPTION_KEY`, credenciales Google y `OPENAI_API_KEY` mediante Secret Manager.
+6. Configurar `DATA_STORE=firestore`, `GOOGLE_CLOUD_PROJECT`, `SESSION_SECRET`, `TOKEN_ENCRYPTION_KEY`, credenciales Google y `OPENAI_API_KEY` mediante Secret Manager o variables de entorno seguras.
 7. Añadir la URL HTTPS de Cloud Run como redirect URI en Google Auth Platform.
 8. Mantener la aplicación en pruebas hasta completar la verificación OAuth.
 
 ## Bloqueos antes de producción
 
-- Migrar `.data/users.json` y `.data/google-tokens.enc` a almacenamiento persistente.
+- Activar Firestore y conceder al service account de Cloud Run permisos mínimos de lectura/escritura sobre las colecciones necesarias.
 - Definir copias de seguridad y revocación de tokens.
 - Configurar dominio propio y HTTPS.
 - Añadir límites de uso y coste para OpenAI.

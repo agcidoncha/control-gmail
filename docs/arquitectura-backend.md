@@ -40,10 +40,11 @@ El asistente recibe solo el contexto de la cuenta activa y trabaja en modo lectu
 
 ## Estado local y evolución
 
-En local se usan `.data/users.json` y `.data/google-tokens.enc`, ambos ignorados por Git. Para producción deben sustituirse por:
+En local se usan `.data/users.json` y `.data/google-tokens.enc`, ambos ignorados por Git. El backend ya admite `DATA_STORE=firestore` para guardar usuarios y tokens en Firestore; los tokens siguen cifrados individualmente con `TOKEN_ENCRYPTION_KEY`. Para producción deben configurarse:
 
-- Base de datos con usuarios, roles y metadatos.
-- Almacén de secretos o KMS para tokens OAuth.
+- Firestore con usuarios, roles y metadatos.
+- Firestore con tokens cifrados por cuenta.
+- Secret Manager para `TOKEN_ENCRYPTION_KEY` y el resto de secretos.
 - Sesiones persistentes y revocables.
 - Auditoría de accesos sin registrar cuerpos de correo.
 - Límites de uso por usuario y control de costes de OpenAI.
