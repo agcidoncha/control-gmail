@@ -4,6 +4,31 @@ import { loadGoogleTokens, saveGoogleTokens } from './token-store.js';
 
 const gmailScope = 'https://www.googleapis.com/auth/gmail.readonly';
 const pendingStates = new Set<string>();
+const gmailCacheTtlMs = 30_000;
+
+type GmailListMessage = {
+  id: string;
+  threadId: string | null;
+  subject: string;
+  from: string;
+  date: string | null;
+  snippet: string;
+};
+
+type GmailThreadMessage = {
+  id: string | null;
+  threadId: string;
+  subject: string;
+  from: string;
+  to: string;
+  date: string | null;
+  internalDate: number | null;
+  body: string;
+};
+
+type CacheEntry<T> = { expiresAt: number; value: T };
+const messageCache = new Map<string, CacheEntry<GmailListMessage[]>>();
+const threadCache = new Map<string, CacheEntry<GmailThreadMessage[]>>();
 
 function getOAuthClient() {
   const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -15,6 +40,15 @@ function getOAuthClient() {
   }
 
   return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+}
+
+async function getGmailClient(email: string) {
+  const storedTokens = await loadGoogleTokens(email);
+  if (!storedTokens) throw new Error('La cuenta no está conectada.');
+
+  const client = getOAuthClient();
+  client.setCredentials(storedTokens);
+  return google.gmail({ version: 'v1', auth: client });
 }
 
 export function createAuthorizationUrl() {
@@ -57,25 +91,80 @@ export async function completeAuthorization(code: string, state: string) {
 }
 
 export async function listRecentMessages(email: string, maxResults = 10, mailbox: 'inbox' | 'sent' = 'inbox') {
-  const storedTokens = await loadGoogleTokens(email);
-  if (!storedTokens) throw new Error('La cuenta no está conectada.');
+  const cacheKey = `${email.toLowerCase()}:${mailbox}`;
+  const cached = messageCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now() && cached.value.length >= maxResults) {
+    return cached.value.slice(0, maxResults);
+  }
 
-  const client = getOAuthClient();
-  client.setCredentials(storedTokens);
-  const gmail = google.gmail({ version: 'v1', auth: client });
-  return listMessagesForLabel(gmail, mailbox === 'sent' ? 'SENT' : 'INBOX', maxResults);
+  const gmail = await getGmailClient(email);
+  const messages = await listMessagesForLabel(gmail, mailbox === 'sent' ? 'SENT' : 'INBOX', maxResults);
+  messageCache.set(cacheKey, { expiresAt: Date.now() + gmailCacheTtlMs, value: messages });
+  return messages;
+}
+
+export async function listPendingFollowUps(email: string, maxResults = 10) {
+  const gmail = await getGmailClient(email);
+  const sentMessages = await listRecentMessages(email, Math.min(Math.max(maxResults * 2, 10), 20), 'sent');
+  const threadIds = [...new Set(sentMessages.map((message) => message.threadId).filter(Boolean))] as string[];
+  const threads = await Promise.all(threadIds.map((threadId) => getCachedThreadMessages(email, gmail, threadId)));
+  const pending = threads.flatMap((thread) => {
+    const ordered = [...thread].sort((left, right) => messageTimestamp(left) - messageTimestamp(right));
+    const lastMessage = ordered.at(-1);
+    if (!lastMessage || !isMessageFromAccount(lastMessage.from, email)) return [];
+
+    const timestamp = messageTimestamp(lastMessage);
+    if (!timestamp) return [];
+
+    const ageDays = Math.max(0, Math.floor((Date.now() - timestamp) / 86_400_000));
+    return [{
+      threadId: lastMessage.threadId,
+      client: lastMessage.to || '(Destinatario desconocido)',
+      subject: lastMessage.subject,
+      date: lastMessage.date,
+      ageDays,
+      reason: ageDays > 0
+        ? `Último mensaje enviado sin respuesta; han pasado ${ageDays} días.`
+        : 'Último mensaje enviado sin respuesta; se envió hoy.',
+    }];
+  });
+
+  return pending
+    .sort((left, right) => right.ageDays - left.ageDays || left.subject.localeCompare(right.subject))
+    .slice(0, maxResults);
+}
+
+export async function listDetectedCommitments(email: string, maxResults = 10) {
+  const context = await listRecentMailboxContext(email, 10);
+  const seen = new Set<string>();
+  const commitments = context.flatMap((candidate) => candidate.threadMessages.flatMap((message) => {
+    const owner = isMessageFromAccount(message.from, email) ? 'Tú' : message.from;
+    return extractCommitmentSentences(message.body).map((commitment) => {
+      const key = `${message.threadId}:${commitment.toLowerCase()}`;
+      if (seen.has(key)) return null;
+      seen.add(key);
+      return {
+        threadId: message.threadId,
+        owner,
+        subject: message.subject,
+        date: message.date,
+        commitment,
+        status: 'Pendiente de revisión',
+        reason: 'Frase de solicitud, confirmación, envío o plazo detectada en el hilo.',
+      };
+    }).filter((item): item is NonNullable<typeof item> => item !== null);
+  }));
+
+  return commitments
+    .sort((left, right) => messageTimestamp(right) - messageTimestamp(left))
+    .slice(0, maxResults);
 }
 
 export async function listRecentMailboxContext(email: string, maxPerFolder = 5) {
-  const storedTokens = await loadGoogleTokens(email);
-  if (!storedTokens) throw new Error('La cuenta no está conectada.');
-
-  const client = getOAuthClient();
-  client.setCredentials(storedTokens);
-  const gmail = google.gmail({ version: 'v1', auth: client });
+  const gmail = await getGmailClient(email);
   const [inbox, sent] = await Promise.all([
-    listMessagesForLabel(gmail, 'INBOX', maxPerFolder),
-    listMessagesForLabel(gmail, 'SENT', maxPerFolder),
+    listRecentMessages(email, maxPerFolder, 'inbox'),
+    listRecentMessages(email, maxPerFolder, 'sent'),
   ]);
 
   const candidates = [
@@ -85,7 +174,7 @@ export async function listRecentMailboxContext(email: string, maxPerFolder = 5) 
 
   const threadIds = [...new Set(candidates.map((message) => message.threadId).filter(Boolean))] as string[];
   const threadEntries = await Promise.all(
-    threadIds.map(async (threadId) => [threadId, await getThreadMessagesFromGmail(gmail, threadId)] as const),
+    threadIds.map(async (threadId) => [threadId, await getCachedThreadMessages(email, gmail, threadId)] as const),
   );
   const threadsById = new Map(threadEntries);
 
@@ -99,13 +188,18 @@ export async function listRecentMailboxContext(email: string, maxPerFolder = 5) 
 }
 
 export async function getThreadMessages(email: string, threadId: string) {
-  const storedTokens = await loadGoogleTokens(email);
-  if (!storedTokens) throw new Error('La cuenta no está conectada.');
+  const gmail = await getGmailClient(email);
+  return getCachedThreadMessages(email, gmail, threadId);
+}
 
-  const client = getOAuthClient();
-  client.setCredentials(storedTokens);
-  const gmail = google.gmail({ version: 'v1', auth: client });
-  return getThreadMessagesFromGmail(gmail, threadId);
+async function getCachedThreadMessages(email: string, gmail: ReturnType<typeof google.gmail>, threadId: string) {
+  const cacheKey = `${email.toLowerCase()}:${threadId}`;
+  const cached = threadCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+  const messages = await getThreadMessagesFromGmail(gmail, threadId);
+  threadCache.set(cacheKey, { expiresAt: Date.now() + gmailCacheTtlMs, value: messages });
+  return messages;
 }
 
 async function getThreadMessagesFromGmail(gmail: ReturnType<typeof google.gmail>, threadId: string) {
@@ -122,9 +216,32 @@ async function getThreadMessagesFromGmail(gmail: ReturnType<typeof google.gmail>
       from: headers.From || '(Remitente desconocido)',
       to: headers.To || '',
       date: headers.Date || null,
+      internalDate: message.internalDate ? Number(message.internalDate) : null,
       body: cleanEmailBody(extractText(message.payload)),
     };
   });
+}
+
+function isMessageFromAccount(from: string, email: string) {
+  const normalizedEmail = email.toLowerCase();
+  const address = from.match(/<([^>]+)>/)?.[1] ?? from.match(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i)?.[0] ?? from;
+  return address.trim().toLowerCase() === normalizedEmail;
+}
+
+function messageTimestamp(message: { internalDate?: number | null; date?: string | null }) {
+  if (message.internalDate && Number.isFinite(message.internalDate)) return message.internalDate;
+  if (!message.date) return 0;
+  const timestamp = Date.parse(message.date);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function extractCommitmentSentences(body: string) {
+  const commitmentPattern = /\b(?:te\s+enviar(?:é|e|emos)|enviar(?:é|e|emos)|quedo\s+a\s+la\s+espera|confirm(?:ar|ación|ame|es)|necesit(?:o|amos)\s+que|puedes\s+confirmar|avis(?:a|ar|en)|borr(?:ar|e|emos)|revoc(?:ar|ación)|rotar|termin(?:en|ar)|please\s+confirm|will\s+send|waiting\s+for|let\s+me\s+know|need\s+you\s+to|deadline)\b/i;
+  return body
+    .split(/\n+|(?<=[.!?])\s+/)
+    .map((sentence) => sentence.replace(/\s+/g, ' ').trim())
+    .filter((sentence) => sentence.length >= 20 && sentence.length <= 320 && commitmentPattern.test(sentence))
+    .map((sentence) => sentence.slice(0, 280));
 }
 
 type GmailPayload = {
@@ -162,7 +279,7 @@ function cleanPlainText(value: string): string {
 }
 
 function cleanEmailBody(value: string): string {
-  const lines = value
+  const lines = redactSensitiveValues(value)
     .replace(/[\u00ad\u034f\u061c\u180e\u200b-\u200d\u2060\ufeff]/g, '')
     .split('\n')
     .filter((line) => !/^\s*[([\s]*https?:\/\/\S+[)\]]?\s*$/i.test(line))
@@ -177,6 +294,12 @@ function cleanEmailBody(value: string): string {
   return lines.length > maxVisibleCharacters
     ? `${lines.slice(0, maxVisibleCharacters).trim()}\n\n[…contenido del correo recortado…]`
     : lines;
+}
+
+function redactSensitiveValues(value: string): string {
+  return value
+    .replace(/((?:api\s*(?:key|token)|access\s+token|refresh\s+token|password|contraseña|clave(?:\s+api)?)\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTADO]')
+    .replace(/\b(?:cb1|sk|pk)_[A-Za-z0-9_-]{12,}\b/gi, '[REDACTADO]');
 }
 
 function htmlToPlainText(value: string): string {
