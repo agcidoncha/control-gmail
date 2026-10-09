@@ -7,7 +7,7 @@ import { clearSessionCookieHeader, readSession, sessionCookieHeader } from './se
 import { getUser, listUsers, upsertUser } from './user-store.js';
 import { askCommercialAssistant } from './assistant.js';
 
-const app = Fastify({ logger: true });
+export const app = Fastify({ logger: true });
 
 app.get('/brand/logo.svg', async (_request, reply) => {
   return reply.type('image/svg+xml').send(await readFile(resolve('logos/logo-color-simple.svg'), 'utf8'));
@@ -265,9 +265,14 @@ app.get<{ Querystring: { code?: string; state?: string; error?: string } }>(
   },
 );
 
-const port = Number(process.env.PORT ?? 3000);
+export async function startServer() {
+  const port = Number(process.env.PORT ?? 3000);
+  await app.listen({ port, host: '127.0.0.1' });
+}
 
-app.listen({ port, host: '127.0.0.1' }).catch((error) => {
-  app.log.error(error);
-  process.exit(1);
-});
+if (process.env.NODE_ENV !== 'test') {
+  startServer().catch((error) => {
+    app.log.error(error);
+    process.exit(1);
+  });
+}
