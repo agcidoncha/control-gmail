@@ -31,7 +31,7 @@ app.get('/', async (_request, reply) => {
           .app-shell { min-height: 100vh; display: grid; grid-template-columns: 250px minmax(0, 1fr); } .sidebar { position: sticky; top: 0; z-index: 20; display: flex; flex-direction: column; gap: 24px; height: 100vh; max-height: 100vh; overflow-y: auto; align-self: start; padding: 28px 18px 20px; color: #fff; background: var(--dark); } .main { min-width: 0; padding: 0 38px 72px; }
           .brand img { display: block; width: 100%; max-width: 208px; height: auto; margin-bottom: 16px; } .brand strong { display: block; font-size: 15px; line-height: 1.2; } .brand small { display: block; margin-top: 5px; color: #C7BFBB; font-size: 11px; }
           .sidebar-caption { margin: 0; color: #B8AFAB; font-size: 11px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; } .sidebar-nav { display: grid; gap: 5px; }
-          .nav-link { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 12px; border-radius: 10px; color: #E8E1DD; text-decoration: none; font-size: 14px; font-weight: 700; transition: background .15s ease, color .15s ease; } .nav-link:hover, .nav-link:focus-visible, .nav-link.active { color: #fff; background: rgba(240, 162, 79, .18); outline: none; } .nav-link b { min-width: 22px; padding: 2px 6px; border-radius: 999px; color: #fff; background: var(--orange); font-size: 11px; text-align: center; }
+          .nav-link { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 12px; border-radius: 10px; color: #E8E1DD; text-decoration: none; font-size: 14px; font-weight: 700; transition: background .15s ease, color .15s ease; } .nav-link > span:first-child { display: inline-flex; align-items: center; min-width: 0; } .nav-link:hover, .nav-link:focus-visible, .nav-link.active { color: #fff; background: rgba(240, 162, 79, .18); outline: none; } .nav-icon { width: 22px; margin-right: 8px; color: var(--orange-light); font-size: 17px; line-height: 1; text-align: center; } .nav-link b { min-width: 22px; padding: 2px 6px; border-radius: 999px; color: #fff; background: var(--orange); font-size: 11px; text-align: center; }
           .sidebar-footer { margin-top: auto; padding-top: 18px; border-top: 1px solid #4E4745; color: #B8AFAB; font-size: 12px; } .connection-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: #7EBF8B; }
           .topbar { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 30px 0 24px; border-bottom: 1px solid var(--border); } .eyebrow { margin: 0 0 6px; color: var(--orange-dark); font-size: 11px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; } h1, h2, h3, p { margin-top: 0; } h1 { margin-bottom: 6px; font-size: clamp(27px, 4vw, 40px); letter-spacing: -.04em; line-height: 1.05; } h2 { margin-bottom: 5px; font-size: 19px; letter-spacing: -.015em; } h3 { font-size: 14px; }
           .top-subtitle, .muted { color: var(--muted); } .top-actions { display: flex; align-items: center; gap: 12px; } .account-chip { max-width: 280px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px; color: var(--muted); background: var(--panel); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -57,12 +57,13 @@ app.get('/', async (_request, reply) => {
             <div class="brand"><img src="/brand/logo-white.svg" alt="Publicidad Segmentada TV"></div>
             <p class="sidebar-caption">Espacio comercial</p>
             <nav class="sidebar-nav" aria-label="Secciones principales">
-              <a class="nav-link active" href="#dashboard">Panel general</a>
-              <a class="nav-link" href="#mailboxSection">Bandeja comercial <b id="navMessageCount">10</b></a>
-              <a class="nav-link" href="#followUpsSection">Seguimientos <b id="navFollowUpCount">—</b></a>
-              <a class="nav-link" href="#commitmentsSection">Compromisos <b id="navCommitmentCount">—</b></a>
-              <a class="nav-link" href="#assistantSection">Consultar a la IA</a>
-              <a class="nav-link" href="#accountSection">Cuenta y permisos</a>
+              <a class="nav-link active" href="#dashboard"><span><span class="nav-icon" aria-hidden="true">⌂</span>Panel general</span></a>
+              <a class="nav-link" href="#mailboxSection"><span><span class="nav-icon" aria-hidden="true">✉</span>Bandeja comercial</span> <b id="navMessageCount">10</b></a>
+              <a class="nav-link" href="#followUpsSection"><span><span class="nav-icon" aria-hidden="true">◷</span>Seguimientos</span> <b id="navFollowUpCount">—</b></a>
+              <a class="nav-link" href="#commitmentsSection"><span><span class="nav-icon" aria-hidden="true">☑</span>Compromisos</span> <b id="navCommitmentCount">—</b></a>
+              <a class="nav-link" href="#clientsSection"><span><span class="nav-icon" aria-hidden="true">♙</span>Clientes</span></a>
+              <a class="nav-link" href="#reportsSection"><span><span class="nav-icon" aria-hidden="true">▤</span>Informes</span></a>
+              <a class="nav-link" href="#assistantSection"><span><span class="nav-icon" aria-hidden="true">✦</span>Consultar a la IA</span></a>
             </nav>
             <div class="sidebar-footer"><span class="connection-dot"></span> Gmail · modo lectura<br><small>Datos de la cuenta activa</small></div>
           </aside>
@@ -80,6 +81,8 @@ app.get('/', async (_request, reply) => {
               </div>
               <section id="followUpsSection" class="card section-card"><div class="card-header"><div><h2>Seguimientos pendientes</h2><p>Mensajes enviados sin una respuesta posterior, agrupados por hilo.</p></div><span id="followUpCount" class="muted"></span></div><div id="followUps" class="follow-ups-list">Cargando seguimientos…</div><button id="followUpMoreButton" class="list-toggle hidden" type="button"></button></section>
               <section id="commitmentsSection" class="card section-card"><div class="card-header"><div><h2>Compromisos detectados</h2><p>Posibles tareas identificadas en conversaciones; siempre requieren revisión.</p></div><span id="commitmentCount" class="muted"></span></div><div id="commitments" class="follow-ups-list">Cargando compromisos…</div><button id="commitmentMoreButton" class="list-toggle hidden" type="button"></button></section>
+              <details id="clientsSection" class="card section-card details-card"><summary><div><h2>Clientes</h2><p>Contactos detectados en los mensajes de la cuenta activa.</p></div></summary><div id="clients" class="details-content">Cargando clientes…</div></details>
+              <details id="reportsSection" class="card section-card details-card"><summary><div><h2>Informes</h2><p>Resumen de actividad con los datos cargados en esta sesión.</p></div></summary><div id="reports" class="details-content">Cargando informe…</div></details>
               <details id="accountSection" class="card section-card details-card"><summary><div><h2>Tu cuenta</h2><p>Identidad y permisos de la sesión actual.</p></div></summary><div class="details-content"><p id="account" class="status">Cargando…</p><p id="role" class="status"></p><p class="muted">Solo tú puedes consultar los mensajes de esta sesión.</p></div></details>
               <details id="adminPanel" class="card admin-panel details-card hidden"><summary><div><h2>Administración</h2><p>Gestión de usuarios y roles. El contenido de los correos no aparece aquí.</p></div></summary><div id="users" class="details-content">Cargando usuarios…</div></details>
             </div>
@@ -106,13 +109,58 @@ app.get('/', async (_request, reply) => {
           const commitmentCount = document.querySelector('#commitmentCount');
           const navCommitmentCount = document.querySelector('#navCommitmentCount');
           const commitmentMoreButton = document.querySelector('#commitmentMoreButton');
+          const clientsNode = document.querySelector('#clients');
+          const reportsNode = document.querySelector('#reports');
           let loadedMessages = [];
           let loadedFollowUps = [];
           let loadedCommitments = [];
+          let activeAccountEmail = '';
           let showAllMessages = false;
           let showAllFollowUps = false;
           let showAllCommitments = false;
           let messageFilter = 'all';
+          function extractEmail(value) {
+            return value?.match(/<([^>]+)>/)?.[1] || value?.match(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i)?.[0] || value || 'Remitente desconocido';
+          }
+          function renderClients() {
+            clientsNode.replaceChildren();
+            const clients = new Map();
+            loadedMessages.forEach((message) => {
+              const email = extractEmail(message.from);
+              if (!email || email.toLowerCase() === activeAccountEmail) return;
+              const current = clients.get(email.toLowerCase()) || { email, count: 0, latest: message.date || '' };
+              current.count += 1;
+              if (message.date && (!current.latest || new Date(message.date) > new Date(current.latest))) current.latest = message.date;
+              clients.set(email.toLowerCase(), current);
+            });
+            if (!clients.size) {
+              clientsNode.append(makeTextElement('p', 'No hay clientes detectados en los mensajes cargados.', 'muted'));
+              return;
+            }
+            [...clients.values()].sort((left, right) => right.count - left.count).forEach((client) => {
+              const row = document.createElement('div');
+              row.className = 'user-row';
+              row.append(makeTextElement('strong', client.email));
+              row.append(makeTextElement('span', client.count + (client.count === 1 ? ' mensaje' : ' mensajes') + ' · último ' + formatMessageDate(client.latest), 'muted'));
+              clientsNode.append(row);
+            });
+          }
+          function renderReports() {
+            reportsNode.replaceChildren();
+            const values = [
+              ['Mensajes cargados', loadedMessages.length],
+              ['Seguimientos pendientes', loadedFollowUps.length],
+              ['Compromisos para revisar', loadedCommitments.length],
+            ];
+            values.forEach(([label, value]) => {
+              const row = document.createElement('div');
+              row.className = 'user-row';
+              row.append(makeTextElement('span', label));
+              row.append(makeTextElement('strong', value));
+              reportsNode.append(row);
+            });
+            reportsNode.append(makeTextElement('p', 'Este resumen refleja únicamente los datos cargados de la cuenta activa en esta sesión.', 'muted'));
+          }
           async function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -133,7 +181,15 @@ app.get('/', async (_request, reply) => {
             const filtered = loadedMessages.filter((message) => matchesFilter(message) && (!query || [message.subject, message.from, message.snippet].join(' ').toLowerCase().includes(query)));
             const visible = showAllMessages ? filtered : filtered.slice(0, 5);
             messageCount.textContent = visible.length + ' de ' + loadedMessages.length;
-            if (!filtered.length) { messagesNode.textContent = query ? 'No hay mensajes que coincidan.' : 'No hay mensajes en la bandeja.'; messageMoreButton.classList.add('hidden'); return; }
+            if (!filtered.length) {
+              messagesNode.textContent = query ? 'No hay mensajes que coincidan.' : 'No hay mensajes en la bandeja.';
+              messageMoreButton.classList.add('hidden');
+              document.querySelector('#navMessageCount').textContent = String(loadedMessages.length);
+              document.querySelector('#statMessageCount').textContent = String(loadedMessages.length);
+              renderClients();
+              renderReports();
+              return;
+            }
             messagesNode.replaceChildren();
             visible.forEach((message) => {
               const article = document.createElement('article');
@@ -156,6 +212,8 @@ app.get('/', async (_request, reply) => {
             messageMoreButton.textContent = showAllMessages ? 'Mostrar menos' : 'Mostrar ' + (filtered.length - 5) + ' más';
             document.querySelector('#navMessageCount').textContent = String(loadedMessages.length);
             document.querySelector('#statMessageCount').textContent = String(loadedMessages.length);
+            renderClients();
+            renderReports();
           }
           async function loadMessages() {
             messagesNode.textContent = 'Cargando mensajes…';
@@ -194,6 +252,7 @@ app.get('/', async (_request, reply) => {
             });
             followUpMoreButton.classList.toggle('hidden', items.length <= 3);
             followUpMoreButton.textContent = showAllFollowUps ? 'Mostrar menos' : 'Mostrar ' + (items.length - 3) + ' más';
+            renderReports();
             if (messageFilter !== 'all') renderMessages();
           }
           async function loadFollowUps() {
@@ -227,6 +286,7 @@ app.get('/', async (_request, reply) => {
             });
             commitmentMoreButton.classList.toggle('hidden', items.length <= 3);
             commitmentMoreButton.textContent = showAllCommitments ? 'Mostrar menos' : 'Mostrar ' + (items.length - 3) + ' más';
+            renderReports();
             if (messageFilter !== 'all') renderMessages();
           }
           async function loadCommitments() {
@@ -250,6 +310,7 @@ app.get('/', async (_request, reply) => {
               const account = await response.json();
               if (!response.ok) { accountNode.innerHTML = '<a href="/auth/google">Conecta tu cuenta de Gmail</a>'; roleNode.textContent = ''; messagesNode.textContent = 'Necesitas iniciar sesión para ver tus mensajes.'; return; }
               accountNode.textContent = account.email;
+              activeAccountEmail = account.email.toLowerCase();
               document.querySelector('#accountChip').textContent = account.email;
               roleNode.textContent = account.role === 'admin' ? 'Rol: Administrador' : 'Rol: Comercial';
               document.querySelector('#statRole').textContent = account.role === 'admin' ? 'Admin' : 'Comercial';
