@@ -34,12 +34,12 @@ app.get('/', async (_request, reply) => {
           .status { color: var(--orange-dark); font-weight: 800; font-size: 18px; } .card > .muted { max-width: 70ch; }
           .message { padding: 18px 0; border-bottom: 1px solid var(--border); } .message:last-child { border-bottom: 0; }
           .message strong { display: block; margin-bottom: 4px; } .message small { color: var(--muted); display: block; margin-bottom: 7px; }
-          .message p { margin: 0; color: #4E4745; } #messages { margin-top: 10px; } .message:hover { background: linear-gradient(90deg, rgba(245, 242, 238, .75), transparent); }
+          .message p { margin: 0; color: #4E4745; white-space: pre-wrap; } #messages { margin-top: 10px; } .message:hover { background: linear-gradient(90deg, rgba(245, 242, 238, .75), transparent); }
           .message-tools { display: flex; align-items: center; gap: 12px; margin-top: 16px; } .message-tools input { flex: 1; min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; background: #fff; }
           .message-tools input:focus, textarea:focus, select:focus { outline: 3px solid rgba(240, 162, 79, .35); border-color: var(--orange-light); }
-          .answer h3 { margin: 18px 0 7px; font-size: 15px; } .answer ul { margin: 7px 0 0; padding-left: 20px; } .answer li { margin: 7px 0; } .answer small { color: var(--muted); } .review-warning { color: var(--orange-dark); font-weight: 800; }
+          .answer h3 { margin: 18px 0 7px; font-size: 15px; } .answer ul { margin: 7px 0 0; padding-left: 20px; } .answer li { margin: 7px 0; } .answer small { color: var(--muted); } .answer li small { display: block; margin-top: 3px; } .review-warning { color: var(--orange-dark); font-weight: 800; }
           select { min-width: 150px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; } .message-tools select { margin-top: 0; }
-          .hidden { display: none; } .user-row { display: flex; justify-content: space-between; gap: 16px; padding: 13px 0; border-bottom: 1px solid var(--border); } .user-row:last-child { border-bottom: 0; } .role { color: var(--orange-dark); font-weight: 800; }
+          .hidden { display: none; } #threadViewer { scroll-margin-top: 18px; } .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; } .secondary-button { background: var(--warm); color: var(--orange-dark); border: 1px solid var(--border); font-size: 13px; } .secondary-button:hover, .secondary-button:focus-visible { background: var(--orange-light); color: var(--ink); } .user-row { display: flex; justify-content: space-between; gap: 16px; padding: 13px 0; border-bottom: 1px solid var(--border); } .user-row:last-child { border-bottom: 0; } .role { color: var(--orange-dark); font-weight: 800; }
           textarea { width: 100%; min-height: 110px; margin-top: 12px; padding: 13px; border: 1px solid var(--border); border-radius: 10px; resize: vertical; font: inherit; background: #fff; } form { margin-top: 4px; } .answer { margin-top: 16px; padding: 18px; background: var(--warm); border: 1px solid var(--border); border-left: 4px solid var(--orange); border-radius: 12px; }
           .thread-button { margin-top: 12px; padding: 7px 11px; font-size: 13px; background: #252122; } .thread-button:hover, .thread-button:focus-visible { background: #171415; }
           @media (max-width: 640px) { body { padding: 18px 14px 48px; } header { align-items: flex-start; flex-direction: column; padding-bottom: 20px; } .brand { align-items: flex-start; flex-direction: column; gap: 10px; } .brand img { width: 150px; } header a { width: 100%; } .card { padding: 18px; border-radius: 14px; } .message-tools { align-items: stretch; flex-direction: column; } .message-tools select { width: 100%; } .message-tools input { width: 100%; } }
@@ -53,18 +53,22 @@ app.get('/', async (_request, reply) => {
         <section class="card"><h2>Tu cuenta</h2><p id="account" class="status">Cargando…</p><p id="role" class="status"></p><p class="muted">Solo tú puedes consultar los mensajes de esta sesión.</p></section>
         <section id="adminPanel" class="card hidden"><h2>Administración</h2><p class="muted">Gestión de usuarios y roles. El contenido de los correos no aparece aquí.</p><div id="users">Cargando usuarios…</div></section>
         <section class="card"><h2>Últimos correos</h2><div class="message-tools"><select id="messageMailbox" aria-label="Tipo de mensajes"><option value="inbox">Recibidos</option><option value="sent">Enviados</option></select><input id="messageSearch" type="search" placeholder="Buscar por asunto, remitente o contenido"><span id="messageCount" class="muted"></span></div><div id="messages" class="muted">Cargando mensajes…</div></section>
-        <section id="threadViewer" class="card hidden"><h2>Hilo completo</h2><div id="threadDetails"></div></section>
+        <section id="threadViewer" class="card hidden"><div class="section-heading"><h2>Hilo completo</h2><button id="closeThread" class="secondary-button" type="button">Cerrar hilo</button></div><div id="threadDetails"></div></section>
         <section class="card"><h2>Consultar al asistente</h2><p class="muted">El asistente analizará solo los mensajes de tu cuenta activa. No envía ni modifica correos.</p><form id="assistantForm"><textarea id="question" placeholder="Ejemplo: ¿Qué seguimientos pendientes detectas?"></textarea><button type="submit">Analizar correos</button></form><div id="assistantAnswer" class="answer hidden"></div></section>
         <script>
-          const escapeHtml = (value) => {
-            let text = String(value ?? '');
-            for (let pass = 0; pass < 2; pass += 1) text = text.replace(/&(amp|lt|gt|quot|#39|#x27);/g, (_, entity) => ({amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", '#x27': "'"}[entity]));
-            return text.replace(/[&<>"']/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
+          const makeTextElement = (tag, value, className = '') => {
+            const node = document.createElement(tag);
+            if (className) node.className = className;
+            node.textContent = String(value ?? '');
+            return node;
           };
           const messagesNode = document.querySelector('#messages');
           const messageMailbox = document.querySelector('#messageMailbox');
           const messageSearch = document.querySelector('#messageSearch');
           const messageCount = document.querySelector('#messageCount');
+          const threadViewer = document.querySelector('#threadViewer');
+          const threadDetails = document.querySelector('#threadDetails');
+          let threadReturnY = 0;
           let loadedMessages = [];
           async function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
             const controller = new AbortController();
@@ -78,7 +82,19 @@ app.get('/', async (_request, reply) => {
             const filtered = loadedMessages.filter((message) => !query || [message.subject, message.from, message.snippet].join(' ').toLowerCase().includes(query));
             messageCount.textContent = filtered.length + ' de ' + loadedMessages.length;
             if (!filtered.length) { messagesNode.textContent = query ? 'No hay mensajes que coincidan.' : 'No hay mensajes en la bandeja.'; return; }
-            messagesNode.innerHTML = filtered.map((message) => '<article class="message"><strong>' + escapeHtml(message.subject) + '</strong><small>' + escapeHtml(message.from) + ' · ' + escapeHtml(message.date) + '</small><p>' + escapeHtml(message.snippet) + '</p><button class="thread-button" data-thread-id="' + escapeHtml(message.threadId) + '">Ver hilo completo</button></article>').join('');
+            messagesNode.replaceChildren();
+            filtered.forEach((message) => {
+              const article = document.createElement('article');
+              article.className = 'message';
+              article.append(makeTextElement('strong', message.subject));
+              article.append(makeTextElement('small', message.from + ' · ' + (message.date || '')));
+              article.append(makeTextElement('p', message.snippet));
+              const button = makeTextElement('button', 'Ver hilo completo');
+              button.className = 'thread-button';
+              button.dataset.threadId = message.threadId || '';
+              article.append(button);
+              messagesNode.append(article);
+            });
           }
           async function loadMessages() {
             messagesNode.textContent = 'Cargando mensajes…';
@@ -104,7 +120,14 @@ app.get('/', async (_request, reply) => {
                 adminPanel.classList.remove('hidden');
                 const usersResponse = await fetchWithTimeout('/admin/users');
                 const usersResult = await usersResponse.json();
-                usersNode.innerHTML = usersResult.users.map((user) => '<div class="user-row"><span>' + escapeHtml(user.email) + '</span><span class="role">' + (user.role === 'admin' ? 'Administrador' : 'Comercial') + '</span></div>').join('');
+                usersNode.replaceChildren();
+                usersResult.users.forEach((user) => {
+                  const row = document.createElement('div');
+                  row.className = 'user-row';
+                  row.append(makeTextElement('span', user.email));
+                  row.append(makeTextElement('span', user.role === 'admin' ? 'Administrador' : 'Comercial', 'role'));
+                  usersNode.append(row);
+                });
               }
               await loadMessages();
             } catch (error) { accountNode.textContent = 'No se pudo cargar la cuenta'; messagesNode.textContent = error.message; }
@@ -114,18 +137,31 @@ app.get('/', async (_request, reply) => {
           document.querySelector('#messages').addEventListener('click', async (event) => {
             const button = event.target.closest('[data-thread-id]');
             if (!button) return;
-            const viewer = document.querySelector('#threadViewer');
-            const details = document.querySelector('#threadDetails');
-            viewer.classList.remove('hidden');
-            details.textContent = 'Cargando hilo…';
+            threadReturnY = window.scrollY;
+            threadViewer.classList.remove('hidden');
+            threadDetails.textContent = 'Cargando hilo…';
+            threadViewer.scrollIntoView({ behavior: 'smooth', block: 'start' });
             try {
               const response = await fetchWithTimeout('/gmail/threads/' + encodeURIComponent(button.dataset.threadId));
               const result = await response.json();
               if (!response.ok) throw new Error(result.error || 'No se pudo cargar el hilo.');
-              details.innerHTML = result.messages.map((message) => '<article class="message"><strong>' + escapeHtml(message.subject) + '</strong><small>' + escapeHtml(message.from) + ' → ' + escapeHtml(message.to) + ' · ' + escapeHtml(message.date) + '</small><p>' + escapeHtml(message.body) + '</p></article>').join('');
+              threadDetails.replaceChildren();
+              result.messages.forEach((message) => {
+                const article = document.createElement('article');
+                article.className = 'message';
+                article.append(makeTextElement('strong', message.subject));
+                article.append(makeTextElement('small', message.from + ' → ' + message.to + ' · ' + (message.date || '')));
+                article.append(makeTextElement('p', message.body));
+                threadDetails.append(article);
+              });
             } catch (error) {
-              details.textContent = 'Error: ' + error.message;
+              threadDetails.textContent = 'Error: ' + error.message;
             }
+          });
+          document.querySelector('#closeThread').addEventListener('click', () => {
+            threadViewer.classList.add('hidden');
+            threadDetails.textContent = '';
+            window.scrollTo({ top: threadReturnY, behavior: 'smooth' });
           });
           document.querySelector('#assistantForm').addEventListener('submit', async (event) => {
             event.preventDefault();
@@ -141,9 +177,39 @@ app.get('/', async (_request, reply) => {
               const result = await response.json();
               if (!response.ok) throw new Error(result.error || 'No se pudo consultar al asistente.');
               const analysis = result.analysis;
-              const renderList = (title, items) => items?.length ? '<section><h3>' + title + '</h3><ul>' + items.map((item) => '<li>' + escapeHtml(item) + '</li>').join('') + '</ul></section>' : '';
-              const sources = (analysis.fuentes || []).length ? '<section><h3>Fuentes</h3><ul>' + analysis.fuentes.map((source) => '<li><strong>' + escapeHtml(source.asunto || source.mensaje_id) + '</strong><br><small>' + escapeHtml(source.motivo) + '</small></li>').join('') + '</ul></section>' : '';
-              answerNode.innerHTML = '<p>' + escapeHtml(analysis.respuesta) + '</p>' + renderList('Hechos', analysis.hechos) + renderList('Inferencias', analysis.inferencias) + renderList('Acciones propuestas', analysis.acciones_propuestas) + sources + (analysis.requiere_revision ? '<p class="review-warning">⚠ Requiere revisión humana</p>' : '');
+              answerNode.replaceChildren();
+              const addText = (parent, tag, value, className = '') => {
+                const node = makeTextElement(tag, value, className);
+                parent.append(node);
+                return node;
+              };
+              const renderList = (title, items) => {
+                if (!items?.length) return;
+                const section = document.createElement('section');
+                addText(section, 'h3', title);
+                const list = document.createElement('ul');
+                items.forEach((item) => addText(list, 'li', item));
+                section.append(list);
+                answerNode.append(section);
+              };
+              addText(answerNode, 'p', analysis.respuesta);
+              renderList('Hechos', analysis.hechos);
+              renderList('Inferencias', analysis.inferencias);
+              renderList('Acciones propuestas', analysis.acciones_propuestas);
+              if (analysis.fuentes?.length) {
+                const section = document.createElement('section');
+                addText(section, 'h3', 'Fuentes');
+                const list = document.createElement('ul');
+                analysis.fuentes.forEach((source) => {
+                  const item = document.createElement('li');
+                  addText(item, 'strong', source.asunto || source.mensaje_id);
+                  addText(item, 'small', source.motivo);
+                  list.append(item);
+                });
+                section.append(list);
+                answerNode.append(section);
+              }
+              if (analysis.requiere_revision) addText(answerNode, 'p', '⚠ Requiere revisión humana', 'review-warning');
             } catch (error) { answerNode.textContent = 'Error: ' + error.message; }
             finally { if (submitButton) submitButton.disabled = false; }
           });

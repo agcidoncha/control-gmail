@@ -122,18 +122,96 @@ async function getThreadMessagesFromGmail(gmail: ReturnType<typeof google.gmail>
       from: headers.From || '(Remitente desconocido)',
       to: headers.To || '',
       date: headers.Date || null,
-      body: extractText(message.payload),
+      body: cleanEmailBody(extractText(message.payload)),
     };
   });
 }
 
-function extractText(payload: { mimeType?: string | null; body?: { data?: string | null } | null; parts?: unknown[] | null } | null | undefined): string {
-  if (!payload) return '';
-  if (payload.body?.data) return Buffer.from(payload.body.data, 'base64url').toString('utf8');
+type GmailPayload = {
+  mimeType?: string | null;
+  body?: { data?: string | null } | null;
+  parts?: unknown[] | null;
+};
 
-  const parts = (payload.parts ?? []) as Array<Parameters<typeof extractText>[0]>;
-  const texts = parts.map((part) => extractText(part)).filter(Boolean);
-  return texts.join('\n\n');
+function extractText(payload: GmailPayload | null | undefined): string {
+  if (!payload) return '';
+
+  const parts = (payload.parts ?? []) as GmailPayload[];
+  const plainParts = parts.filter((part) => part.mimeType === 'text/plain');
+  const nestedPlainText = plainParts.map(readPayloadData).filter(Boolean).join('\n\n');
+  if (nestedPlainText) return cleanPlainText(nestedPlainText);
+
+  if (payload.mimeType === 'text/plain') return cleanPlainText(readPayloadData(payload));
+
+  const nestedText = parts.map(extractText).filter(Boolean).join('\n\n');
+  if (nestedText) return nestedText;
+
+  if (payload.mimeType === 'text/html') return htmlToPlainText(readPayloadData(payload));
+  return cleanPlainText(readPayloadData(payload));
+}
+
+function readPayloadData(payload: GmailPayload): string {
+  return payload.body?.data ? Buffer.from(payload.body.data, 'base64url').toString('utf8') : '';
+}
+
+function cleanPlainText(value: string): string {
+  const decoded = decodeHtmlEntities(value).replace(/\r\n?/g, '\n').trim();
+  return /<\s*(?:!doctype|html|head|body|table|style|script|div|p|br)\b/i.test(decoded)
+    ? htmlToPlainText(decoded)
+    : decoded;
+}
+
+function cleanEmailBody(value: string): string {
+  const lines = value
+    .replace(/[\u00ad\u034f\u061c\u180e\u200b-\u200d\u2060\ufeff]/g, '')
+    .split('\n')
+    .filter((line) => !/^\s*[([\s]*https?:\/\/\S+[)\]]?\s*$/i.test(line))
+    .map((line) => line.replace(/https?:\/\/\S+/gi, '').replace(/\s+$/g, '').trim())
+    .filter((line, index, all) => line || all[index - 1] !== '')
+    .join('\n')
+    .replace(/\(\s*\)/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  const maxVisibleCharacters = 8000;
+  return lines.length > maxVisibleCharacters
+    ? `${lines.slice(0, maxVisibleCharacters).trim()}\n\n[…contenido del correo recortado…]`
+    : lines;
+}
+
+function htmlToPlainText(value: string): string {
+  return decodeHtmlEntities(value)
+    .replace(/<\/?(?:script|style|noscript|template|head)[^>]*>[\s\S]*?<\/?(?:script|style|noscript|template|head)\s*>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:p|div|section|article|header|footer|h[1-6]|li|tr|blockquote)>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '• ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function decodeHtmlEntities(value: string): string {
+  const namedEntities: Record<string, string> = {
+    amp: '&', apos: "'", aacute: 'á', eacute: 'é', iacute: 'í', oacute: 'ó', uacute: 'ú',
+    Aacute: 'Á', Eacute: 'É', Iacute: 'Í', Oacute: 'Ó', Uacute: 'Ú', ntilde: 'ñ', Ntilde: 'Ñ',
+    auml: 'ä', euml: 'ë', iuml: 'ï', ouml: 'ö', uuml: 'ü', Auml: 'Ä', Euml: 'Ë', Iuml: 'Ï', Ouml: 'Ö', Uuml: 'Ü',
+    agrave: 'à', egrave: 'è', igrave: 'ì', ograve: 'ò', ugrave: 'ù', Agrave: 'À', Egrave: 'È', Igrave: 'Ì', Ograve: 'Ò', Ugrave: 'Ù',
+    nbsp: ' ', zwnj: '', zwj: '', shy: '', euro: '€', hellip: '…', ndash: '–', mdash: '—',
+    laquo: '«', raquo: '»', ldquo: '“', rdquo: '”', lsquo: '‘', rsquo: '’', copy: '©', reg: '®', trade: '™',
+  };
+
+  return value.replace(/&(#x[0-9a-f]+|#\d+|[a-z][a-z0-9]+);/gi, (match, code: string) => {
+    if (code.startsWith('#')) {
+      const numericCode = code.slice(1);
+      const number = numericCode.toLowerCase().startsWith('x')
+        ? Number.parseInt(numericCode.slice(1), 16)
+        : Number.parseInt(numericCode, 10);
+      return Number.isFinite(number) ? String.fromCodePoint(number) : '';
+    }
+    return namedEntities[code.toLowerCase()] ?? match;
+  });
 }
 
 async function listMessagesForLabel(gmail: ReturnType<typeof google.gmail>, label: 'INBOX' | 'SENT', maxResults: number) {
@@ -162,7 +240,7 @@ async function listMessagesForLabel(gmail: ReturnType<typeof google.gmail>, labe
         subject: headers.Subject || '(Sin asunto)',
         from: headers.From || '(Remitente desconocido)',
         date: headers.Date || null,
-        snippet: data.snippet ?? '',
+        snippet: cleanEmailBody(data.snippet ?? ''),
       };
     }),
   );
