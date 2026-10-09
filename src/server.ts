@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import Fastify from 'fastify';
-import { completeAuthorization, createAuthorizationUrl, getThreadMessages, listDetectedCommitments, listPendingFollowUps, listRecentMessages } from './google-oauth.js';
+import { completeAuthorization, createAuthorizationUrl, getThreadMessages, listAccountInsights, listDetectedCommitments, listPendingFollowUps, listRecentMessages } from './google-oauth.js';
 import { clearSessionCookieHeader, readSession, sessionCookieHeader } from './session.js';
 import { getUser, listUsers, upsertUser } from './user-store.js';
 import { askCommercialAssistant } from './assistant.js';
@@ -38,7 +38,7 @@ app.get('/', async (_request, reply) => {
           .content { max-width: 1240px; margin: 0 auto; } .welcome { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 26px 28px; border: 1px solid var(--border); border-radius: 18px; background: #FFF7EE; box-shadow: var(--shadow); } .welcome p { margin: 0; color: #6F6864; }
           .card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 24px; box-shadow: var(--shadow); } .section-card { margin-top: 18px; } .card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; } .card-header p { margin: 0; color: var(--muted); font-size: 13px; }
           .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 18px; } .stat { padding: 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); } .stat span, .stat small { display: block; color: var(--muted); font-size: 12px; } .stat strong { display: block; margin: 7px 0 2px; color: var(--orange-dark); font-size: 27px; letter-spacing: -.04em; }
-          .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, .8fr); gap: 18px; margin-top: 18px; align-items: start; } .dashboard-grid > .card { min-width: 0; } .assistant-card { background: var(--panel-dark); border-color: var(--panel-dark); color: #fff; } .assistant-card .muted, .assistant-card .card-header p { color: #C7BFBB; } .assistant-card textarea { border-color: #4E4745; background: #312B2B; color: #fff; }
+          .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, .8fr); gap: 18px; margin-top: 18px; align-items: start; } .dashboard-grid.single-screen { grid-template-columns: minmax(0, 1fr); } .dashboard-grid > .card { min-width: 0; } .assistant-card { background: var(--panel-dark); border-color: var(--panel-dark); color: #fff; } .assistant-card .muted, .assistant-card .card-header p { color: #C7BFBB; } .assistant-card textarea { border-color: #4E4745; background: #312B2B; color: #fff; }
           button, .button-link { display: inline-flex; align-items: center; justify-content: center; border: 0; margin: 0; padding: 10px 14px; border-radius: 10px; background: var(--orange); color: #fff; text-decoration: none; cursor: pointer; font: inherit; font-weight: 750; transition: background .15s ease, transform .15s ease; } button:hover, button:focus-visible, .button-link:hover, .button-link:focus-visible { background: var(--orange-dark); transform: translateY(-1px); outline: none; } button:disabled { opacity: .6; cursor: wait; transform: none; } .secondary-button { color: var(--orange-dark); background: var(--warm); border: 1px solid var(--border); font-size: 13px; } .secondary-button:hover, .secondary-button:focus-visible { color: var(--ink); background: var(--orange-light); }
           .message { min-width: 0; padding: 18px 0; border-bottom: 1px solid var(--border); } .message:last-child { border-bottom: 0; } .message strong { display: block; margin-bottom: 4px; overflow-wrap: anywhere; } .message small { display: block; margin-bottom: 7px; color: var(--muted); overflow-wrap: anywhere; } .message p { margin: 0; color: #4E4745; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; } .message:hover, .message.is-open { background: #FCFAF8; } .thread-button { margin-top: 12px; padding: 7px 11px; font-size: 13px; color: #fff; background: var(--panel-dark); } .thread-button:hover, .thread-button:focus-visible { background: var(--dark); } .thread-inline { margin-top: 18px; padding: 16px 18px 4px; border: 1px solid var(--border); border-radius: 12px; background: var(--warm); overflow-wrap: anywhere; } .thread-inline:focus { outline: 3px solid rgba(222, 217, 211, .8); outline-offset: 2px; } .thread-inline .message { padding: 12px 0; } .thread-inline .message:first-child { padding-top: 0; } .thread-inline .message:last-child { padding-bottom: 0; }
           .message-tools { display: flex; align-items: center; gap: 12px; margin: 18px 0 4px; } .message-tools input { flex: 1; min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; background: #fff; } .quick-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 4px; } .filter-chip { padding: 7px 11px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); background: #fff; font-size: 12px; } .filter-chip:hover, .filter-chip:focus-visible, .filter-chip.active { color: var(--orange-dark); background: #FFF1E2; border-color: var(--border); transform: none; } select { min-width: 150px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; }
@@ -73,18 +73,18 @@ app.get('/', async (_request, reply) => {
               <div class="top-actions"><span id="accountChip" class="account-chip">Cuenta activa</span><a class="button-link" href="/auth/switch">Cambiar de cuenta</a></div>
             </header>
             <div class="content">
-              <section id="dashboard" class="welcome section-card"><div><h2>Tu actividad comercial, en un solo lugar</h2><p>Revisa mensajes, consulta al asistente y trabaja siempre con tu cuenta autorizada.</p></div><a class="button-link" href="#assistantSection">Consultar a la IA</a></section>
-              <section class="stats" aria-label="Resumen de la cuenta"><article class="stat"><span>Mensajes visibles</span><strong id="statMessageCount">—</strong><small>En la bandeja actual</small></article><article class="stat"><span>Cuenta conectada</span><strong>1</strong><small>Sesión activa</small></article><article class="stat"><span>Modo</span><strong>Solo lectura</strong><small>Sin envíos automáticos</small></article><article class="stat"><span>Permisos</span><strong id="statRole">—</strong><small>Según tu cuenta</small></article></section>
+              <section id="dashboard" data-screen="dashboard" class="welcome section-card"><div><h2>Tu actividad comercial, en un solo lugar</h2><p>Revisa mensajes, consulta al asistente y trabaja siempre con tu cuenta autorizada.</p></div><a class="button-link" href="#assistantSection">Consultar a la IA</a></section>
+              <section data-screen="dashboard" class="stats" aria-label="Resumen de la cuenta"><article class="stat"><span>Mensajes visibles</span><strong id="statMessageCount">—</strong><small>En la bandeja actual</small></article><article class="stat"><span>Cuenta conectada</span><strong>1</strong><small>Sesión activa</small></article><article class="stat"><span>Modo</span><strong>Solo lectura</strong><small>Sin envíos automáticos</small></article><article class="stat"><span>Permisos</span><strong id="statRole">—</strong><small>Según tu cuenta</small></article></section>
               <div class="dashboard-grid">
-                <section id="mailboxSection" class="card"><div class="card-header"><div><h2>Correos que requieren atención</h2><p>Filtra por bandeja, asunto, remitente o contenido.</p></div><span id="messageCount" class="muted"></span></div><div class="message-tools"><select id="messageMailbox" aria-label="Tipo de mensajes"><option value="inbox">Recibidos</option><option value="sent">Enviados</option></select><input id="messageSearch" type="search" placeholder="Buscar cliente, empresa o asunto…"></div><div id="messageFilters" class="quick-filters" role="group" aria-label="Filtrar mensajes"><button class="filter-chip active" type="button" data-message-filter="all">Todos</button><button class="filter-chip" type="button" data-message-filter="attention">Atención</button><button class="filter-chip" type="button" data-message-filter="follow-ups">Sin respuesta</button><button class="filter-chip" type="button" data-message-filter="commitments">Compromisos</button></div><div id="messages" class="muted">Cargando mensajes…</div><button id="messageMoreButton" class="list-toggle hidden" type="button"></button></section>
-                <section id="assistantSection" class="card assistant-card"><div class="card-header"><div><h2>Consultar al asistente IA</h2><p>Pregunta sobre la actividad de tu cuenta.</p></div></div><p class="muted">El asistente analiza solo tus mensajes. No envía ni modifica correos.</p><form id="assistantForm"><textarea id="question" placeholder="Ejemplo: ¿Qué seguimientos pendientes detectas?"></textarea><button type="submit">Analizar correos</button></form><div id="assistantAnswer" class="answer hidden"></div></section>
+                <section id="mailboxSection" data-screen="mailbox" class="card"><div class="card-header"><div><h2>Correos que requieren atención</h2><p>Filtra por bandeja, asunto, remitente o contenido.</p></div><span id="messageCount" class="muted"></span></div><div class="message-tools"><select id="messageMailbox" aria-label="Tipo de mensajes"><option value="inbox">Recibidos</option><option value="sent">Enviados</option></select><input id="messageSearch" type="search" placeholder="Buscar cliente, empresa o asunto…"></div><div id="messageFilters" class="quick-filters" role="group" aria-label="Filtrar mensajes"><button class="filter-chip active" type="button" data-message-filter="all">Todos</button><button class="filter-chip" type="button" data-message-filter="attention">Atención</button><button class="filter-chip" type="button" data-message-filter="follow-ups">Sin respuesta</button><button class="filter-chip" type="button" data-message-filter="commitments">Compromisos</button></div><div id="messages" class="muted">Cargando mensajes…</div><button id="messageMoreButton" class="list-toggle hidden" type="button"></button></section>
+                <section id="assistantSection" data-screen="assistant" class="card assistant-card"><div class="card-header"><div><h2>Consultar al asistente IA</h2><p>Pregunta sobre la actividad de tu cuenta.</p></div></div><p class="muted">El asistente analiza solo tus mensajes. No envía ni modifica correos.</p><form id="assistantForm"><textarea id="question" placeholder="Ejemplo: ¿Qué seguimientos pendientes detectas?"></textarea><button type="submit">Analizar correos</button></form><div id="assistantAnswer" class="answer hidden"></div></section>
               </div>
-              <section id="followUpsSection" class="card section-card"><div class="card-header"><div><h2>Seguimientos pendientes</h2><p>Mensajes enviados sin una respuesta posterior, agrupados por hilo.</p></div><span id="followUpCount" class="muted"></span></div><div id="followUps" class="follow-ups-list">Cargando seguimientos…</div><button id="followUpMoreButton" class="list-toggle hidden" type="button"></button></section>
-              <section id="commitmentsSection" class="card section-card"><div class="card-header"><div><h2>Compromisos detectados</h2><p>Posibles tareas identificadas en conversaciones; siempre requieren revisión.</p></div><span id="commitmentCount" class="muted"></span></div><div id="commitments" class="follow-ups-list">Cargando compromisos…</div><button id="commitmentMoreButton" class="list-toggle hidden" type="button"></button></section>
-              <details id="clientsSection" class="card section-card details-card"><summary><div><h2>Clientes</h2><p>Contactos detectados en los mensajes de la cuenta activa.</p></div></summary><div id="clients" class="details-content">Cargando clientes…</div></details>
-              <details id="reportsSection" class="card section-card details-card"><summary><div><h2>Informes</h2><p>Resumen de actividad con los datos cargados en esta sesión.</p></div></summary><div id="reports" class="details-content">Cargando informe…</div></details>
-              <details id="accountSection" class="card section-card details-card"><summary><div><h2>Tu cuenta</h2><p>Identidad y permisos de la sesión actual.</p></div></summary><div class="details-content"><p id="account" class="status">Cargando…</p><p id="role" class="status"></p><p class="muted">Solo tú puedes consultar los mensajes de esta sesión.</p></div></details>
-              <details id="adminPanel" class="card admin-panel details-card hidden"><summary><div><h2>Administración</h2><p>Gestión de usuarios y roles. El contenido de los correos no aparece aquí.</p></div></summary><div id="users" class="details-content">Cargando usuarios…</div></details>
+              <section id="followUpsSection" data-screen="follow-ups" class="card section-card"><div class="card-header"><div><h2>Seguimientos pendientes</h2><p>Mensajes enviados sin una respuesta posterior, agrupados por hilo.</p></div><span id="followUpCount" class="muted"></span></div><div id="followUps" class="follow-ups-list">Cargando seguimientos…</div><button id="followUpMoreButton" class="list-toggle hidden" type="button"></button></section>
+              <section id="commitmentsSection" data-screen="commitments" class="card section-card"><div class="card-header"><div><h2>Compromisos detectados</h2><p>Posibles tareas identificadas en conversaciones; siempre requieren revisión.</p></div><span id="commitmentCount" class="muted"></span></div><div id="commitments" class="follow-ups-list">Cargando compromisos…</div><button id="commitmentMoreButton" class="list-toggle hidden" type="button"></button></section>
+              <section id="clientsSection" data-screen="clients" class="card section-card"><div class="card-header"><div><h2>Clientes</h2><p>Contactos detectados en los mensajes de la cuenta activa.</p></div></div><div id="clients" class="details-content">Cargando clientes…</div></section>
+              <section id="reportsSection" data-screen="reports" class="card section-card"><div class="card-header"><div><h2>Informes</h2><p>Resumen de actividad con los datos cargados de la cuenta.</p></div></div><div id="reports" class="details-content">Cargando informe…</div></section>
+              <details id="accountSection" data-screen="dashboard" class="card section-card details-card"><summary><div><h2>Tu cuenta</h2><p>Identidad y permisos de la sesión actual.</p></div></summary><div class="details-content"><p id="account" class="status">Cargando…</p><p id="role" class="status"></p><p class="muted">Solo tú puedes consultar los mensajes de esta sesión.</p></div></details>
+              <details id="adminPanel" data-screen="dashboard" class="card admin-panel details-card hidden"><summary><div><h2>Administración</h2><p>Gestión de usuarios y roles. El contenido de los correos no aparece aquí.</p></div></summary><div id="users" class="details-content">Cargando usuarios…</div></details>
             </div>
           </main>
         </div>
@@ -111,9 +111,12 @@ app.get('/', async (_request, reply) => {
           const commitmentMoreButton = document.querySelector('#commitmentMoreButton');
           const clientsNode = document.querySelector('#clients');
           const reportsNode = document.querySelector('#reports');
+          const dashboardGrid = document.querySelector('.dashboard-grid');
+          const screenNodes = [...document.querySelectorAll('[data-screen]')];
           let loadedMessages = [];
           let loadedFollowUps = [];
           let loadedCommitments = [];
+          let loadedInsights = null;
           let activeAccountEmail = '';
           let showAllMessages = false;
           let showAllFollowUps = false;
@@ -124,6 +127,20 @@ app.get('/', async (_request, reply) => {
           }
           function renderClients() {
             clientsNode.replaceChildren();
+            if (loadedInsights?.clients) {
+              if (!loadedInsights.clients.length) {
+                clientsNode.append(makeTextElement('p', 'No hay clientes detectados en los mensajes revisados.', 'muted'));
+                return;
+              }
+              loadedInsights.clients.forEach((client) => {
+                const row = document.createElement('div');
+                row.className = 'user-row';
+                row.append(makeTextElement('strong', client.email));
+                row.append(makeTextElement('span', client.messages + (client.messages === 1 ? ' mensaje' : ' mensajes') + ' · último ' + formatMessageDate(client.latestDate), 'muted'));
+                clientsNode.append(row);
+              });
+              return;
+            }
             const clients = new Map();
             loadedMessages.forEach((message) => {
               const email = extractEmail(message.from);
@@ -147,7 +164,13 @@ app.get('/', async (_request, reply) => {
           }
           function renderReports() {
             reportsNode.replaceChildren();
-            const values = [
+            const values = loadedInsights ? [
+              ['Mensajes recibidos revisados', loadedInsights.inboxMessages],
+              ['Mensajes enviados revisados', loadedInsights.sentMessages],
+              ['Clientes detectados', loadedInsights.clients.length],
+              ['Seguimientos pendientes', loadedFollowUps.length],
+              ['Compromisos para revisar', loadedCommitments.length],
+            ] : [
               ['Mensajes cargados', loadedMessages.length],
               ['Seguimientos pendientes', loadedFollowUps.length],
               ['Compromisos para revisar', loadedCommitments.length],
@@ -159,7 +182,9 @@ app.get('/', async (_request, reply) => {
               row.append(makeTextElement('strong', value));
               reportsNode.append(row);
             });
-            reportsNode.append(makeTextElement('p', 'Este resumen refleja únicamente los datos cargados de la cuenta activa en esta sesión.', 'muted'));
+            reportsNode.append(makeTextElement('p', loadedInsights
+              ? 'El informe revisa los mensajes recientes de recibidos y enviados de la cuenta activa; no modifica ni envía correos.'
+              : 'Este resumen refleja únicamente los datos cargados de la cuenta activa en esta sesión.', 'muted'));
           }
           async function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
             const controller = new AbortController();
@@ -222,6 +247,14 @@ app.get('/', async (_request, reply) => {
             if (!response.ok) throw new Error(result.error || 'No se pudieron cargar los mensajes.');
             loadedMessages = result.messages || [];
             renderMessages();
+          }
+          async function loadInsights() {
+            const response = await fetchWithTimeout('/gmail/insights?max=25');
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || 'No se pudo preparar el informe.');
+            loadedInsights = result.insights || null;
+            renderClients();
+            renderReports();
           }
           function formatMessageDate(value) {
             if (!value) return 'Fecha desconocida';
@@ -328,6 +361,7 @@ app.get('/', async (_request, reply) => {
                 });
               }
               await loadMessages().catch(() => renderLoadError(messagesNode, 'No se pudieron cargar los mensajes ahora. Inténtalo de nuevo en unos segundos.'));
+              await loadInsights().catch(() => { loadedInsights = null; renderClients(); renderReports(); });
               await loadFollowUps().catch(() => {
                 followUpCount.textContent = 'No disponible';
                 navFollowUpCount.textContent = '—';
@@ -342,18 +376,30 @@ app.get('/', async (_request, reply) => {
           }
           const navLinks = [...document.querySelectorAll('.nav-link')];
           const setActiveNav = (activeLink) => navLinks.forEach((item) => item.classList.toggle('active', item === activeLink));
-          navLinks.forEach((link) => link.addEventListener('click', () => setActiveNav(link)));
-          if ('IntersectionObserver' in window) {
-            const navTargets = navLinks.map((link) => ({ link, section: document.querySelector(link.getAttribute('href')) })).filter((item) => item.section);
-            const navObserver = new IntersectionObserver((entries) => {
-              const visible = entries.filter((entry) => entry.isIntersecting).sort((left, right) => left.boundingClientRect.top - right.boundingClientRect.top);
-              const current = visible[0];
-              if (!current) return;
-              const match = navTargets.find((item) => item.section === current.target);
-              if (match) setActiveNav(match.link);
-            }, { rootMargin: '-18% 0px -68% 0px', threshold: 0 });
-            navTargets.forEach(({ section }) => navObserver.observe(section));
+          function setActiveScreen(screenId, activeLink, updateUrl = false, targetId = '') {
+            const validScreen = screenNodes.some((node) => node.dataset.screen === screenId) ? screenId : 'dashboard';
+            screenNodes.forEach((node) => { node.hidden = node.dataset.screen !== validScreen; });
+            dashboardGrid.hidden = !['mailbox', 'assistant'].includes(validScreen);
+            dashboardGrid.classList.toggle('single-screen', ['mailbox', 'assistant'].includes(validScreen));
+            setActiveNav(activeLink || navLinks.find((link) => link.getAttribute('href') === '#' + targetId));
+            if (updateUrl && targetId) window.history.pushState(null, '', '#' + targetId);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
           }
+          function openScreenFromLink(link, event) {
+            event.preventDefault();
+            const targetId = link.getAttribute('href')?.slice(1) || 'dashboard';
+            const target = document.getElementById(targetId);
+            setActiveScreen(target?.dataset.screen || 'dashboard', link.classList.contains('nav-link') ? link : null, true, targetId);
+          }
+          document.querySelectorAll('a[href^="#"]').forEach((link) => link.addEventListener('click', (event) => openScreenFromLink(link, event)));
+          const initialTargetId = window.location.hash.slice(1) || 'dashboard';
+          const initialTarget = document.getElementById(initialTargetId) || document.getElementById('dashboard');
+          setActiveScreen(initialTarget?.dataset.screen || 'dashboard', navLinks.find((link) => link.getAttribute('href') === '#' + initialTarget?.id), false, initialTarget?.id || 'dashboard');
+          window.addEventListener('popstate', () => {
+            const targetId = window.location.hash.slice(1) || 'dashboard';
+            const target = document.getElementById(targetId) || document.getElementById('dashboard');
+            setActiveScreen(target?.dataset.screen || 'dashboard', navLinks.find((link) => link.getAttribute('href') === '#' + target?.id), false, target?.id || 'dashboard');
+          });
           messageMoreButton.addEventListener('click', () => { showAllMessages = !showAllMessages; renderMessages(); });
           followUpMoreButton.addEventListener('click', () => { showAllFollowUps = !showAllFollowUps; renderFollowUps(loadedFollowUps); });
           commitmentMoreButton.addEventListener('click', () => { showAllCommitments = !showAllCommitments; renderCommitments(loadedCommitments); });
@@ -514,6 +560,20 @@ app.get<{ Querystring: { max?: string; mailbox?: string } }>(
     }
   },
 );
+
+app.get<{ Querystring: { max?: string } }>('/gmail/insights', async (request, reply) => {
+  const account = readSession(request.headers.cookie);
+  if (!account) return reply.code(401).send({ error: 'Sesión no iniciada.' });
+
+  try {
+    const insights = await listAccountInsights(account, Number(request.query.max ?? 25));
+    return { account, insights };
+  } catch (error) {
+    return reply.code(500).send({
+      error: error instanceof Error ? error.message : 'No se pudo preparar el informe.',
+    });
+  }
+});
 
 app.get<{ Querystring: { max?: string } }>('/gmail/follow-ups', async (request, reply) => {
   const account = readSession(request.headers.cookie);

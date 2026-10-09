@@ -11,6 +11,7 @@ type GmailListMessage = {
   threadId: string | null;
   subject: string;
   from: string;
+  to: string;
   date: string | null;
   snippet: string;
 };
@@ -29,6 +30,21 @@ type GmailThreadMessage = {
 type CacheEntry<T> = { expiresAt: number; value: T };
 const messageCache = new Map<string, CacheEntry<GmailListMessage[]>>();
 const threadCache = new Map<string, CacheEntry<GmailThreadMessage[]>>();
+const insightsCache = new Map<string, CacheEntry<AccountInsights>>();
+
+export type AccountClient = {
+  email: string;
+  messages: number;
+  latestDate: string | null;
+};
+
+export type AccountInsights = {
+  inboxMessages: number;
+  sentMessages: number;
+  reviewedMessages: number;
+  clients: AccountClient[];
+  latestDate: string | null;
+};
 
 function getOAuthClient() {
   const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -101,6 +117,43 @@ export async function listRecentMessages(email: string, maxResults = 10, mailbox
   const messages = await listMessagesForLabel(gmail, mailbox === 'sent' ? 'SENT' : 'INBOX', maxResults);
   messageCache.set(cacheKey, { expiresAt: Date.now() + gmailCacheTtlMs, value: messages });
   return messages;
+}
+
+export async function listAccountInsights(email: string, maxResults = 25): Promise<AccountInsights> {
+  const normalizedEmail = email.toLowerCase();
+  const cached = insightsCache.get(normalizedEmail);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+  const [inbox, sent] = await Promise.all([
+    listRecentMessages(email, maxResults, 'inbox'),
+    listRecentMessages(email, maxResults, 'sent'),
+  ]);
+  const clients = new Map<string, AccountClient>();
+  const dates = [...inbox, ...sent].map((message) => message.date).filter(Boolean) as string[];
+
+  const addClient = (value: string, date: string | null) => {
+    const addresses = extractEmailAddresses(value);
+    addresses.forEach((address) => {
+      if (address === normalizedEmail) return;
+      const current = clients.get(address) ?? { email: address, messages: 0, latestDate: null };
+      current.messages += 1;
+      if (date && (!current.latestDate || messageTimestamp({ date }) > messageTimestamp({ date: current.latestDate }))) current.latestDate = date;
+      clients.set(address, current);
+    });
+  };
+
+  inbox.forEach((message) => addClient(message.from, message.date));
+  sent.forEach((message) => addClient(message.to, message.date));
+
+  const insights: AccountInsights = {
+    inboxMessages: inbox.length,
+    sentMessages: sent.length,
+    reviewedMessages: inbox.length + sent.length,
+    clients: [...clients.values()].sort((left, right) => right.messages - left.messages || left.email.localeCompare(right.email)),
+    latestDate: dates.sort((left, right) => messageTimestamp({ date: right }) - messageTimestamp({ date: left }))[0] ?? null,
+  };
+  insightsCache.set(normalizedEmail, { expiresAt: Date.now() + gmailCacheTtlMs, value: insights });
+  return insights;
 }
 
 export async function listPendingFollowUps(email: string, maxResults = 10) {
@@ -351,7 +404,7 @@ async function listMessagesForLabel(gmail: ReturnType<typeof google.gmail>, labe
         userId: 'me',
         id,
         format: 'metadata',
-        metadataHeaders: ['Subject', 'From', 'Date'],
+        metadataHeaders: ['Subject', 'From', 'To', 'Date'],
       });
       const headers = Object.fromEntries(
         (data.payload?.headers ?? []).map((header) => [header.name ?? '', header.value ?? '']),
@@ -362,6 +415,7 @@ async function listMessagesForLabel(gmail: ReturnType<typeof google.gmail>, labe
         threadId: data.threadId ?? null,
         subject: headers.Subject || '(Sin asunto)',
         from: headers.From || '(Remitente desconocido)',
+        to: headers.To || '',
         date: headers.Date || null,
         snippet: cleanEmailBody(data.snippet ?? ''),
       };
@@ -369,4 +423,11 @@ async function listMessagesForLabel(gmail: ReturnType<typeof google.gmail>, labe
   );
 
   return messages.filter((message): message is NonNullable<typeof message> => message !== null);
+}
+
+function extractEmailAddresses(value: string) {
+  const matches = [...value.matchAll(/<([^>]+)>|([\w.+-]+@[\w.-]+\.[a-z]{2,})/gi)]
+    .map((match) => (match[1] ?? match[2]).trim().toLowerCase())
+    .filter(Boolean);
+  return [...new Set(matches)];
 }

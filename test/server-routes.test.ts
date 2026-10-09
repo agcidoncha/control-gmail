@@ -25,12 +25,14 @@ test('las rutas privadas rechazan peticiones sin sesión', async () => {
   const me = await app.inject({ method: 'GET', url: '/me' });
   const users = await app.inject({ method: 'GET', url: '/admin/users' });
   const messages = await app.inject({ method: 'GET', url: '/gmail/messages?account=angel.cidoncha%40gmail.com' });
+  const insights = await app.inject({ method: 'GET', url: '/gmail/insights' });
   const followUps = await app.inject({ method: 'GET', url: '/gmail/follow-ups' });
   const commitments = await app.inject({ method: 'GET', url: '/gmail/commitments' });
 
   assert.equal(me.statusCode, 401);
   assert.equal(users.statusCode, 401);
   assert.equal(messages.statusCode, 401);
+  assert.equal(insights.statusCode, 401);
   assert.equal(followUps.statusCode, 401);
   assert.equal(commitments.statusCode, 401);
 });

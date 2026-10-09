@@ -11,3 +11,6 @@ OAuth client created/
 dist/
 node_modules/
 .data/
+
+# Metadatos locales de Astro
+frontend/.astro/

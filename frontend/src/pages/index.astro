@@ -1,0 +1,20 @@
+---
+import AppShell from '../layouts/AppShell.astro';
+---
+
+<AppShell>
+  <section class="welcome">
+    <div><h2>Tu actividad comercial, en un solo lugar</h2><p>Revisa mensajes, consulta al asistente y trabaja siempre con tu cuenta autorizada.</p></div>
+    <a class="button-link" href="/assistant">Consultar a la IA</a>
+  </section>
+  <section class="stats" aria-label="Resumen de la cuenta">
+    <article class="stat"><span>Mensajes visibles</span><strong id="statMessageCount">—</strong><small>En la bandeja actual</small></article>
+    <article class="stat"><span>Cuenta conectada</span><strong>1</strong><small>Sesión activa</small></article>
+    <article class="stat"><span>Modo</span><strong>Solo lectura</strong><small>Sin envíos automáticos</small></article>
+    <article class="stat"><span>Permisos</span><strong id="statRole">—</strong><small>Según tu cuenta</small></article>
+  </section>
+  <section class="card screen-note">
+    <h2>Accede a una sección desde el menú</h2>
+    <p>La aplicación ya está preparada para cargar cada módulo en su propia pantalla, sin una página interminable.</p>
+  </section>
+</AppShell>
