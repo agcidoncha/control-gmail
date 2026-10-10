@@ -14,6 +14,8 @@ export default defineConfig({
         '/me': 'http://127.0.0.1:3000',
         '/gmail': 'http://127.0.0.1:3000',
         '/assistant': 'http://127.0.0.1:3000',
+        '/ai': 'http://127.0.0.1:3000',
+        '/admin': 'http://127.0.0.1:3000',
         '/auth': 'http://127.0.0.1:3000',
         '/brand': 'http://127.0.0.1:3000',
       },

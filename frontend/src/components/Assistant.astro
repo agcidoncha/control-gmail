@@ -1,0 +1,61 @@
+<section class="card assistant-screen">
+  <div class="card-header">
+    <div>
+      <h2>Consultar a la IA</h2>
+      <p>Pregunta sobre la actividad comercial de tu cuenta autorizada.</p>
+    </div>
+    <span id="assistantConnectionStatus" class="status-pill status-neutral" role="status" aria-live="polite">Comprobando conexión…</span>
+  </div>
+
+  <div class="assistant-intro">
+    <strong>Asistente comercial</strong>
+    <p>Analiza tus correos y propone acciones. No envía, modifica ni elimina mensajes.</p>
+  </div>
+
+  <form id="assistantForm" class="assistant-form">
+    <label for="assistantQuestion">¿Qué quieres revisar?</label>
+    <textarea id="assistantQuestion" placeholder="Ejemplo: ¿Qué seguimientos pendientes detectas?" required></textarea>
+    <div class="assistant-actions">
+      <button id="assistantSubmit" type="submit" disabled>Analizar correos</button>
+      <a class="button-link secondary-button" href="/settings/ai">Configurar conexión IA</a>
+    </div>
+    <p id="assistantMessage" class="form-message" role="status" aria-live="polite"></p>
+  </form>
+
+  <article id="assistantAnswer" class="assistant-answer" hidden aria-live="polite"></article>
+</section>
+
+<script is:inline src="/scripts/assistant.js"></script>
+
+<style is:global>
+  .assistant-screen { margin-top: 18px; }
+  .assistant-intro { margin-top: 20px; padding: 18px; border-radius: 12px; background: var(--panel-dark); color: #fff; }
+  .assistant-intro strong { display: block; font-size: 16px; }
+  .assistant-intro p { margin: 5px 0 0; color: #C7BFBB; font-size: 13px; }
+  .assistant-form { display: grid; gap: 9px; max-width: 850px; margin-top: 22px; }
+  .assistant-form label { font-size: 13px; font-weight: 750; }
+  .assistant-form textarea { min-height: 150px; margin-top: 0; border: 1px solid var(--border); background: #fff; color: var(--ink); }
+  .assistant-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 5px; }
+  .assistant-actions button:disabled { opacity: .55; cursor: not-allowed; }
+  .assistant-actions .secondary-button { color: var(--orange-dark); background: var(--warm); border: 1px solid var(--border); }
+  .assistant-actions .secondary-button:hover { color: var(--ink); background: var(--orange-light); }
+  .assistant-answer { margin-top: 22px; padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--warm); }
+  .assistant-answer[hidden] { display: none; }
+  .assistant-answer h3 { margin: 0 0 8px; font-size: 17px; }
+  .assistant-answer h4 { margin: 18px 0 7px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--orange-dark); }
+  .assistant-answer p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .assistant-answer ul { margin: 0; padding-left: 20px; }
+  .assistant-answer li { margin: 5px 0; overflow-wrap: anywhere; }
+  .assistant-answer .review-note { margin-bottom: 14px; padding: 9px 11px; border-radius: 9px; color: var(--orange-dark); background: #FFF1E2; font-size: 13px; font-weight: 750; }
+  .assistant-answer .source { padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .assistant-answer .source:last-child { border-bottom: 0; }
+  .assistant-answer .source strong, .assistant-answer .source small { display: block; }
+  .assistant-answer .source small { margin-top: 3px; color: var(--muted); }
+  .form-message { min-height: 20px; margin: 0; color: var(--muted); font-size: 13px; }
+  .form-message.error { color: #A33C28; }
+  .form-message.success { color: #28683B; }
+  .status-pill { padding: 5px 9px; border-radius: 999px; color: #28683B; background: #E5F3E8; font-size: 12px; font-weight: 800; white-space: nowrap; }
+  .status-pill.status-neutral { color: var(--muted); background: #EAE6E2; }
+  .status-pill.status-warning { color: var(--orange-dark); background: #FFF1E2; }
+  @media (max-width: 640px) { .assistant-actions { align-items: stretch; flex-direction: column; } .assistant-actions a, .assistant-actions button { width: 100%; } .card-header { flex-direction: column; } }
+</style>

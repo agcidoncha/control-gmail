@@ -4,11 +4,13 @@ import { getFirestore, isFirestoreEnabled } from './firestore.js';
 import { defaultOrganizationId, ensureDefaultOrganization } from './organization-store.js';
 
 export type UserRole = 'commercial' | 'admin';
+export type UserAccessStatus = 'active' | 'pending' | 'revoked';
 
 export type AppUser = {
   email: string;
   organizationId: string;
   role: UserRole;
+  accessStatus?: UserAccessStatus;
   createdAt: string;
   lastLoginAt: string;
 };
@@ -17,31 +19,55 @@ const userFile = resolve(process.env.USER_STORE_FILE ?? '.data/users.json');
 
 export async function upsertUser(email: string) {
   await ensureDefaultOrganization();
-  if (isFirestoreEnabled()) return upsertFirestoreUser(email);
+  const normalizedEmail = normalizeEmail(email);
+  if (isFirestoreEnabled()) return upsertFirestoreUser(normalizedEmail);
 
   const users = await readUsers();
   const now = new Date().toISOString();
-  const existing = users.find((user) => user.email === email);
-  const adminEmails = new Set(
-    (process.env.ADMIN_EMAILS ?? '').split(',').map((value) => value.trim().toLowerCase()).filter(Boolean),
-  );
+  const existing = users.find((user) => user.email.toLowerCase() === normalizedEmail);
 
   if (existing) {
+    if (normalizeUser(existing).accessStatus !== 'active' && !isAdminEmail(normalizedEmail)) {
+      throw new Error('Esta cuenta no está autorizada por el administrador.');
+    }
     existing.lastLoginAt = now;
     existing.organizationId ??= defaultOrganizationId;
-    existing.role = adminEmails.has(email.toLowerCase()) ? 'admin' : 'commercial';
+    existing.role = isAdminEmail(normalizedEmail) ? 'admin' : existing.role === 'admin' ? 'commercial' : existing.role;
+    existing.accessStatus = 'active';
   } else {
+    if (!isAdminEmail(normalizedEmail)) throw new Error('Esta cuenta no está autorizada por el administrador.');
     users.push({
-      email,
+      email: normalizedEmail,
       organizationId: defaultOrganizationId,
-      role: adminEmails.has(email.toLowerCase()) ? 'admin' : 'commercial',
+      role: 'admin',
+      accessStatus: 'active',
       createdAt: now,
       lastLoginAt: now,
     });
   }
 
   await writeUsers(users);
-  return normalizeUser(users.find((user) => user.email === email)!);
+  return normalizeUser(users.find((user) => user.email.toLowerCase() === normalizedEmail)!);
+}
+
+export async function authorizeUser(email: string, role: UserRole = 'commercial', organizationId = defaultOrganizationId) {
+  await ensureDefaultOrganization();
+  const normalizedEmail = normalizeEmail(email);
+  if (isFirestoreEnabled()) return authorizeFirestoreUser(normalizedEmail, role, organizationId);
+
+  const users = await readUsers();
+  const now = new Date().toISOString();
+  const existing = users.find((user) => user.email.toLowerCase() === normalizedEmail);
+  if (existing) {
+    existing.email = normalizedEmail;
+    existing.organizationId = organizationId;
+    existing.role = isAdminEmail(normalizedEmail) ? 'admin' : role;
+    existing.accessStatus = 'active';
+  } else {
+    users.push({ email: normalizedEmail, organizationId, role: isAdminEmail(normalizedEmail) ? 'admin' : role, accessStatus: 'active', createdAt: now, lastLoginAt: now });
+  }
+  await writeUsers(users);
+  return normalizeUser(users.find((user) => user.email.toLowerCase() === normalizedEmail)!);
 }
 
 export async function getUser(email: string) {
@@ -58,16 +84,10 @@ export async function listUsers() {
     const snapshot = await getFirestore().collection('users').orderBy('email').get();
     return snapshot.docs.map((document) => {
       const user = document.data() as AppUser;
-      return { email: user.email, organizationId: user.organizationId ?? defaultOrganizationId, role: user.role, createdAt: user.createdAt, lastLoginAt: user.lastLoginAt };
+      return { ...normalizeUser(user), organizationId: user.organizationId ?? defaultOrganizationId };
     });
   }
-  return (await readUsers()).map(({ email, organizationId, role, createdAt, lastLoginAt }) => ({
-    email,
-    organizationId: organizationId ?? defaultOrganizationId,
-    role,
-    createdAt,
-    lastLoginAt,
-  }));
+  return (await readUsers()).map(normalizeUser);
 }
 
 async function upsertFirestoreUser(email: string) {
@@ -76,10 +96,14 @@ async function upsertFirestoreUser(email: string) {
   const now = new Date().toISOString();
   const role = isAdminEmail(email) ? 'admin' : 'commercial';
   const existing = snapshot.exists ? snapshot.data() as AppUser : undefined;
+  if (existing && normalizeUser(existing).accessStatus !== 'active' && !isAdminEmail(email)) {
+    throw new Error('Esta cuenta no está autorizada por el administrador.');
+  }
   const user: AppUser = {
     email,
     organizationId: defaultOrganizationId,
-    role,
+    role: existing && !isAdminEmail(email) ? existing.role : role,
+    accessStatus: 'active',
     createdAt: existing?.createdAt ?? now,
     lastLoginAt: now,
   };
@@ -87,8 +111,29 @@ async function upsertFirestoreUser(email: string) {
   return user;
 }
 
+async function authorizeFirestoreUser(email: string, role: UserRole, organizationId: string) {
+  const reference = getFirestore().collection('users').doc(email);
+  const snapshot = await reference.get();
+  const now = new Date().toISOString();
+  const existing = snapshot.exists ? snapshot.data() as AppUser : undefined;
+  const user: AppUser = {
+    email,
+    organizationId,
+    role: isAdminEmail(email) ? 'admin' : role,
+    accessStatus: 'active',
+    createdAt: existing?.createdAt ?? now,
+    lastLoginAt: existing?.lastLoginAt ?? now,
+  };
+  await reference.set(user, { merge: true });
+  return user;
+}
+
 function normalizeUser(user: AppUser): AppUser {
-  return { ...user, organizationId: user.organizationId ?? defaultOrganizationId };
+  return { ...user, organizationId: user.organizationId ?? defaultOrganizationId, accessStatus: user.accessStatus ?? 'active' };
+}
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
 }
 
 function isAdminEmail(email: string) {

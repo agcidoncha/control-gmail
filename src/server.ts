@@ -4,10 +4,14 @@ import { resolve } from 'node:path';
 import Fastify from 'fastify';
 import { completeAuthorization, createAuthorizationUrl, getThreadMessages, listAccountInsights, listDetectedCommitments, listPendingFollowUps, listRecentMessages } from './google-oauth.js';
 import { clearSessionCookieHeader, readSession, readSessionContext, sessionCookieHeaderForOrganization } from './session.js';
-import { getUser, listUsers, upsertUser } from './user-store.js';
+import { authorizeUser, getUser, listUsers, upsertUser } from './user-store.js';
 import { askCommercialAssistant } from './assistant.js';
+import { deletePersonalAiConnection, getPersonalAiConnectionStatus, savePersonalAiConnection } from './ai-connection-store.js';
+import { getOrganization, updateOrganizationAiSettings } from './organization-store.js';
+import type { AiProvider } from './ai-connections.js';
 
 export const app = Fastify({ logger: true });
+const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:4321';
 
 app.get('/brand/logo.svg', async (_request, reply) => {
   return reply.type('image/svg+xml').send(await readFile(resolve('logos/logo-color-simple.svg'), 'utf8'));
@@ -64,6 +68,7 @@ app.get('/', async (_request, reply) => {
               <a class="nav-link" href="#clientsSection"><span><span class="nav-icon" aria-hidden="true">♙</span>Clientes</span></a>
               <a class="nav-link" href="#reportsSection"><span><span class="nav-icon" aria-hidden="true">▤</span>Informes</span></a>
               <a class="nav-link" href="#assistantSection"><span><span class="nav-icon" aria-hidden="true">✦</span>Consultar a la IA</span></a>
+              <a class="nav-link" href="${frontendUrl}/settings/ai"><span><span class="nav-icon" aria-hidden="true">⚙</span>Configuración IA</span></a>
             </nav>
             <div class="sidebar-footer"><span class="connection-dot"></span> Gmail · modo lectura<br><small>Datos de la cuenta activa</small></div>
           </aside>
@@ -529,6 +534,145 @@ app.get('/admin/users', async (request, reply) => {
   return { users: await listUsers() };
 });
 
+app.post<{ Body: { email?: string; role?: string } }>('/admin/users', async (request, reply) => {
+  const email = readSession(request.headers.cookie);
+  if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
+  const user = await getUser(email);
+  if (user?.role !== 'admin') return reply.code(403).send({ error: 'No tienes permisos de administración.' });
+
+  const targetEmail = request.body?.email?.trim().toLowerCase();
+  const role = request.body?.role;
+  if (!targetEmail || !targetEmail.includes('@')) return reply.code(400).send({ error: 'Introduce un correo válido.' });
+  if (role !== 'admin' && role !== 'commercial') return reply.code(400).send({ error: 'Rol no válido.' });
+
+  const target = await authorizeUser(targetEmail, role, user.organizationId);
+  return { user: { email: target.email, organizationId: target.organizationId, role: target.role, accessStatus: target.accessStatus } };
+});
+
+app.get('/admin/ai', async (request, reply) => {
+  const email = readSession(request.headers.cookie);
+  if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
+  const user = await getUser(email);
+  if (user?.role !== 'admin') return reply.code(403).send({ error: 'No tienes permisos de administración.' });
+
+  const organization = await getOrganization(user.organizationId);
+  const sharedAiUserEmails = organization?.sharedAiUserEmails ?? [];
+  const activeProvider = organization?.sharedAiProvider ?? ((process.env.DEFAULT_AI_PROVIDER ?? 'openai').toLowerCase() === 'claude' ? 'claude' : 'openai');
+  const providers = {
+    openai: { configured: Boolean(process.env.OPENAI_API_KEY), model: process.env.OPENAI_MODEL ?? 'gpt-6-luna' },
+    claude: { configured: Boolean(process.env.CLAUDE_API_KEY), model: process.env.CLAUDE_MODEL ?? 'claude-sonnet-4-6' },
+  };
+  const users = (await listUsers())
+    .filter((item) => item.organizationId === user.organizationId)
+    .map((item) => ({
+      email: item.email,
+      role: item.role,
+      canUseSharedAi: item.role === 'admin' || sharedAiUserEmails.includes(item.email.toLowerCase()),
+    }));
+
+  return { organizationId: user.organizationId, activeProvider, providers, users };
+});
+
+app.put<{ Body: { provider?: string } }>('/admin/ai', async (request, reply) => {
+  const email = readSession(request.headers.cookie);
+  if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
+  const user = await getUser(email);
+  if (user?.role !== 'admin') return reply.code(403).send({ error: 'No tienes permisos de administración.' });
+
+  const provider = request.body?.provider;
+  if (provider !== 'openai' && provider !== 'claude') return reply.code(400).send({ error: 'Proveedor no válido.' });
+  const configured = provider === 'openai' ? Boolean(process.env.OPENAI_API_KEY) : Boolean(process.env.CLAUDE_API_KEY);
+  if (!configured) return reply.code(400).send({ error: `No hay una clave ${provider === 'openai' ? 'OPENAI_API_KEY' : 'CLAUDE_API_KEY'} configurada en .env.` });
+
+  const organization = await getOrganization(user.organizationId);
+  const updated = await updateOrganizationAiSettings(user.organizationId, {
+    provider,
+    sharedAiUserEmails: organization?.sharedAiUserEmails ?? [],
+  });
+  return { activeProvider: updated?.sharedAiProvider ?? provider };
+});
+
+app.patch<{ Params: { email: string }; Body: { canUseSharedAi?: boolean } }>('/admin/ai/users/:email', async (request, reply) => {
+  const email = readSession(request.headers.cookie);
+  if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
+  const user = await getUser(email);
+  if (user?.role !== 'admin') return reply.code(403).send({ error: 'No tienes permisos de administración.' });
+
+  const target = (await listUsers()).find((item) => item.email.toLowerCase() === request.params.email.toLowerCase());
+  if (!target || target.organizationId !== user.organizationId) return reply.code(404).send({ error: 'Usuario no encontrado.' });
+  const organization = await getOrganization(user.organizationId);
+  const current = new Set(organization?.sharedAiUserEmails ?? []);
+  if (request.body?.canUseSharedAi) current.add(target.email.toLowerCase());
+  else current.delete(target.email.toLowerCase());
+  await updateOrganizationAiSettings(user.organizationId, {
+    provider: organization?.sharedAiProvider,
+    sharedAiUserEmails: [...current],
+  });
+  return { email: target.email, canUseSharedAi: Boolean(request.body?.canUseSharedAi) };
+});
+
+app.get('/ai/connections', async (request, reply) => {
+  const email = readSession(request.headers.cookie);
+  if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
+  const user = await getUser(email);
+  if (!user) return reply.code(403).send({ error: 'Usuario no registrado.' });
+
+  const organization = await getOrganization(user.organizationId);
+  const provider = organization?.sharedAiProvider ?? ((process.env.DEFAULT_AI_PROVIDER ?? 'openai').toLowerCase() === 'claude' ? 'claude' : 'openai');
+  const companyConfigured = provider === 'openai'
+    ? Boolean(process.env.OPENAI_API_KEY)
+    : provider === 'claude' && Boolean(process.env.CLAUDE_API_KEY);
+  const canUseCompany = user.role === 'admin' || Boolean(organization?.sharedAiUserEmails?.includes(email.toLowerCase()));
+
+  return {
+    account: email,
+    role: user.role,
+    organizationId: user.organizationId,
+    company: {
+      provider: provider === 'claude' ? 'claude' : 'openai',
+      mode: 'company_shared',
+      status: companyConfigured ? 'active' : 'not_configured',
+      model: provider === 'claude' ? (process.env.CLAUDE_MODEL ?? 'claude-sonnet-4-6') : (process.env.OPENAI_MODEL ?? 'gpt-6-luna'),
+      canUse: canUseCompany,
+    },
+    personal: await getPersonalAiConnectionStatus(user.organizationId, email),
+  };
+});
+
+app.post<{ Body: { provider?: string; apiKey?: string } }>('/ai/connections/personal', async (request, reply) => {
+  const email = readSession(request.headers.cookie);
+  if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
+  const user = await getUser(email);
+  if (!user) return reply.code(403).send({ error: 'Usuario no registrado.' });
+
+  const provider = request.body?.provider;
+  const apiKey = request.body?.apiKey?.trim();
+  if (provider !== 'openai' && provider !== 'claude') return reply.code(400).send({ error: 'Proveedor no válido.' });
+  if (!apiKey || apiKey.length < 10) return reply.code(400).send({ error: 'Introduce una clave de API válida.' });
+
+  try {
+    await savePersonalAiConnection({
+      organizationId: user.organizationId,
+      userEmail: email,
+      provider: provider as AiProvider,
+      apiKey,
+    });
+    return { connected: true, provider, mode: 'user_personal' };
+  } catch (error) {
+    return reply.code(500).send({ error: error instanceof Error ? error.message : 'No se pudo guardar la conexión personal.' });
+  }
+});
+
+app.delete('/ai/connections/personal', async (request, reply) => {
+  const email = readSession(request.headers.cookie);
+  if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
+  const user = await getUser(email);
+  if (!user) return reply.code(403).send({ error: 'Usuario no registrado.' });
+
+  await deletePersonalAiConnection(user.organizationId, email);
+  return { connected: false };
+});
+
 app.post<{ Body: { question?: string } }>('/assistant/ask', async (request, reply) => {
   const email = readSession(request.headers.cookie);
   if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
@@ -653,8 +797,11 @@ app.get<{ Querystring: { code?: string; state?: string; error?: string } }>(
       }
       const user = await upsertUser(profile.emailAddress);
       reply.header('Set-Cookie', sessionCookieHeaderForOrganization(profile.emailAddress, user.organizationId));
-      return reply.redirect('/?connected=' + encodeURIComponent(profile.emailAddress));
+      return reply.redirect(frontendUrl + '/mailbox?connected=' + encodeURIComponent(profile.emailAddress));
     } catch (callbackError) {
+      if (callbackError instanceof Error && callbackError.message.includes('no está autorizada')) {
+        return reply.code(403).send({ error: callbackError.message });
+      }
       return reply.code(500).send({
         error: callbackError instanceof Error ? callbackError.message : 'Falló la autorización.',
       });

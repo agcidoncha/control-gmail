@@ -1,0 +1,49 @@
+---
+import AppShell from '../../layouts/AppShell.astro';
+---
+
+<AppShell>
+  <section id="adminUsersScreen" class="card users-screen" hidden>
+    <div class="card-header">
+      <div>
+        <span class="eyebrow">Solo administrador</span>
+        <h2>Usuarios autorizados</h2>
+        <p>Solo los correos añadidos aquí podrán iniciar sesión en esta empresa.</p>
+      </div>
+    </div>
+    <form id="userAuthorizationForm" class="user-form">
+      <div>
+        <label for="authorizedUserEmail">Correo de Google</label>
+        <input id="authorizedUserEmail" type="email" placeholder="comercial@empresa.com" required />
+      </div>
+      <div>
+        <label for="authorizedUserRole">Rol</label>
+        <select id="authorizedUserRole">
+          <option value="commercial">Comercial</option>
+          <option value="admin">Administrador</option>
+        </select>
+      </div>
+      <button type="submit">Autorizar usuario</button>
+    </form>
+    <p id="userAuthorizationMessage" class="form-message" role="status" aria-live="polite"></p>
+    <div id="authorizedUsers" class="authorized-users">Cargando usuarios…</div>
+  </section>
+</AppShell>
+
+<script is:inline src="/scripts/admin-users.js"></script>
+
+<style is:global>
+  .users-screen { margin-top: 18px; }
+  .users-screen h2 { margin: 0 0 5px; }
+  .users-screen .card-header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .user-form { display: grid; grid-template-columns: minmax(0, 1fr) 180px auto; align-items: end; gap: 12px; margin: 24px 0 8px; }
+  .user-form label { display: block; margin-bottom: 7px; font-size: 13px; font-weight: 750; }
+  .user-form input, .user-form select { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; }
+  .authorized-users { display: grid; gap: 8px; margin-top: 16px; }
+  .authorized-user { display: flex; justify-content: space-between; gap: 12px; padding: 13px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--warm); }
+  .authorized-user small { color: var(--muted); }
+  .form-message { min-height: 20px; color: var(--muted); font-size: 13px; }
+  .form-message.error { color: #A33C28; }
+  .form-message.success { color: #28683B; }
+  @media (max-width: 700px) { .user-form { grid-template-columns: 1fr; align-items: stretch; } .user-form button { width: 100%; } .authorized-user { align-items: flex-start; flex-direction: column; } }
+</style>

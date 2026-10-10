@@ -21,6 +21,10 @@
   }
 
   function render() {
+    listNode.removeAttribute('aria-hidden');
+    listNode.removeAttribute('aria-busy');
+    listNode.removeAttribute('aria-label');
+    countNode.removeAttribute('aria-label');
     const query = searchNode.value.trim().toLowerCase();
     const minimumAge = ageNode.value === 'all' ? 0 : Number(ageNode.value);
     const visible = items.filter((item) => {
@@ -72,6 +76,10 @@
       if (navCount) navCount.textContent = String(items.length);
       render();
     } catch (error) {
+      listNode.removeAttribute('aria-hidden');
+      listNode.removeAttribute('aria-busy');
+      listNode.removeAttribute('aria-label');
+      countNode.removeAttribute('aria-label');
       listNode.replaceChildren(text('p', error.message || 'No se pudieron cargar los seguimientos.', 'muted'));
       countNode.textContent = '—';
     }

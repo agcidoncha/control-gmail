@@ -1,7 +1,7 @@
 <section class="card mailbox-screen">
   <div class="card-header">
     <div><h2>Correos que requieren atención</h2><p>Filtra por bandeja, asunto, remitente o contenido.</p></div>
-    <span id="mailboxCount" class="muted">Cargando…</span>
+    <span id="mailboxCount" class="muted" aria-label="Cargando cantidad de mensajes"><span class="skeleton skeleton-inline" aria-hidden="true"></span></span>
   </div>
   <div class="message-tools">
     <select id="messageMailbox" aria-label="Tipo de mensajes">
@@ -16,7 +16,11 @@
     <button class="filter-chip" type="button" data-message-filter="follow-ups">Sin respuesta</button>
     <button class="filter-chip" type="button" data-message-filter="commitments">Compromisos</button>
   </div>
-  <div id="messages" class="muted">Cargando mensajes…</div>
+  <div id="messages" class="skeleton-list" aria-live="polite" aria-busy="true" aria-label="Cargando mensajes" aria-hidden="true">
+    <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line short"></span></div>
+    <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line short"></span></div>
+    <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line short"></span></div>
+  </div>
 </section>
 
 <script is:inline src="/scripts/mailbox.js"></script>

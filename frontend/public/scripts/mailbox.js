@@ -24,6 +24,10 @@
   }
 
   function render() {
+    messagesNode.removeAttribute('aria-hidden');
+    messagesNode.removeAttribute('aria-busy');
+    messagesNode.removeAttribute('aria-label');
+    countNode.removeAttribute('aria-label');
     const query = searchNode.value.trim().toLowerCase();
     const followUpThreads = new Set(followUps.map((item) => item.threadId));
     const commitmentThreads = new Set(commitments.map((item) => item.threadId));
@@ -79,6 +83,10 @@
       if (navCommitmentCount) navCommitmentCount.textContent = String(commitments.length);
       render();
     } catch (error) {
+      messagesNode.removeAttribute('aria-hidden');
+      messagesNode.removeAttribute('aria-busy');
+      messagesNode.removeAttribute('aria-label');
+      countNode.removeAttribute('aria-label');
       messagesNode.replaceChildren(text('p', error.message || 'No se pudieron cargar los mensajes.', 'muted'));
     }
   }

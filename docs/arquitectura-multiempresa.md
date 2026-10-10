@@ -82,9 +82,19 @@ Cada usuario podrá elegir entre:
 - **IA de empresa**: una conexión OpenAI o Claude configurada para toda la organización.
 - **Mi conexión personal**: una credencial privada que solo se utiliza para ese usuario.
 
-La conexión de empresa será la opción inicial. En este momento el proyecto la resuelve mediante `OPENAI_API_KEY`, `OPENAI_MODEL` y `OPENAI_REASONING_EFFORT`. La resolución ya está separada en `src/ai-connections.ts` para que la futura pantalla de configuración no tenga que cambiar la lógica del asistente.
+La conexión de empresa se resuelve en el servidor mediante `OPENAI_API_KEY`/`OPENAI_MODEL` o `CLAUDE_API_KEY`/`CLAUDE_MODEL`. El proveedor activo se guarda en la organización (`sharedAiProvider`) y, si todavía no se ha elegido, se toma `DEFAULT_AI_PROVIDER` como valor inicial.
 
-Claude está modelado como proveedor permitido, pero todavía no tiene adaptador de ejecución. No se debe seleccionar como proveedor activo hasta implementar su cliente, validación y almacenamiento seguro.
+La selección del proveedor global y la concesión de acceso son funciones exclusivas del administrador. El administrador puede elegir OpenAI o Claude sin volver a introducir la clave almacenada en `.env` y puede marcar qué usuarios concretos pueden usar esa conexión. El administrador siempre tiene acceso; un usuario comercial no lo tiene por defecto. Si un comercial no tiene permiso global, debe guardar una conexión personal cifrada para poder usar el asistente. La conexión personal tiene prioridad sobre la global.
+
+La resolución está separada en `src/ai-connections.ts` y aplica estas reglas, en orden:
+
+1. Usar la conexión personal cifrada del usuario, si existe.
+2. Si no existe, usar la conexión global solo si el usuario es administrador o aparece en `sharedAiUserEmails`.
+3. Si no se cumple ninguna de las anteriores, devolver un error claro y no ejecutar ninguna llamada al proveedor.
+
+La pantalla `/settings/ai` muestra al administrador el selector de proveedor global y la lista de permisos por usuario. Los usuarios no administradores solo ven el estado de su conexión y la opción de guardar o desconectar su clave personal. Las claves globales nunca se envían al navegador ni se muestran en la interfaz.
+
+Claude ya dispone de un adaptador de ejecución mediante la Messages API. Antes de usarlo en producción hay que validarlo con una clave de prueba y comparar sus resultados con OpenAI.
 
 La interfaz común prevista es:
 
@@ -114,19 +124,21 @@ No se implementan todavía pagos, suscripciones ni dominios personalizados porqu
 - Los usuarios incorporan `organizationId` al iniciar sesión.
 - La cookie de sesión incluye la organización activa.
 - `/me` devuelve la organización activa además del usuario y el rol.
+- La entrada pública de la aplicación es `/`; muestra la bienvenida y el botón de acceso con Google.
+- Tras completar OAuth, el backend redirige a `/mailbox` para mostrar directamente los correos; las secciones internas requieren una sesión válida.
 - La resolución inicial de IA queda centralizada y etiquetada como `company_shared`.
+- La pantalla `/settings/ai` permite consultar la conexión de empresa y guardar o desconectar una conexión personal.
+- Las conexiones personales se cifran con `AI_CONNECTION_ENCRYPTION_KEY` y, en desarrollo, pueden usar como respaldo `TOKEN_ENCRYPTION_KEY`.
 - El almacenamiento local continúa funcionando para desarrollo.
 - Firestore mantiene una colección separada de organizaciones cuando `DATA_STORE=firestore`.
 
 ## Próximos pasos
 
-1. Crear la pantalla de configuración de IA.
-2. Añadir almacenamiento cifrado para claves personales.
-3. Implementar el adaptador Claude.
-4. Añadir endpoints protegidos para conectar, probar, cambiar y desconectar proveedores.
-5. Añadir `organizationId` a tokens Gmail, conexiones IA, auditoría y eventos de uso.
-6. Añadir un selector de organización solo cuando un usuario pueda pertenecer a más de una.
-7. Antes del despliegue, migrar secretos a Secret Manager y revisar las reglas de acceso de Firestore.
+1. Probar el adaptador Claude con una clave personal de prueba y documentar la elección del proveedor.
+2. Añadir endpoints protegidos para probar una conexión sin guardar la clave en claro.
+3. Añadir `organizationId` a tokens Gmail, auditoría y eventos de uso.
+4. Añadir un selector de organización solo cuando un usuario pueda pertenecer a más de una.
+5. Antes del despliegue, migrar secretos a Secret Manager y revisar las reglas de acceso de Firestore.
 
 ## Seguridad de API
 

@@ -4,7 +4,7 @@
       <h2>Seguimientos pendientes</h2>
       <p>Mensajes enviados sin una respuesta posterior, agrupados por hilo.</p>
     </div>
-    <span id="followUpCount" class="muted">Cargando…</span>
+    <span id="followUpCount" class="muted" aria-label="Cargando cantidad de seguimientos"><span class="skeleton skeleton-inline" aria-hidden="true"></span></span>
   </div>
 
   <div class="follow-up-tools">
@@ -16,8 +16,9 @@
     </select>
   </div>
 
-  <div id="followUps" class="follow-ups-list" aria-live="polite">
-    <p class="muted">Cargando seguimientos…</p>
+  <div id="followUps" class="skeleton-list follow-ups-list" aria-live="polite" aria-busy="true" aria-label="Cargando seguimientos" aria-hidden="true">
+    <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line short"></span></div>
+    <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line short"></span></div>
   </div>
 </section>
 

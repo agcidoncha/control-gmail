@@ -1,20 +1,43 @@
 ---
-import AppShell from '../layouts/AppShell.astro';
+const connected = Astro.url.searchParams.get('connected');
 ---
 
-<AppShell>
-  <section class="welcome">
-    <div><h2>Tu actividad comercial, en un solo lugar</h2><p>Revisa mensajes, consulta al asistente y trabaja siempre con tu cuenta autorizada.</p></div>
-    <a class="button-link" href="/assistant">Consultar a la IA</a>
-  </section>
-  <section class="stats" aria-label="Resumen de la cuenta">
-    <article class="stat"><span>Mensajes visibles</span><strong id="statMessageCount">—</strong><small>En la bandeja actual</small></article>
-    <article class="stat"><span>Cuenta conectada</span><strong>1</strong><small>Sesión activa</small></article>
-    <article class="stat"><span>Modo</span><strong>Solo lectura</strong><small>Sin envíos automáticos</small></article>
-    <article class="stat"><span>Permisos</span><strong id="statRole">—</strong><small>Según tu cuenta</small></article>
-  </section>
-  <section class="card screen-note">
-    <h2>Accede a una sección desde el menú</h2>
-    <p>La aplicación ya está preparada para cargar cada módulo en su propia pantalla, sin una página interminable.</p>
-  </section>
-</AppShell>
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Asistente Comercial · Gmail</title>
+  </head>
+  <body>
+    <main class="login-page">
+      <section class="login-card" aria-labelledby="login-title">
+        <img class="login-logo" src="/brand/logo.svg" alt="Publicidad Segmentada TV" />
+        <p class="eyebrow">Asistente comercial</p>
+        <h1 id="login-title">Gestiona tu actividad comercial desde Gmail</h1>
+        <p class="login-description">Conecta tu cuenta autorizada para revisar mensajes, seguimientos y compromisos en un espacio privado.</p>
+        <a class="google-login" href="/auth/google">Iniciar sesión con Google</a>
+        <p class="login-note">Cada usuario entra con su propia cuenta. Solo verá los datos de su sesión.</p>
+        {connected && <p class="login-status">Cuenta conectada: {connected}</p>}
+      </section>
+    </main>
+    <script is:inline src="/scripts/landing.js"></script>
+  </body>
+</html>
+
+<style is:global>
+  :root { --orange: #CB7721; --orange-dark: #AD6218; --ink: #231F20; --muted: #6F6864; --warm: #F5F2EE; --border: #DED9D3; }
+  * { box-sizing: border-box; }
+  body { min-width: 320px; min-height: 100vh; margin: 0; color: var(--ink); background: var(--warm); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .login-page { display: grid; place-items: center; min-height: 100vh; padding: 24px; background: radial-gradient(circle at 18% 10%, #fff 0, transparent 32%), var(--warm); }
+  .login-card { width: min(100%, 520px); padding: clamp(30px, 7vw, 58px); border: 1px solid var(--border); border-radius: 24px; background: #fff; box-shadow: 0 22px 55px rgba(35, 31, 32, .12); }
+  .login-logo { display: block; width: min(100%, 310px); height: auto; margin: 0 auto 48px; }
+  .eyebrow { margin: 0 0 10px; color: var(--orange-dark); font-size: 11px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+  h1 { max-width: 430px; margin: 0; font-size: clamp(30px, 6vw, 46px); letter-spacing: -.045em; line-height: 1.04; }
+  .login-description { margin: 18px 0 28px; color: var(--muted); font-size: 16px; line-height: 1.55; }
+  .google-login { display: inline-flex; align-items: center; justify-content: center; width: 100%; min-height: 50px; padding: 12px 18px; border-radius: 10px; color: #fff; background: var(--orange); font-size: 15px; font-weight: 800; text-decoration: none; transition: background .15s ease, transform .15s ease; }
+  .google-login:hover, .google-login:focus-visible { background: var(--orange-dark); transform: translateY(-1px); outline: none; }
+  .login-note, .login-status { margin: 16px 0 0; color: var(--muted); font-size: 12px; }
+  .login-status { color: #28683B; }
+  @media (max-width: 560px) { .login-page { padding: 14px; } .login-card { padding: 30px 22px; border-radius: 18px; } .login-logo { margin-bottom: 38px; } }
+</style>

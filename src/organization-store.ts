@@ -10,6 +10,8 @@ export type Organization = {
   name: string;
   status: 'active' | 'suspended';
   createdAt: string;
+  sharedAiProvider?: 'openai' | 'claude';
+  sharedAiUserEmails?: string[];
 };
 
 const organizationFile = resolve(process.env.ORGANIZATION_STORE_FILE ?? '.data/organizations.json');
@@ -39,17 +41,43 @@ export async function ensureDefaultOrganization(): Promise<Organization> {
 export async function getOrganization(id: string): Promise<Organization | null> {
   if (isFirestoreEnabled()) {
     const snapshot = await getFirestore().collection('organizations').doc(id).get();
-    return snapshot.exists ? snapshot.data() as Organization : null;
+    return snapshot.exists ? normalizeOrganization(snapshot.data() as Organization) : null;
   }
-  return (await readOrganizations()).find((organization) => organization.id === id) ?? null;
+  const organization = (await readOrganizations()).find((item) => item.id === id);
+  return organization ? normalizeOrganization(organization) : null;
 }
 
 export async function listOrganizations(): Promise<Organization[]> {
   if (isFirestoreEnabled()) {
     const snapshot = await getFirestore().collection('organizations').orderBy('name').get();
-    return snapshot.docs.map((document) => document.data() as Organization);
+    return snapshot.docs.map((document) => normalizeOrganization(document.data() as Organization));
   }
-  return (await readOrganizations()).sort((left, right) => left.name.localeCompare(right.name));
+  return (await readOrganizations()).map(normalizeOrganization).sort((left, right) => left.name.localeCompare(right.name));
+}
+
+export async function updateOrganizationAiSettings(id: string, settings: { provider?: 'openai' | 'claude'; sharedAiUserEmails?: string[] }) {
+  const nextEmails = [...new Set((settings.sharedAiUserEmails ?? []).map((email) => email.trim().toLowerCase()).filter(Boolean))];
+  if (isFirestoreEnabled()) {
+    const update: Record<string, unknown> = { sharedAiUserEmails: nextEmails };
+    if (settings.provider) update.sharedAiProvider = settings.provider;
+    await getFirestore().collection('organizations').doc(id).set(update, { merge: true });
+    return getOrganization(id);
+  }
+
+  const organizations = await readOrganizations();
+  const organization = organizations.find((item) => item.id === id);
+  if (!organization) return null;
+  organization.sharedAiUserEmails = nextEmails;
+  if (settings.provider) organization.sharedAiProvider = settings.provider;
+  await writeOrganizations(organizations);
+  return normalizeOrganization(organization);
+}
+
+function normalizeOrganization(organization: Organization): Organization {
+  return {
+    ...organization,
+    sharedAiUserEmails: [...new Set((organization.sharedAiUserEmails ?? []).map((email) => email.toLowerCase()))],
+  };
 }
 
 async function readOrganizations(): Promise<Organization[]> {

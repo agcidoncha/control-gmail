@@ -7,10 +7,17 @@ import { test } from 'node:test';
 process.env.NODE_ENV = 'test';
 process.env.SESSION_SECRET = 'test-server-secret-with-at-least-32-chars';
 process.env.ADMIN_EMAILS = 'angel.cidoncha@gmail.com';
-process.env.USER_STORE_FILE = join(await mkdtemp(join(tmpdir(), 'control-gmail-routes-')), 'users.json');
+const testDataDirectory = await mkdtemp(join(tmpdir(), 'control-gmail-routes-'));
+process.env.USER_STORE_FILE = join(testDataDirectory, 'users.json');
+process.env.ORGANIZATION_STORE_FILE = join(testDataDirectory, 'organizations.json');
+process.env.OPENAI_API_KEY = 'test-openai-key';
+process.env.CLAUDE_API_KEY = 'test-claude-key';
 await writeFile(process.env.USER_STORE_FILE, JSON.stringify([
   { email: 'angel.cidoncha@gmail.com', role: 'admin', createdAt: '2026-01-01T00:00:00.000Z', lastLoginAt: '2026-01-01T00:00:00.000Z' },
   { email: 'dev@publicidadsegmentadatv.com', role: 'commercial', createdAt: '2026-01-01T00:00:00.000Z', lastLoginAt: '2026-01-01T00:00:00.000Z' },
+], null, 2));
+await writeFile(process.env.ORGANIZATION_STORE_FILE, JSON.stringify([
+  { id: 'org_publicidad_segmentada_tv', name: 'Publicidad Segmentada TV', status: 'active', createdAt: '2026-01-01T00:00:00.000Z' },
 ], null, 2));
 
 const { app } = await import('../src/server.ts?server-routes-test');
@@ -18,7 +25,7 @@ const { sessionCookieHeader } = await import('../src/session.ts?server-routes-se
 
 test.after(async () => {
   await app.close();
-  await rm(process.env.USER_STORE_FILE!, { force: true });
+  await rm(testDataDirectory, { recursive: true, force: true });
 });
 
 test('las rutas privadas rechazan peticiones sin sesión', async () => {
@@ -65,6 +72,69 @@ test('el comercial no puede acceder a administración', async () => {
 
   assert.deepEqual(me.json(), { email: 'dev@publicidadsegmentadatv.com', organizationId: 'org_publicidad_segmentada_tv', role: 'commercial' });
   assert.equal(users.statusCode, 403);
+});
+
+test('el administrador autoriza usuarios y un comercial no puede hacerlo', async () => {
+  const adminHeaders = { cookie: sessionCookieHeader('angel.cidoncha@gmail.com') };
+  const commercialHeaders = { cookie: sessionCookieHeader('dev@publicidadsegmentadatv.com') };
+  const denied = await app.inject({
+    method: 'POST',
+    url: '/admin/users',
+    headers: { ...commercialHeaders, 'content-type': 'application/json' },
+    payload: { email: 'otra-cuenta@gmail.com', role: 'commercial' },
+  });
+  assert.equal(denied.statusCode, 403);
+
+  const authorized = await app.inject({
+    method: 'POST',
+    url: '/admin/users',
+    headers: { ...adminHeaders, 'content-type': 'application/json' },
+    payload: { email: 'otra-cuenta@gmail.com', role: 'commercial' },
+  });
+  assert.equal(authorized.statusCode, 200);
+  assert.deepEqual(authorized.json().user, {
+    email: 'otra-cuenta@gmail.com',
+    organizationId: 'org_publicidad_segmentada_tv',
+    role: 'commercial',
+    accessStatus: 'active',
+  });
+});
+
+test('el administrador controla el proveedor global y el acceso por usuario', async () => {
+  const adminHeaders = { cookie: sessionCookieHeader('angel.cidoncha@gmail.com') };
+  const commercialHeaders = { cookie: sessionCookieHeader('dev@publicidadsegmentadatv.com') };
+
+  const initialAdmin = await app.inject({ method: 'GET', url: '/admin/ai', headers: adminHeaders });
+  assert.equal(initialAdmin.statusCode, 200);
+  assert.equal(initialAdmin.json().activeProvider, 'openai');
+  assert.equal(initialAdmin.json().providers.openai.configured, true);
+  assert.equal(initialAdmin.json().users.find((user: { email: string }) => user.email === 'dev@publicidadsegmentadatv.com').canUseSharedAi, false);
+
+  const commercialConnections = await app.inject({ method: 'GET', url: '/ai/connections', headers: commercialHeaders });
+  assert.equal(commercialConnections.statusCode, 200);
+  assert.equal(commercialConnections.json().role, 'commercial');
+  assert.equal(commercialConnections.json().company.canUse, false);
+
+  const permission = await app.inject({
+    method: 'PATCH',
+    url: '/admin/ai/users/dev%40publicidadsegmentadatv.com',
+    headers: { ...adminHeaders, 'content-type': 'application/json' },
+    payload: { canUseSharedAi: true },
+  });
+  assert.equal(permission.statusCode, 200);
+  assert.equal(permission.json().canUseSharedAi, true);
+
+  const grantedConnections = await app.inject({ method: 'GET', url: '/ai/connections', headers: commercialHeaders });
+  assert.equal(grantedConnections.json().company.canUse, true);
+
+  const provider = await app.inject({
+    method: 'PUT',
+    url: '/admin/ai',
+    headers: { ...adminHeaders, 'content-type': 'application/json' },
+    payload: { provider: 'claude' },
+  });
+  assert.equal(provider.statusCode, 200);
+  assert.equal(provider.json().activeProvider, 'claude');
 });
 
 test('cambiar de cuenta elimina la cookie anterior y redirige a OAuth', async () => {

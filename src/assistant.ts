@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import OpenAI from 'openai';
 import { listRecentMailboxContext } from './google-oauth.js';
 import { resolveAiConnection } from './ai-connections.js';
+import { askClaude } from './claude.js';
 
 const rulesPath = resolve('docs/reglas-seguridad-trabajo-con-ia.md');
 const agentSpecPath = resolve('docs/agente-asistente-comercial-openai.md');
@@ -40,14 +41,8 @@ export async function askCommercialAssistant(email: string, question: string, or
     listRecentMailboxContext(email, 5),
   ]);
 
-  const connection = resolveAiConnection(email, organizationId);
-  const client = new OpenAI({ apiKey: connection.apiKey });
-  const model = connection.model;
-  const effort = connection.reasoningEffort;
-  const response = await client.responses.create({
-    model,
-    reasoning: { effort },
-    instructions: `
+  const connection = await resolveAiConnection(email, organizationId);
+  const instructions = `
 Eres Asistente Comercial. Trabajas exclusivamente con la cuenta Gmail autorizada de la sesión actual.
 No envíes, borres, archives, etiquetes ni modifiques mensajes. Solo analiza y propone.
 No inventes datos. Distingue hechos, inferencias y recomendaciones. Si falta información, indícalo.
@@ -59,14 +54,25 @@ ${rules}
 
 ESPECIFICACIÓN DEL AGENTE:
 ${agentSpec}
-`,
-    input: `
+`;
+  const prompt = `
 Pregunta del comercial:
 ${question}
 
 Mensajes disponibles de la cuenta autorizada:
 ${JSON.stringify(messages)}
-`,
+`;
+
+  if (connection.provider === 'claude') {
+    return askClaude({ apiKey: connection.apiKey, model: connection.model, instructions, prompt });
+  }
+
+  const client = new OpenAI({ apiKey: connection.apiKey });
+  const response = await client.responses.create({
+    model: connection.model,
+    reasoning: { effort: connection.reasoningEffort },
+    instructions,
+    input: prompt,
     text: {
       format: {
         type: 'json_schema',

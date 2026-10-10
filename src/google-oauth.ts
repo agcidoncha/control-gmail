@@ -27,10 +27,35 @@ type GmailThreadMessage = {
   body: string;
 };
 
+type PendingFollowUp = {
+  threadId: string;
+  client: string;
+  subject: string;
+  date: string | null;
+  ageDays: number;
+  reason: string;
+};
+
+type DetectedCommitment = {
+  threadId: string;
+  owner: string;
+  subject: string;
+  date: string | null;
+  commitment: string;
+  status: string;
+  reason: string;
+};
+
 type CacheEntry<T> = { expiresAt: number; value: T };
 const messageCache = new Map<string, CacheEntry<GmailListMessage[]>>();
 const threadCache = new Map<string, CacheEntry<GmailThreadMessage[]>>();
 const insightsCache = new Map<string, CacheEntry<AccountInsights>>();
+const followUpCache = new Map<string, CacheEntry<PendingFollowUp[]>>();
+const commitmentCache = new Map<string, CacheEntry<DetectedCommitment[]>>();
+const messageRequests = new Map<string, Promise<GmailListMessage[]>>();
+const threadRequests = new Map<string, Promise<GmailThreadMessage[]>>();
+const followUpRequests = new Map<string, Promise<PendingFollowUp[]>>();
+const commitmentRequests = new Map<string, Promise<DetectedCommitment[]>>();
 
 export type AccountClient = {
   email: string;
@@ -113,10 +138,22 @@ export async function listRecentMessages(email: string, maxResults = 10, mailbox
     return cached.value.slice(0, maxResults);
   }
 
-  const gmail = await getGmailClient(email);
-  const messages = await listMessagesForLabel(gmail, mailbox === 'sent' ? 'SENT' : 'INBOX', maxResults);
-  messageCache.set(cacheKey, { expiresAt: Date.now() + gmailCacheTtlMs, value: messages });
-  return messages;
+  const existingRequest = messageRequests.get(cacheKey);
+  if (existingRequest) return (await existingRequest).slice(0, maxResults);
+
+  const request = (async () => {
+    const gmail = await getGmailClient(email);
+    return listMessagesForLabel(gmail, mailbox === 'sent' ? 'SENT' : 'INBOX', maxResults);
+  })();
+  messageRequests.set(cacheKey, request);
+
+  try {
+    const messages = await request;
+    messageCache.set(cacheKey, { expiresAt: Date.now() + gmailCacheTtlMs, value: messages });
+    return messages.slice(0, maxResults);
+  } finally {
+    messageRequests.delete(cacheKey);
+  }
 }
 
 export async function listAccountInsights(email: string, maxResults = 25): Promise<AccountInsights> {
@@ -157,60 +194,92 @@ export async function listAccountInsights(email: string, maxResults = 25): Promi
 }
 
 export async function listPendingFollowUps(email: string, maxResults = 10) {
-  const gmail = await getGmailClient(email);
-  const sentMessages = await listRecentMessages(email, Math.min(Math.max(maxResults * 2, 10), 20), 'sent');
-  const threadIds = [...new Set(sentMessages.map((message) => message.threadId).filter(Boolean))] as string[];
-  const threads = await Promise.all(threadIds.map((threadId) => getCachedThreadMessages(email, gmail, threadId)));
-  const pending = threads.flatMap((thread) => {
-    const ordered = [...thread].sort((left, right) => messageTimestamp(left) - messageTimestamp(right));
-    const lastMessage = ordered.at(-1);
-    if (!lastMessage || !isMessageFromAccount(lastMessage.from, email)) return [];
+  const cacheKey = email.toLowerCase();
+  const cached = followUpCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.value.slice(0, maxResults);
 
-    const timestamp = messageTimestamp(lastMessage);
-    if (!timestamp) return [];
+  const existingRequest = followUpRequests.get(cacheKey);
+  if (existingRequest) return (await existingRequest).slice(0, maxResults);
 
-    const ageDays = Math.max(0, Math.floor((Date.now() - timestamp) / 86_400_000));
-    return [{
-      threadId: lastMessage.threadId,
-      client: lastMessage.to || '(Destinatario desconocido)',
-      subject: lastMessage.subject,
-      date: lastMessage.date,
-      ageDays,
-      reason: ageDays > 0
-        ? `Último mensaje enviado sin respuesta; han pasado ${ageDays} días.`
-        : 'Último mensaje enviado sin respuesta; se envió hoy.',
-    }];
-  });
+  const request = (async (): Promise<PendingFollowUp[]> => {
+    const gmail = await getGmailClient(email);
+    const sentMessages = await listRecentMessages(email, Math.min(Math.max(maxResults * 2, 10), 20), 'sent');
+    const threadIds = [...new Set(sentMessages.map((message) => message.threadId).filter(Boolean))] as string[];
+    const threads = await Promise.all(threadIds.map((threadId) => getCachedThreadMessages(email, gmail, threadId)));
+    const pending = threads.flatMap((thread) => {
+      const ordered = [...thread].sort((left, right) => messageTimestamp(left) - messageTimestamp(right));
+      const lastMessage = ordered.at(-1);
+      if (!lastMessage || !isMessageFromAccount(lastMessage.from, email)) return [];
 
-  return pending
-    .sort((left, right) => right.ageDays - left.ageDays || left.subject.localeCompare(right.subject))
-    .slice(0, maxResults);
+      const timestamp = messageTimestamp(lastMessage);
+      if (!timestamp) return [];
+
+      const ageDays = Math.max(0, Math.floor((Date.now() - timestamp) / 86_400_000));
+      return [{
+        threadId: lastMessage.threadId,
+        client: lastMessage.to || '(Destinatario desconocido)',
+        subject: lastMessage.subject,
+        date: lastMessage.date,
+        ageDays,
+        reason: ageDays > 0
+          ? `Último mensaje enviado sin respuesta; han pasado ${ageDays} días.`
+          : 'Último mensaje enviado sin respuesta; se envió hoy.',
+      }];
+    });
+
+    return pending.sort((left, right) => right.ageDays - left.ageDays || left.subject.localeCompare(right.subject));
+  })();
+  followUpRequests.set(cacheKey, request);
+
+  try {
+    const pending = await request;
+    followUpCache.set(cacheKey, { expiresAt: Date.now() + gmailCacheTtlMs, value: pending });
+    return pending.slice(0, maxResults);
+  } finally {
+    followUpRequests.delete(cacheKey);
+  }
 }
 
 export async function listDetectedCommitments(email: string, maxResults = 10) {
-  const context = await listRecentMailboxContext(email, 10);
-  const seen = new Set<string>();
-  const commitments = context.flatMap((candidate) => candidate.threadMessages.flatMap((message) => {
-    const owner = isMessageFromAccount(message.from, email) ? 'Tú' : message.from;
-    return extractCommitmentSentences(message.body).map((commitment) => {
-      const key = `${message.threadId}:${commitment.toLowerCase()}`;
-      if (seen.has(key)) return null;
-      seen.add(key);
-      return {
-        threadId: message.threadId,
-        owner,
-        subject: message.subject,
-        date: message.date,
-        commitment,
-        status: 'Pendiente de revisión',
-        reason: 'Frase de solicitud, confirmación, envío o plazo detectada en el hilo.',
-      };
-    }).filter((item): item is NonNullable<typeof item> => item !== null);
-  }));
+  const cacheKey = email.toLowerCase();
+  const cached = commitmentCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.value.slice(0, maxResults);
 
-  return commitments
-    .sort((left, right) => messageTimestamp(right) - messageTimestamp(left))
-    .slice(0, maxResults);
+  const existingRequest = commitmentRequests.get(cacheKey);
+  if (existingRequest) return (await existingRequest).slice(0, maxResults);
+
+  const request = (async (): Promise<DetectedCommitment[]> => {
+    const context = await listRecentMailboxContext(email, 10);
+    const seen = new Set<string>();
+    const commitments = context.flatMap((candidate) => candidate.threadMessages.flatMap((message) => {
+      const owner = isMessageFromAccount(message.from, email) ? 'Tú' : message.from;
+      return extractCommitmentSentences(message.body).map((commitment) => {
+        const key = `${message.threadId}:${commitment.toLowerCase()}`;
+        if (seen.has(key)) return null;
+        seen.add(key);
+        return {
+          threadId: message.threadId,
+          owner,
+          subject: message.subject,
+          date: message.date,
+          commitment,
+          status: 'Pendiente de revisión',
+          reason: 'Frase de solicitud, confirmación, envío o plazo detectada en el hilo.',
+        };
+      }).filter((item): item is NonNullable<typeof item> => item !== null);
+    }));
+
+    return commitments.sort((left, right) => messageTimestamp(right) - messageTimestamp(left));
+  })();
+  commitmentRequests.set(cacheKey, request);
+
+  try {
+    const commitments = await request;
+    commitmentCache.set(cacheKey, { expiresAt: Date.now() + gmailCacheTtlMs, value: commitments });
+    return commitments.slice(0, maxResults);
+  } finally {
+    commitmentRequests.delete(cacheKey);
+  }
 }
 
 export async function listRecentMailboxContext(email: string, maxPerFolder = 5) {
@@ -250,9 +319,18 @@ async function getCachedThreadMessages(email: string, gmail: ReturnType<typeof g
   const cached = threadCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
-  const messages = await getThreadMessagesFromGmail(gmail, threadId);
-  threadCache.set(cacheKey, { expiresAt: Date.now() + gmailCacheTtlMs, value: messages });
-  return messages;
+  const existingRequest = threadRequests.get(cacheKey);
+  if (existingRequest) return existingRequest;
+
+  const request = getThreadMessagesFromGmail(gmail, threadId);
+  threadRequests.set(cacheKey, request);
+  try {
+    const messages = await request;
+    threadCache.set(cacheKey, { expiresAt: Date.now() + gmailCacheTtlMs, value: messages });
+    return messages;
+  } finally {
+    threadRequests.delete(cacheKey);
+  }
 }
 
 async function getThreadMessagesFromGmail(gmail: ReturnType<typeof google.gmail>, threadId: string) {
