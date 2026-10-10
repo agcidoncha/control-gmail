@@ -3,7 +3,9 @@
   const countNode = document.querySelector('#followUpCount');
   const searchNode = document.querySelector('#followUpSearch');
   const ageNode = document.querySelector('#followUpAge');
-  if (!listNode || !countNode || !searchNode || !ageNode) return;
+  const categoryNode = document.querySelector('#followUpCategory');
+  const alertsNode = document.querySelector('#followUpAlerts');
+  if (!listNode || !countNode || !searchNode || !ageNode || !categoryNode || !alertsNode) return;
 
   let items = [];
 
@@ -20,6 +22,36 @@
     return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
   }
 
+  function urgencyFor(ageDays) {
+    if (ageDays >= 15) return ['urgent', 'Urgente'];
+    if (ageDays >= 10) return ['priority', 'Prioritario'];
+    if (ageDays >= 5) return ['attention', 'Atención'];
+    return ['normal', 'Reciente'];
+  }
+
+  function renderAlerts() {
+    const thresholds = [
+      { days: 5, tone: 'attention', title: 'Desde 5 días', description: 'Revisar esta semana' },
+      { days: 10, tone: 'priority', title: 'Desde 10 días', description: 'Prioridad comercial' },
+      { days: 15, tone: 'urgent', title: 'Desde 15 días', description: 'Atención urgente' },
+    ];
+    const alerts = thresholds
+      .map((threshold) => ({ ...threshold, count: items.filter((item) => item.ageDays >= threshold.days).length }))
+      .filter((threshold) => threshold.count > 0);
+
+    alertsNode.replaceChildren();
+    alertsNode.hidden = alerts.length === 0;
+    alerts.forEach((alert) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'follow-up-alert ' + alert.tone;
+      button.dataset.ageAlert = String(alert.days);
+      button.append(text('strong', alert.count + (alert.count === 1 ? ' seguimiento' : ' seguimientos') + ' · ' + alert.title));
+      button.append(text('span', alert.description));
+      alertsNode.append(button);
+    });
+  }
+
   function render() {
     listNode.removeAttribute('aria-hidden');
     listNode.removeAttribute('aria-busy');
@@ -29,9 +61,12 @@
     const minimumAge = ageNode.value === 'all' ? 0 : Number(ageNode.value);
     const visible = items.filter((item) => {
       const haystack = [item.client, item.subject, item.reason].join(' ').toLowerCase();
-      return (!query || haystack.includes(query)) && item.ageDays >= minimumAge;
+      return (!query || haystack.includes(query))
+        && item.ageDays >= minimumAge
+        && (categoryNode.value === 'all' || item.category === categoryNode.value);
     });
 
+    renderAlerts();
     countNode.textContent = visible.length + (visible.length === 1 ? ' pendiente' : ' pendientes');
     listNode.replaceChildren();
     if (!visible.length) {
@@ -50,6 +85,9 @@
 
       const side = document.createElement('div');
       side.className = 'follow-up-side';
+      const urgency = urgencyFor(item.ageDays);
+      side.append(text('span', urgency[1], 'follow-up-urgency ' + urgency[0]));
+      side.append(text('span', item.category || 'Seguimiento general', 'follow-up-category'));
       side.append(text('span', item.ageDays + (item.ageDays === 1 ? ' día' : ' días'), 'follow-up-age'));
       const button = text('button', 'Ver hilo completo');
       button.type = 'button';
@@ -68,9 +106,15 @@
 
   async function load() {
     try {
-      const response = await fetch('/gmail/follow-ups?max=10');
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'No se pudieron detectar seguimientos.');
+      const shared = window.__commercialNavDataPromise
+        ? await window.__commercialNavDataPromise
+        : null;
+      const result = shared?.followUps ?? await (async () => {
+        const response = await fetch('/gmail/follow-ups?max=10');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'No se pudieron detectar seguimientos.');
+        return data;
+      })();
       items = result.followUps || [];
       const navCount = document.querySelector('#navFollowUpCount');
       if (navCount) navCount.textContent = String(items.length);
@@ -119,5 +163,13 @@
 
   searchNode.addEventListener('input', render);
   ageNode.addEventListener('change', render);
+  categoryNode.addEventListener('change', render);
+  alertsNode.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-age-alert]');
+    if (!button) return;
+    ageNode.value = button.dataset.ageAlert || 'all';
+    render();
+    listNode.focus?.({ preventScroll: true });
+  });
   load();
 })();

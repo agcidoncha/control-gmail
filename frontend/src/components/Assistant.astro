@@ -17,6 +17,8 @@
     <textarea id="assistantQuestion" placeholder="Ejemplo: ¿Qué seguimientos pendientes detectas?" required></textarea>
     <div class="assistant-actions">
       <button id="assistantSubmit" type="submit" disabled>Analizar correos</button>
+      <button class="secondary-button assistant-preset" type="button" data-assistant-prompt="Resúmeme las conversaciones largas y destaca decisiones, compromisos y próximos pasos.">Resumir conversaciones largas</button>
+      <button class="secondary-button assistant-preset" type="button" data-assistant-prompt="Interpreta las necesidades de cada cliente a partir de las conversaciones y separa hechos de inferencias.">Interpretar necesidades del cliente</button>
       <a class="button-link secondary-button" href="/settings/ai">Configurar conexión IA</a>
     </div>
     <p id="assistantMessage" class="form-message" role="status" aria-live="polite"></p>

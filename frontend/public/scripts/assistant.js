@@ -6,6 +6,7 @@
   const messageNode = document.querySelector('#assistantMessage');
   const answerNode = document.querySelector('#assistantAnswer');
   if (!form || !questionNode || !submitButton || !connectionStatus || !messageNode || !answerNode) return;
+  const presetButtons = [...document.querySelectorAll('[data-assistant-prompt]')];
 
   const providerLabel = (provider) => provider === 'claude' ? 'Anthropic Claude' : 'OpenAI';
   let canAsk = false;
@@ -119,6 +120,13 @@
     } finally {
       submitButton.disabled = !canAsk;
     }
+  });
+
+  presetButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      questionNode.value = button.dataset.assistantPrompt || '';
+      questionNode.focus();
+    });
   });
 
   loadConnection();

@@ -16,21 +16,26 @@
     if (node) node.textContent = String(value);
   }
 
-  Promise.allSettled([
+  const sharedPromise = window.__commercialNavDataPromise;
+  (sharedPromise ? sharedPromise.then((data) => ({
+    messagesResult: data.messages,
+    followUpsResult: data.followUps,
+    commitmentsResult: data.commitments,
+  })) : Promise.allSettled([
     fetchJson('/gmail/messages?max=10&mailbox=inbox'),
     fetchJson('/gmail/follow-ups?max=10'),
     fetchJson('/gmail/commitments?max=10'),
-  ]).then(([messagesResult, followUpsResult, commitmentsResult]) => {
-    if (messagesResult.status === 'fulfilled') {
-      const messages = messagesResult.value.messages || [];
+  ]).then(([messagesResult, followUpsResult, commitmentsResult]) => ({ messagesResult, followUpsResult, commitmentsResult }))).then(({ messagesResult, followUpsResult, commitmentsResult }) => {
+    if (messagesResult && (messagesResult.status === undefined || messagesResult.status === 'fulfilled')) {
+      const messages = messagesResult.messages || messagesResult.value?.messages || [];
       setCount(statMessageCount, messages.length);
       setCount(navMessageCount, messages.length);
     }
-    if (followUpsResult.status === 'fulfilled') {
-      setCount(navFollowUpCount, (followUpsResult.value.followUps || []).length);
+    if (followUpsResult && (followUpsResult.status === undefined || followUpsResult.status === 'fulfilled')) {
+      setCount(navFollowUpCount, (followUpsResult.followUps || followUpsResult.value?.followUps || []).length);
     }
-    if (commitmentsResult.status === 'fulfilled') {
-      setCount(navCommitmentCount, (commitmentsResult.value.commitments || []).length);
+    if (commitmentsResult && (commitmentsResult.status === undefined || commitmentsResult.status === 'fulfilled')) {
+      setCount(navCommitmentCount, (commitmentsResult.commitments || commitmentsResult.value?.commitments || []).length);
     }
   });
 })();

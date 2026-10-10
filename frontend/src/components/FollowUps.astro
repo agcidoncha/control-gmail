@@ -11,10 +11,20 @@
     <input id="followUpSearch" type="search" placeholder="Buscar cliente o asunto…" aria-label="Buscar seguimientos" />
     <select id="followUpAge" aria-label="Filtrar por antigüedad">
       <option value="all">Cualquier antigüedad</option>
-      <option value="7">Más de 7 días</option>
-      <option value="30">Más de 30 días</option>
+      <option value="5">Desde 5 días</option>
+      <option value="10">Desde 10 días</option>
+      <option value="15">Desde 15 días</option>
+    </select>
+    <select id="followUpCategory" aria-label="Filtrar por tipo de seguimiento">
+      <option value="all">Todos los motivos</option>
+      <option value="Posible presupuesto">Presupuestos</option>
+      <option value="Posible propuesta">Propuestas</option>
+      <option value="Solicitud de información">Información</option>
+      <option value="Seguimiento general">General</option>
     </select>
   </div>
+
+  <div id="followUpAlerts" class="follow-up-alerts" aria-live="polite" hidden></div>
 
   <div id="followUps" class="skeleton-list follow-ups-list" aria-live="polite" aria-busy="true" aria-label="Cargando seguimientos" aria-hidden="true">
     <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line short"></span></div>
@@ -29,6 +39,11 @@
   .follow-up-tools { display: flex; gap: 12px; margin: 18px 0 4px; }
   .follow-up-tools input, .follow-up-tools select { min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; background: #fff; color: var(--ink); }
   .follow-up-tools input { flex: 1; }
+  .follow-up-alerts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 14px 0 6px; }
+  .follow-up-alert { display: grid; gap: 3px; justify-items: start; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; color: var(--ink); background: var(--surface-soft); text-align: left; }
+  .follow-up-alert:hover, .follow-up-alert:focus-visible { background: var(--surface-alt); transform: none; }
+  .follow-up-alert strong { font-size: 13px; }
+  .follow-up-alert span { color: var(--muted); font-size: 12px; }
   .follow-ups-list { display: grid; gap: 0; margin-top: 10px; }
   .follow-up { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--border); }
   .follow-up:last-child { border-bottom: 0; }
@@ -36,6 +51,12 @@
   .follow-up small { margin-top: 4px; color: var(--muted); }
   .follow-up p { margin: 7px 0 0; color: #4E4745; font-size: 13px; }
   .follow-up-side { display: flex; align-items: flex-end; flex-direction: column; gap: 10px; }
+  .follow-up-urgency { align-self: flex-end; padding: 5px 9px; border-radius: 999px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+  .follow-up-urgency.normal { color: var(--muted); background: var(--neutral-bg); }
+  .follow-up-urgency.attention { color: var(--orange-dark); background: #FFF1E2; }
+  .follow-up-urgency.priority { color: #8A4B0A; background: #F7D49F; }
+  .follow-up-urgency.urgent { color: #FFFFFF; background: #A33C28; }
+  .follow-up-category { display: inline-flex; align-self: flex-end; padding: 5px 9px; border-radius: 999px; color: var(--muted); background: var(--neutral-bg); font-size: 12px; font-weight: 700; white-space: nowrap; }
   .follow-up-age { align-self: flex-end; padding: 5px 9px; border-radius: 999px; color: var(--orange-dark); background: #FFF1E2; font-size: 12px; font-weight: 800; white-space: nowrap; }
   .follow-up-thread-button { padding: 7px 10px; background: var(--panel-dark); font-size: 12px; }
   .follow-up-thread { grid-column: 1 / -1; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--warm); }
@@ -45,5 +66,8 @@
   .thread-message strong, .thread-message small, .thread-message p { display: block; }
   .thread-message small { margin-top: 3px; color: var(--muted); }
   .thread-message p { margin: 7px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-  @media (max-width: 640px) { .follow-up-tools { flex-direction: column; } .follow-up-tools input, .follow-up-tools select { width: 100%; } .follow-up { grid-template-columns: 1fr; gap: 10px; } .follow-up-side { align-items: flex-start; flex-direction: row; flex-wrap: wrap; } .follow-up-age { align-self: center; } }
+  html[data-theme='dark'] .follow-up-urgency.normal { color: var(--muted); background: var(--neutral-bg); } html[data-theme='dark'] .follow-up-urgency.attention { color: var(--orange-light); background: var(--surface-alt); } html[data-theme='dark'] .follow-up-urgency.priority { color: #FFD18C; background: #5A3B23; } html[data-theme='dark'] .follow-up-urgency.urgent { color: #FFFFFF; background: #A33C28; }
+  html[data-theme='dark'] .follow-up-category { color: var(--muted); background: var(--neutral-bg); }
+  @media (max-width: 760px) { .follow-up-alerts { grid-template-columns: 1fr; } }
+  @media (max-width: 640px) { .follow-up-tools { flex-direction: column; } .follow-up-tools input, .follow-up-tools select { width: 100%; } .follow-up { grid-template-columns: 1fr; gap: 10px; } .follow-up-side { align-items: flex-start; flex-direction: row; flex-wrap: wrap; } .follow-up-age, .follow-up-urgency { align-self: center; } }
 </style>

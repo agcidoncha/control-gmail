@@ -2,7 +2,8 @@
   const listNode = document.querySelector('#commitments');
   const countNode = document.querySelector('#commitmentCount');
   const searchNode = document.querySelector('#commitmentSearch');
-  if (!listNode || !countNode || !searchNode) return;
+  const ownerNode = document.querySelector('#commitmentOwner');
+  if (!listNode || !countNode || !searchNode || !ownerNode) return;
 
   let items = [];
 
@@ -25,7 +26,14 @@
     listNode.removeAttribute('aria-label');
     countNode.removeAttribute('aria-label');
     const query = searchNode.value.trim().toLowerCase();
-    const visible = items.filter((item) => [item.subject, item.owner, item.commitment, item.reason].join(' ').toLowerCase().includes(query));
+    const visible = items.filter((item) => {
+      const matchesQuery = [item.subject, item.owner, item.commitment, item.reason].join(' ').toLowerCase().includes(query);
+      const isCommercial = item.owner === 'Tú';
+      const matchesOwner = ownerNode.value === 'all'
+        || (ownerNode.value === 'commercial' && isCommercial)
+        || (ownerNode.value === 'client' && !isCommercial);
+      return matchesQuery && matchesOwner;
+    });
     countNode.textContent = visible.length + (visible.length === 1 ? ' posible compromiso' : ' posibles compromisos');
     listNode.replaceChildren();
     if (!visible.length) {
@@ -62,9 +70,15 @@
 
   async function load() {
     try {
-      const response = await fetch('/gmail/commitments?max=10');
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'No se pudieron cargar los compromisos.');
+      const shared = window.__commercialNavDataPromise
+        ? await window.__commercialNavDataPromise
+        : null;
+      const result = shared?.commitments ?? await (async () => {
+        const response = await fetch('/gmail/commitments?max=10');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'No se pudieron cargar los compromisos.');
+        return data;
+      })();
       items = result.commitments || [];
       const navCount = document.querySelector('#navCommitmentCount');
       if (navCount) navCount.textContent = String(items.length);
@@ -112,5 +126,6 @@
   });
 
   searchNode.addEventListener('input', render);
+  ownerNode.addEventListener('change', render);
   load();
 })();

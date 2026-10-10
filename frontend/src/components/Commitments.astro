@@ -9,6 +9,11 @@
 
   <div class="commitment-tools">
     <input id="commitmentSearch" type="search" placeholder="Buscar asunto, responsable o compromiso…" aria-label="Buscar compromisos" />
+    <select id="commitmentOwner" aria-label="Filtrar responsable">
+      <option value="all">Todos los responsables</option>
+      <option value="commercial">Adquiridos por el comercial</option>
+      <option value="client">Adquiridos por el cliente</option>
+    </select>
   </div>
 
   <div id="commitments" class="skeleton-list commitments-list" aria-live="polite" aria-busy="true" aria-label="Cargando compromisos" aria-hidden="true">
@@ -22,7 +27,7 @@
 <style is:global>
   .commitments-screen { margin-top: 18px; }
   .commitment-tools { display: flex; gap: 12px; margin: 18px 0 4px; }
-  .commitment-tools input { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; background: #fff; color: var(--ink); }
+  .commitment-tools input, .commitment-tools select { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; background: #fff; color: var(--ink); }
   .commitments-list { display: grid; gap: 0; margin-top: 10px; }
   .commitment { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--border); }
   .commitment:last-child { border-bottom: 0; }

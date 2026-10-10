@@ -4,6 +4,7 @@ import Assistant from '../components/Assistant.astro';
 import Mailbox from '../components/Mailbox.astro';
 import FollowUps from '../components/FollowUps.astro';
 import Commitments from '../components/Commitments.astro';
+import Clients from '../components/Clients.astro';
 
 const screens = {
   mailbox: { title: 'Bandeja comercial', description: 'Filtra por bandeja, asunto, remitente o contenido.', body: 'Aquí se conectará la bandeja de Gmail de la cuenta activa.' },
@@ -24,6 +25,8 @@ const section = Astro.params.section ?? 'mailbox';
       <FollowUps />
     ) : section === 'commitments' ? (
       <Commitments />
+    ) : section === 'clients' ? (
+      <Clients />
     ) : section === 'consultar-ia' ? (
       <Assistant />
     ) : (

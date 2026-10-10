@@ -37,6 +37,8 @@
       const matchesFilter = filter === 'all'
         || (filter === 'follow-ups' && followUpThreads.has(message.threadId))
         || (filter === 'commitments' && commitmentThreads.has(message.threadId))
+        || (filter === 'important' && message.important === true)
+        || (filter === 'bounced' && message.bounced === true)
         || (filter === 'attention' && (followUpThreads.has(message.threadId) || commitmentThreads.has(message.threadId)));
       return matchesQuery && matchesFilter;
     });
@@ -50,7 +52,12 @@
     filtered.forEach((message) => {
       const article = document.createElement('article');
       article.className = 'message';
-      article.append(text('strong', message.subject));
+      const title = document.createElement('div');
+      title.className = 'message-title';
+      title.append(text('strong', message.subject));
+      if (message.important) title.append(text('span', 'Importante', 'message-importance'));
+      if (message.bounced) title.append(text('span', 'Rebotado', 'message-bounce'));
+      article.append(title);
       article.append(text('small', message.from + ' · ' + (message.date || '')));
       article.append(text('p', message.snippet));
       const button = text('button', 'Ver hilo completo');
@@ -67,11 +74,17 @@
 
   async function load() {
     try {
-      const [messageResult, followUpResult, commitmentResult] = await Promise.all([
-        fetchJson('/gmail/messages?max=10&mailbox=' + encodeURIComponent(mailboxNode.value)),
-        fetchJson('/gmail/follow-ups?max=10'),
-        fetchJson('/gmail/commitments?max=10'),
-      ]);
+      const shared = mailboxNode.value === 'inbox' && window.__commercialNavDataPromise
+        ? await window.__commercialNavDataPromise
+        : null;
+      const [messageResult, followUpResult, commitmentResult] = shared
+        ? [shared.messages, shared.followUps, shared.commitments]
+        : await Promise.all([
+          fetchJson('/gmail/messages?max=10&mailbox=' + encodeURIComponent(mailboxNode.value)),
+          fetchJson('/gmail/follow-ups?max=10'),
+          fetchJson('/gmail/commitments?max=10'),
+        ]);
+      if (!messageResult || !followUpResult || !commitmentResult) throw new Error('No se pudo cargar toda la información de la bandeja.');
       messages = messageResult.messages || [];
       followUps = followUpResult.followUps || [];
       commitments = commitmentResult.commitments || [];

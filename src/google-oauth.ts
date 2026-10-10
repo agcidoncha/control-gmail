@@ -14,6 +14,9 @@ type GmailListMessage = {
   to: string;
   date: string | null;
   snippet: string;
+  labelIds: string[];
+  important: boolean;
+  bounced: boolean;
 };
 
 type GmailThreadMessage = {
@@ -33,6 +36,7 @@ type PendingFollowUp = {
   subject: string;
   date: string | null;
   ageDays: number;
+  category: string;
   reason: string;
 };
 
@@ -131,7 +135,7 @@ export async function completeAuthorization(code: string, state: string) {
   };
 }
 
-export async function listRecentMessages(email: string, maxResults = 10, mailbox: 'inbox' | 'sent' = 'inbox') {
+export async function listRecentMessages(email: string, maxResults = 10, mailbox: 'inbox' | 'sent' | 'spam' = 'inbox') {
   const cacheKey = `${email.toLowerCase()}:${mailbox}`;
   const cached = messageCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now() && cached.value.length >= maxResults) {
@@ -143,7 +147,8 @@ export async function listRecentMessages(email: string, maxResults = 10, mailbox
 
   const request = (async () => {
     const gmail = await getGmailClient(email);
-    return listMessagesForLabel(gmail, mailbox === 'sent' ? 'SENT' : 'INBOX', maxResults);
+    const label = mailbox === 'sent' ? 'SENT' : mailbox === 'spam' ? 'SPAM' : 'INBOX';
+    return listMessagesForLabel(gmail, label, maxResults);
   })();
   messageRequests.set(cacheKey, request);
 
@@ -221,6 +226,7 @@ export async function listPendingFollowUps(email: string, maxResults = 10) {
         subject: lastMessage.subject,
         date: lastMessage.date,
         ageDays,
+        category: classifyFollowUp(ordered),
         reason: ageDays > 0
           ? `Último mensaje enviado sin respuesta; han pasado ${ageDays} días.`
           : 'Último mensaje enviado sin respuesta; se envió hoy.',
@@ -375,6 +381,18 @@ function extractCommitmentSentences(body: string) {
     .map((sentence) => sentence.slice(0, 280));
 }
 
+export function classifyFollowUp(thread: GmailThreadMessage[]) {
+  const content = thread.map((message) => `${message.subject}\n${message.body}`).join('\n').toLowerCase();
+  if (/\bpresupuesto(?:s)?\b|\bcotizaci[oó]n(?:es)?\b|\bquotation(?:s)?\b|\bquote(?:s)?\b|\bpricing\b|\bprecio(?:s)?\b|\bcoste(?:s)?\b|\bcosto(?:s)?\b|\btarifa(?:s)?\b|\bpropuesta\s+econ[oó]mica\b/.test(content)) return 'Posible presupuesto';
+  if (/\bpropuesta(?:s)?\b|\boferta(?:s)?\b|\bproposal(?:s)?\b/.test(content)) return 'Posible propuesta';
+  if (/\bbriefing\b|\binformaci[oó]n\b|\bdetalles?\b|\bconfirm(?:ar|aci[oó]n)\b|\bdatos\b|\balcance\b/.test(content)) return 'Solicitud de información';
+  return 'Seguimiento general';
+}
+
+function looksLikeBounce(subject: string, snippet: string) {
+  return /mail delivery subsystem|delivery status notification|delivery failed|failure notice|undeliverable|returned mail|message not delivered|mensaje no entregado|no se pudo entregar|correo rechazado/i.test(`${subject} ${snippet}`);
+}
+
 type GmailPayload = {
   mimeType?: string | null;
   body?: { data?: string | null } | null;
@@ -474,7 +492,7 @@ function decodeHtmlEntities(value: string): string {
   return decoded;
 }
 
-async function listMessagesForLabel(gmail: ReturnType<typeof google.gmail>, label: 'INBOX' | 'SENT', maxResults: number) {
+async function listMessagesForLabel(gmail: ReturnType<typeof google.gmail>, label: 'INBOX' | 'SENT' | 'SPAM', maxResults: number) {
   const listed = await gmail.users.messages.list({
     userId: 'me',
     labelIds: [label],
@@ -502,6 +520,9 @@ async function listMessagesForLabel(gmail: ReturnType<typeof google.gmail>, labe
         to: headers.To || '',
         date: headers.Date || null,
         snippet: cleanEmailBody(data.snippet ?? ''),
+        labelIds: data.labelIds ?? [],
+        important: (data.labelIds ?? []).includes('IMPORTANT'),
+        bounced: label === 'INBOX' && looksLikeBounce(headers.Subject || '', data.snippet ?? ''),
       };
     }),
   );

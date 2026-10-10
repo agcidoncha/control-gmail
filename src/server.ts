@@ -696,7 +696,11 @@ app.get<{ Querystring: { max?: string; mailbox?: string } }>(
     if (!account) return reply.code(401).send({ error: 'Sesión no iniciada.' });
 
     try {
-      const mailbox = request.query.mailbox === 'sent' ? 'sent' : 'inbox';
+      const mailbox = request.query.mailbox === 'sent'
+        ? 'sent'
+        : request.query.mailbox === 'spam'
+          ? 'spam'
+          : 'inbox';
       const messages = await listRecentMessages(account, Number(request.query.max ?? 10), mailbox);
       return { account, mailbox, messages };
     } catch (error) {

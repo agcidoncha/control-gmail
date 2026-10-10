@@ -1,0 +1,27 @@
+<section class="card clients-screen">
+  <div class="card-header">
+    <div>
+      <h2>Clientes</h2>
+      <p>Contactos detectados en los mensajes de la cuenta activa.</p>
+    </div>
+    <span id="clientCount" class="muted" aria-label="Cargando cantidad de clientes"><span class="skeleton skeleton-inline" aria-hidden="true"></span></span>
+  </div>
+  <p class="clients-note">Fichas básicas generadas con remitentes y destinatarios visibles. Las necesidades y preferencias requieren análisis adicional.</p>
+  <div id="clients" class="clients-list skeleton-list" aria-live="polite" aria-busy="true" aria-label="Cargando clientes" aria-hidden="true">
+    <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line short"></span></div>
+    <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line short"></span></div>
+  </div>
+</section>
+
+<script is:inline src="/scripts/clients.js"></script>
+
+<style is:global>
+  .clients-screen { margin-top: 18px; }
+  .clients-note { margin: 16px 0 4px; color: var(--muted); font-size: 13px; }
+  .clients-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-top: 16px; }
+  .client-card { display: grid; gap: 8px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-soft); }
+  .client-card strong, .client-card small, .client-card p { overflow-wrap: anywhere; }
+  .client-card small { color: var(--muted); }
+  .client-card p { margin: 0; color: var(--body-copy); font-size: 13px; }
+  html[data-theme='dark'] .client-card { background: var(--surface-soft); }
+</style>
