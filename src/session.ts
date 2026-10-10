@@ -16,12 +16,40 @@ function sign(value: string) {
 }
 
 export function createSession(email: string) {
+  return createSessionForOrganization(email, process.env.DEFAULT_ORGANIZATION_ID ?? 'org_publicidad_segmentada_tv');
+}
+
+export function createSessionForOrganization(email: string, organizationId: string) {
   const payload = Buffer.from(JSON.stringify({
     email,
+    organizationId,
     exp: Math.floor(Date.now() / 1000) + sessionLifetimeSeconds,
   })).toString('base64url');
 
   return `${payload}.${sign(payload)}`;
+}
+
+export function readSessionContext(cookieHeader?: string): { email: string; organizationId: string } | null {
+  const cookie = cookieHeader?.split(';').map((value) => value.trim())
+    .find((value) => value.startsWith(`${sessionCookie}=`));
+  if (!cookie) return null;
+
+  const value = cookie.slice(`${sessionCookie}=`.length);
+  const [payload, signature] = value.split('.');
+  if (!payload || !signature) return null;
+
+  const expected = sign(payload);
+  const providedBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  if (providedBuffer.length !== expectedBuffer.length || !timingSafeEqual(providedBuffer, expectedBuffer)) return null;
+
+  try {
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { email?: string; organizationId?: string; exp?: number };
+    if (!data.email || !data.organizationId || !data.exp || data.exp < Math.floor(Date.now() / 1000)) return null;
+    return { email: data.email, organizationId: data.organizationId };
+  } catch {
+    return null;
+  }
 }
 
 export function readSession(cookieHeader?: string) {
@@ -50,8 +78,12 @@ export function readSession(cookieHeader?: string) {
 }
 
 export function sessionCookieHeader(email: string) {
+  return sessionCookieHeaderForOrganization(email, process.env.DEFAULT_ORGANIZATION_ID ?? 'org_publicidad_segmentada_tv');
+}
+
+export function sessionCookieHeaderForOrganization(email: string, organizationId: string) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  return `${sessionCookie}=${createSession(email)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${sessionLifetimeSeconds}${secure}`;
+  return `${sessionCookie}=${createSessionForOrganization(email, organizationId)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${sessionLifetimeSeconds}${secure}`;
 }
 
 export function clearSessionCookieHeader() {

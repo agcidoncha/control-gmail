@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import Fastify from 'fastify';
 import { completeAuthorization, createAuthorizationUrl, getThreadMessages, listAccountInsights, listDetectedCommitments, listPendingFollowUps, listRecentMessages } from './google-oauth.js';
-import { clearSessionCookieHeader, readSession, sessionCookieHeader } from './session.js';
+import { clearSessionCookieHeader, readSession, readSessionContext, sessionCookieHeaderForOrganization } from './session.js';
 import { getUser, listUsers, upsertUser } from './user-store.js';
 import { askCommercialAssistant } from './assistant.js';
 
@@ -517,7 +517,8 @@ app.get('/me', async (request, reply) => {
   if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
   const user = await getUser(email);
   if (!user) return reply.code(403).send({ error: 'Usuario no registrado.' });
-  return { email: user.email, role: user.role };
+  const context = readSessionContext(request.headers.cookie);
+  return { email: user.email, organizationId: context?.organizationId ?? user.organizationId, role: user.role };
 });
 
 app.get('/admin/users', async (request, reply) => {
@@ -535,7 +536,8 @@ app.post<{ Body: { question?: string } }>('/assistant/ask', async (request, repl
   if (!question) return reply.code(400).send({ error: 'Indica una pregunta.' });
 
   try {
-    return { account: email, analysis: await askCommercialAssistant(email, question) };
+    const context = readSessionContext(request.headers.cookie);
+    return { account: email, organizationId: context?.organizationId, analysis: await askCommercialAssistant(email, question, context?.organizationId) };
   } catch (error) {
     return reply.code(500).send({
       error: error instanceof Error ? error.message : 'No se pudo consultar al asistente.',
@@ -649,8 +651,8 @@ app.get<{ Querystring: { code?: string; state?: string; error?: string } }>(
       if (!profile.emailAddress) {
         return reply.code(500).send({ error: 'Google no devolvió el email de la cuenta.' });
       }
-      await upsertUser(profile.emailAddress);
-      reply.header('Set-Cookie', sessionCookieHeader(profile.emailAddress));
+      const user = await upsertUser(profile.emailAddress);
+      reply.header('Set-Cookie', sessionCookieHeaderForOrganization(profile.emailAddress, user.organizationId));
       return reply.redirect('/?connected=' + encodeURIComponent(profile.emailAddress));
     } catch (callbackError) {
       return reply.code(500).send({

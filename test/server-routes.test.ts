@@ -63,7 +63,7 @@ test('el comercial no puede acceder a administración', async () => {
     headers: { cookie: sessionCookieHeader('dev@publicidadsegmentadatv.com') },
   });
 
-  assert.deepEqual(me.json(), { email: 'dev@publicidadsegmentadatv.com', role: 'commercial' });
+  assert.deepEqual(me.json(), { email: 'dev@publicidadsegmentadatv.com', organizationId: 'org_publicidad_segmentada_tv', role: 'commercial' });
   assert.equal(users.statusCode, 403);
 });
 

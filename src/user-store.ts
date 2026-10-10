@@ -1,11 +1,13 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { getFirestore, isFirestoreEnabled } from './firestore.js';
+import { defaultOrganizationId, ensureDefaultOrganization } from './organization-store.js';
 
 export type UserRole = 'commercial' | 'admin';
 
 export type AppUser = {
   email: string;
+  organizationId: string;
   role: UserRole;
   createdAt: string;
   lastLoginAt: string;
@@ -14,6 +16,7 @@ export type AppUser = {
 const userFile = resolve(process.env.USER_STORE_FILE ?? '.data/users.json');
 
 export async function upsertUser(email: string) {
+  await ensureDefaultOrganization();
   if (isFirestoreEnabled()) return upsertFirestoreUser(email);
 
   const users = await readUsers();
@@ -25,10 +28,12 @@ export async function upsertUser(email: string) {
 
   if (existing) {
     existing.lastLoginAt = now;
+    existing.organizationId ??= defaultOrganizationId;
     existing.role = adminEmails.has(email.toLowerCase()) ? 'admin' : 'commercial';
   } else {
     users.push({
       email,
+      organizationId: defaultOrganizationId,
       role: adminEmails.has(email.toLowerCase()) ? 'admin' : 'commercial',
       createdAt: now,
       lastLoginAt: now,
@@ -36,15 +41,16 @@ export async function upsertUser(email: string) {
   }
 
   await writeUsers(users);
-  return users.find((user) => user.email === email)!;
+  return normalizeUser(users.find((user) => user.email === email)!);
 }
 
 export async function getUser(email: string) {
   if (isFirestoreEnabled()) {
     const snapshot = await getFirestore().collection('users').doc(email).get();
-    return snapshot.exists ? snapshot.data() as AppUser : null;
+    return snapshot.exists ? normalizeUser(snapshot.data() as AppUser) : null;
   }
-  return (await readUsers()).find((user) => user.email === email) ?? null;
+  const user = (await readUsers()).find((item) => item.email === email);
+  return user ? normalizeUser(user) : null;
 }
 
 export async function listUsers() {
@@ -52,11 +58,12 @@ export async function listUsers() {
     const snapshot = await getFirestore().collection('users').orderBy('email').get();
     return snapshot.docs.map((document) => {
       const user = document.data() as AppUser;
-      return { email: user.email, role: user.role, createdAt: user.createdAt, lastLoginAt: user.lastLoginAt };
+      return { email: user.email, organizationId: user.organizationId ?? defaultOrganizationId, role: user.role, createdAt: user.createdAt, lastLoginAt: user.lastLoginAt };
     });
   }
-  return (await readUsers()).map(({ email, role, createdAt, lastLoginAt }) => ({
+  return (await readUsers()).map(({ email, organizationId, role, createdAt, lastLoginAt }) => ({
     email,
+    organizationId: organizationId ?? defaultOrganizationId,
     role,
     createdAt,
     lastLoginAt,
@@ -71,12 +78,17 @@ async function upsertFirestoreUser(email: string) {
   const existing = snapshot.exists ? snapshot.data() as AppUser : undefined;
   const user: AppUser = {
     email,
+    organizationId: defaultOrganizationId,
     role,
     createdAt: existing?.createdAt ?? now,
     lastLoginAt: now,
   };
   await reference.set(user);
   return user;
+}
+
+function normalizeUser(user: AppUser): AppUser {
+  return { ...user, organizationId: user.organizationId ?? defaultOrganizationId };
 }
 
 function isAdminEmail(email: string) {

@@ -1,0 +1,44 @@
+<section class="card mailbox-screen">
+  <div class="card-header">
+    <div><h2>Correos que requieren atención</h2><p>Filtra por bandeja, asunto, remitente o contenido.</p></div>
+    <span id="mailboxCount" class="muted">Cargando…</span>
+  </div>
+  <div class="message-tools">
+    <select id="messageMailbox" aria-label="Tipo de mensajes">
+      <option value="inbox">Recibidos</option>
+      <option value="sent">Enviados</option>
+    </select>
+    <input id="messageSearch" type="search" placeholder="Buscar cliente, empresa o asunto…" />
+  </div>
+  <div id="messageFilters" class="quick-filters" role="group" aria-label="Filtrar mensajes">
+    <button class="filter-chip active" type="button" data-message-filter="all">Todos</button>
+    <button class="filter-chip" type="button" data-message-filter="attention">Atención</button>
+    <button class="filter-chip" type="button" data-message-filter="follow-ups">Sin respuesta</button>
+    <button class="filter-chip" type="button" data-message-filter="commitments">Compromisos</button>
+  </div>
+  <div id="messages" class="muted">Cargando mensajes…</div>
+</section>
+
+<script is:inline src="/scripts/mailbox.js"></script>
+
+<style is:global>
+  .mailbox-screen { margin-top: 18px; }
+  .message-tools { display: flex; align-items: center; gap: 12px; margin: 18px 0 4px; }
+  .message-tools input, .message-tools select { min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; background: #fff; color: var(--ink); }
+  .message-tools input { flex: 1; }
+  .quick-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 4px; }
+  .filter-chip { padding: 7px 11px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); background: #fff; font-size: 12px; }
+  .filter-chip:hover, .filter-chip:focus-visible, .filter-chip.active { color: var(--orange-dark); background: #FFF1E2; border-color: var(--border); }
+  .message { min-width: 0; padding: 18px 0; border-bottom: 1px solid var(--border); }
+  .message:last-child { border-bottom: 0; }
+  .message strong { display: block; margin-bottom: 4px; overflow-wrap: anywhere; }
+  .message small { display: block; margin-bottom: 7px; color: var(--muted); overflow-wrap: anywhere; }
+  .message p { margin: 0; color: #4E4745; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+  .message.is-open { background: #FCFAF8; }
+  .thread-button { margin-top: 12px; padding: 7px 11px; border-radius: 10px; background: var(--panel-dark); font-size: 13px; }
+  .thread-inline { margin-top: 18px; padding: 16px 18px 4px; border: 1px solid var(--border); border-radius: 12px; background: var(--warm); overflow-wrap: anywhere; }
+  .thread-inline .message { padding: 12px 0; }
+  .thread-inline .message:first-child { padding-top: 0; }
+  .thread-inline .message:last-child { padding-bottom: 0; }
+  @media (max-width: 640px) { .message-tools { align-items: stretch; flex-direction: column; } .message-tools select, .message-tools input { width: 100%; } }
+</style>

@@ -332,7 +332,7 @@ function cleanPlainText(value: string): string {
 }
 
 function cleanEmailBody(value: string): string {
-  const lines = redactSensitiveValues(value)
+  const lines = redactSensitiveValues(decodeHtmlEntities(value))
     .replace(/[\u00ad\u034f\u061c\u180e\u200b-\u200d\u2060\ufeff]/g, '')
     .split('\n')
     .filter((line) => !/^\s*[([\s]*https?:\/\/\S+[)\]]?\s*$/i.test(line))
@@ -378,16 +378,22 @@ function decodeHtmlEntities(value: string): string {
     laquo: '«', raquo: '»', ldquo: '“', rdquo: '”', lsquo: '‘', rsquo: '’', copy: '©', reg: '®', trade: '™',
   };
 
-  return value.replace(/&(#x[0-9a-f]+|#\d+|[a-z][a-z0-9]+);/gi, (match, code: string) => {
-    if (code.startsWith('#')) {
-      const numericCode = code.slice(1);
-      const number = numericCode.toLowerCase().startsWith('x')
-        ? Number.parseInt(numericCode.slice(1), 16)
-        : Number.parseInt(numericCode, 10);
-      return Number.isFinite(number) ? String.fromCodePoint(number) : '';
-    }
-    return namedEntities[code.toLowerCase()] ?? match;
-  });
+  let decoded = value;
+  for (let pass = 0; pass < 3; pass += 1) {
+    const next = decoded.replace(/&(#x[0-9a-f]+|#\d+|[a-z][a-z0-9]+);/gi, (match, code: string) => {
+      if (code.startsWith('#')) {
+        const numericCode = code.slice(1);
+        const number = numericCode.toLowerCase().startsWith('x')
+          ? Number.parseInt(numericCode.slice(1), 16)
+          : Number.parseInt(numericCode, 10);
+        return Number.isFinite(number) ? String.fromCodePoint(number) : '';
+      }
+      return namedEntities[code.toLowerCase()] ?? match;
+    });
+    if (next === decoded) break;
+    decoded = next;
+  }
+  return decoded;
 }
 
 async function listMessagesForLabel(gmail: ReturnType<typeof google.gmail>, label: 'INBOX' | 'SENT', maxResults: number) {

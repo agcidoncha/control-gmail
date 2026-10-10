@@ -12,6 +12,7 @@ Aplicación local para ayudar a cada comercial a revisar sus propios correos de 
 - Búsqueda y lectura de hilos completos.
 - Asistente con hechos, inferencias, acciones, fuentes y aviso de revisión humana.
 - Tokens Google cifrados localmente.
+- Base preparada para organizaciones, usuarios y conexiones de IA compartidas o personales.
 - Pruebas automáticas de sesiones, roles, cifrado y rutas protegidas.
 
 ## Ejecutar en local
@@ -45,6 +46,8 @@ La preparación del contenedor y el despliegue futuro en Cloud Run están descri
 ## Arquitectura
 
 La descripción de responsabilidades, privacidad y evolución a producción está en [`docs/arquitectura-backend.md`](docs/arquitectura-backend.md).
+
+La evolución a varias empresas y las conexiones OpenAI/Claude están documentadas en [`docs/arquitectura-multiempresa.md`](docs/arquitectura-multiempresa.md).
 
 Reglas de trabajo del agente: [`docs/reglas-seguridad-trabajo-con-ia.md`](docs/reglas-seguridad-trabajo-con-ia.md).
 

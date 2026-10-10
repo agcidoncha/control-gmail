@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import OpenAI from 'openai';
 import { listRecentMailboxContext } from './google-oauth.js';
+import { resolveAiConnection } from './ai-connections.js';
 
 const rulesPath = resolve('docs/reglas-seguridad-trabajo-con-ia.md');
 const agentSpecPath = resolve('docs/agente-asistente-comercial-openai.md');
@@ -32,20 +33,17 @@ const analysisSchema = {
   required: ['respuesta', 'hechos', 'inferencias', 'acciones_propuestas', 'requiere_revision', 'fuentes'],
 } as const;
 
-export async function askCommercialAssistant(email: string, question: string) {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error('Falta OPENAI_API_KEY en .env.');
-  }
-
+export async function askCommercialAssistant(email: string, question: string, organizationId?: string) {
   const [rules, agentSpec, messages] = await Promise.all([
     readFile(rulesPath, 'utf8'),
     readFile(agentSpecPath, 'utf8'),
     listRecentMailboxContext(email, 5),
   ]);
 
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const model = process.env.OPENAI_MODEL ?? 'gpt-6-luna';
-  const effort = (process.env.OPENAI_REASONING_EFFORT ?? 'high') as 'low' | 'medium' | 'high';
+  const connection = resolveAiConnection(email, organizationId);
+  const client = new OpenAI({ apiKey: connection.apiKey });
+  const model = connection.model;
+  const effort = connection.reasoningEffort;
   const response = await client.responses.create({
     model,
     reasoning: { effort },
