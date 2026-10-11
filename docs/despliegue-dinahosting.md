@@ -30,7 +30,13 @@ Si Dinahosting indica que sus DNS no están activos para el dominio, el registro
 
 ## Prueba remota en el segundo hosting
 
-La prueba debe hacerse con un dominio o subdominio cuyos DNS sí estén gestionados por ese segundo entorno. Debe validar, en este orden:
+La prueba remota se hará inicialmente en:
+
+- Dominio/subdominio de prueba: `lab.thelocalhost.es`.
+- Host SSH: `ftp.thelocalhost.es`.
+- Usuario SSH: `thelocalhost`.
+
+La clave privada SSH no se guarda en el repositorio. La prueba debe hacerse con un dominio o subdominio cuyos DNS sí estén gestionados por ese segundo entorno. Debe validar, en este orden:
 
 1. Acceso SSH y versión compatible de Node.js.
 2. Instalación limpia con `npm ci` en backend y frontend.
