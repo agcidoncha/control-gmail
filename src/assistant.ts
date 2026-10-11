@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import OpenAI from 'openai';
-import { listRecentMailboxContext } from './google-oauth.js';
+import { getAnalysisWindow, listRecentMailboxContext, type AnalysisWindow } from './google-oauth.js';
 import { resolveAiConnection } from './ai-connections.js';
-import { askClaude } from './claude.js';
+import { askClaude, parseCommercialAnalysis } from './claude.js';
 
 const rulesPath = resolve('docs/reglas-seguridad-trabajo-con-ia.md');
 const agentSpecPath = resolve('docs/agente-asistente-comercial-openai.md');
@@ -34,11 +34,11 @@ const analysisSchema = {
   required: ['respuesta', 'hechos', 'inferencias', 'acciones_propuestas', 'requiere_revision', 'fuentes'],
 } as const;
 
-export async function askCommercialAssistant(email: string, question: string, organizationId?: string) {
+export async function askCommercialAssistant(email: string, question: string, organizationId?: string, analysisWindow: AnalysisWindow = getAnalysisWindow()) {
   const [rules, agentSpec, messages] = await Promise.all([
     readFile(rulesPath, 'utf8'),
     readFile(agentSpecPath, 'utf8'),
-    listRecentMailboxContext(email, 5),
+    listRecentMailboxContext(email, 5, analysisWindow, true),
   ]);
 
   const connection = await resolveAiConnection(email, organizationId);
@@ -61,6 +61,9 @@ ${question}
 
 Mensajes disponibles de la cuenta autorizada:
 ${JSON.stringify(messages)}
+
+Ventana temporal aplicada: ${analysisWindow.from} a ${analysisWindow.to} (${analysisWindow.days} días).
+Alcance del buzón aplicado: ${analysisWindow.scope === 'all' ? 'todos los mensajes, incluidos los archivados' : analysisWindow.scope === 'spam' ? 'Spam' : 'bandeja de entrada y enviados'}.
 `;
 
   if (connection.provider === 'claude') {
@@ -83,5 +86,5 @@ ${JSON.stringify(messages)}
     },
   });
 
-  return JSON.parse(response.output_text);
+  return parseCommercialAnalysis(response.output_text);
 }

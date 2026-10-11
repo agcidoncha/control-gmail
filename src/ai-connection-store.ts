@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { getFirestore, isFirestoreEnabled } from './firestore.js';
+import { getMysqlPool, isMysqlEnabled } from './mysql.js';
 import type { AiProvider } from './ai-connections.js';
 
 export type PersonalAiConnection = {
@@ -31,6 +32,15 @@ export async function savePersonalAiConnection(connection: Omit<PersonalAiConnec
     });
     return;
   }
+  if (isMysqlEnabled()) {
+    await getMysqlPool().query(
+      `INSERT INTO ai_connections (organization_id, user_email, provider, api_key_ciphertext, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE provider = VALUES(provider), api_key_ciphertext = VALUES(api_key_ciphertext), updated_at = VALUES(updated_at)`,
+      [next.organizationId, next.userEmail.toLowerCase(), next.provider, encryptValue(next.apiKey), next.createdAt, next.updatedAt],
+    );
+    return;
+  }
 
   const connections = await readConnections();
   connections[key] = next;
@@ -44,6 +54,22 @@ export async function loadPersonalAiConnection(organizationId: string, userEmail
     if (!snapshot.exists) return null;
     const data = snapshot.data() as PersonalAiConnection & { apiKey: string };
     return { ...data, apiKey: decryptValue(data.apiKey) };
+  }
+  if (isMysqlEnabled()) {
+    const [rows] = await getMysqlPool().query(
+      'SELECT * FROM ai_connections WHERE organization_id = ? AND user_email = ?',
+      [organizationId, userEmail.toLowerCase()],
+    );
+    const row = (rows as Array<Record<string, unknown>>)[0];
+    if (!row) return null;
+    return {
+      organizationId: String(row.organization_id),
+      userEmail: String(row.user_email),
+      provider: row.provider === 'claude' ? 'claude' : 'openai',
+      apiKey: decryptValue(String(row.api_key_ciphertext)),
+      createdAt: String(row.created_at),
+      updatedAt: String(row.updated_at),
+    };
   }
   const connections = await readConnections();
   return connections[key] ?? null;
@@ -60,6 +86,13 @@ export async function deletePersonalAiConnection(organizationId: string, userEma
   const key = connectionKey(organizationId, userEmail);
   if (isFirestoreEnabled()) {
     await getFirestore().collection('ai_connections').doc(key).delete();
+    return;
+  }
+  if (isMysqlEnabled()) {
+    await getMysqlPool().query(
+      'DELETE FROM ai_connections WHERE organization_id = ? AND user_email = ?',
+      [organizationId, userEmail.toLowerCase()],
+    );
     return;
   }
 

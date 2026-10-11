@@ -1,12 +1,14 @@
 <section class="card mailbox-screen">
   <div class="card-header">
     <div><h2>Correos que requieren atención</h2><p>Filtra por bandeja, asunto, remitente o contenido.</p></div>
-    <span id="mailboxCount" class="muted" aria-label="Cargando cantidad de mensajes"><span class="skeleton skeleton-inline" aria-hidden="true"></span></span>
+    <div class="mailbox-header-actions"><span id="mailboxCount" class="muted" aria-label="Cargando cantidad de mensajes"><span class="skeleton skeleton-inline" aria-hidden="true"></span></span><button id="composeMessageButton" type="button">Nuevo correo</button></div>
   </div>
   <div class="message-tools">
     <select id="messageMailbox" aria-label="Tipo de mensajes">
       <option value="inbox">Recibidos</option>
       <option value="sent">Enviados</option>
+      <option value="archived">Archivados en Gmail</option>
+      <option value="appArchived">Archivados por Asistente Comercial</option>
       <option value="spam">Spam</option>
     </select>
     <input id="messageSearch" type="search" placeholder="Buscar cliente, empresa o asunto…" />
@@ -19,10 +21,29 @@
     <button class="filter-chip" type="button" data-message-filter="follow-ups">Sin respuesta</button>
     <button class="filter-chip" type="button" data-message-filter="commitments">Compromisos</button>
   </div>
+  <p id="archivedMailboxNotice" class="mailbox-archived-notice muted" hidden></p>
+  <p class="mailbox-permissions muted">Puedes marcar, archivar, enviar a papelera, redactar y responder. Si conectaste Gmail antes de activar estas acciones, vuelve a autorizar la cuenta desde «Cambiar de cuenta».</p>
+  <form id="composeMessageForm" class="compose-message" hidden>
+    <div class="compose-heading"><strong id="composeTitle">Nuevo correo</strong><button id="cancelComposeButton" class="secondary-button" type="button">Cancelar</button></div>
+    <label>Para <input id="composeTo" type="email" required /></label>
+    <label>Asunto <input id="composeSubject" type="text" maxlength="500" required /></label>
+    <label>Mensaje <textarea id="composeBody" maxlength="100000" required></textarea></label>
+    <input id="composeThreadId" type="hidden" />
+    <input id="composeReplyToMessageId" type="hidden" />
+    <div class="compose-actions"><button type="submit">Enviar correo</button><span id="composeStatus" class="muted" role="status" aria-live="polite"></span></div>
+  </form>
   <div id="messages" class="skeleton-list" aria-live="polite" aria-busy="true" aria-label="Cargando mensajes" aria-hidden="true">
     <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line short"></span></div>
     <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line short"></span></div>
     <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line short"></span></div>
+  </div>
+  <div id="mailboxUndo" class="mailbox-undo" role="status" aria-live="polite" hidden>
+    <span id="mailboxUndoMessage"></span>
+    <button id="mailboxUndoButton" type="button">Deshacer</button>
+  </div>
+  <div class="mailbox-pagination">
+    <button id="loadMoreMessages" type="button" hidden>Cargar más mensajes</button>
+    <span id="mailboxPaginationStatus" class="muted" aria-live="polite"></span>
   </div>
 </section>
 
@@ -30,6 +51,7 @@
 
 <style is:global>
   .mailbox-screen { margin-top: 18px; }
+  .mailbox-header-actions { display: flex; align-items: center; gap: 12px; }
   .message-tools { display: flex; align-items: center; gap: 12px; margin: 18px 0 4px; }
   .message-tools input, .message-tools select { min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; background: #fff; color: var(--ink); }
   .message-tools input { flex: 1; }
@@ -44,12 +66,34 @@
   .message-bounce { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 999px; color: var(--danger); background: var(--neutral-bg); font-size: 11px; font-weight: 800; white-space: nowrap; }
   .message small { display: block; margin-bottom: 7px; color: var(--muted); overflow-wrap: anywhere; }
   .message p { margin: 0; color: #4E4745; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+  .mailbox-permissions { margin: 14px 0 0; font-size: 12px; }
+  .mailbox-archived-notice { margin: 10px 0 0; padding: 10px 12px; border-radius: 9px; background: var(--surface-soft); font-size: 12px; }
+  .compose-message { display: grid; gap: 10px; margin-top: 18px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-soft); }
+  .compose-message[hidden] { display: none; }
+  .compose-heading, .compose-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .compose-message label { display: grid; gap: 5px; font-size: 12px; font-weight: 750; }
+  .compose-message input, .compose-message textarea { width: 100%; margin: 0; padding: 10px 11px; border: 1px solid var(--border); border-radius: 9px; color: var(--ink); background: var(--surface-input); font: inherit; }
+  .compose-message textarea { min-height: 130px; resize: vertical; }
+  .compose-message .secondary-button { color: var(--orange-dark); background: var(--warm); border: 1px solid var(--border); font-size: 12px; }
+  .message-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .message-actions button { padding: 7px 10px; border: 1px solid var(--border); color: var(--ink); background: var(--warm); font-size: 12px; }
+  .message-actions button:hover, .message-actions button:focus-visible { color: var(--ink); background: var(--orange-light); }
+  .message-actions button.danger { color: var(--danger); }
+  .message-action-status { margin: 8px 0 0; font-size: 12px; }
+  .mailbox-undo { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 14px; padding: 11px 13px; border: 1px solid var(--border); border-radius: 10px; color: var(--ink); background: var(--surface-soft); font-size: 12px; }
+  .mailbox-undo[hidden] { display: none; }
+  .mailbox-undo button { flex: 0 0 auto; padding: 6px 10px; border: 1px solid var(--border); color: var(--ink); background: var(--warm); font-size: 12px; }
+  .mailbox-undo button:hover, .mailbox-undo button:focus-visible { background: var(--orange-light); }
   .message.is-open { background: #FCFAF8; }
   .thread-button { margin-top: 12px; padding: 7px 11px; border-radius: 10px; background: var(--panel-dark); font-size: 13px; }
   .thread-inline { margin-top: 18px; padding: 16px 18px 4px; border: 1px solid var(--border); border-radius: 12px; background: var(--warm); overflow-wrap: anywhere; }
   .thread-inline .message { padding: 12px 0; }
   .thread-inline .message:first-child { padding-top: 0; }
   .thread-inline .message:last-child { padding-bottom: 0; }
+  .mailbox-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 42px; margin-top: 14px; }
+  .mailbox-pagination button[hidden] { display: none; }
+  .mailbox-pagination button { color: var(--orange-dark); background: var(--warm); border: 1px solid var(--border); font-size: 13px; }
+  .mailbox-pagination button:hover, .mailbox-pagination button:focus-visible { color: var(--ink); background: var(--orange-light); }
   html[data-theme='dark'] .message-importance { color: var(--orange-light); background: var(--surface-alt); }
   html[data-theme='dark'] .message-bounce { color: var(--danger); background: var(--neutral-bg); }
   @media (max-width: 640px) { .message-tools { align-items: stretch; flex-direction: column; } .message-tools select, .message-tools input { width: 100%; } }

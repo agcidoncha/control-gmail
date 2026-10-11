@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { getFirestore, isFirestoreEnabled } from './firestore.js';
+import { getMysqlPool, isMysqlEnabled } from './mysql.js';
 
 export const defaultOrganizationId = process.env.DEFAULT_ORGANIZATION_ID ?? 'org_publicidad_segmentada_tv';
 export const defaultOrganizationName = process.env.DEFAULT_ORGANIZATION_NAME ?? 'Publicidad Segmentada TV';
@@ -29,6 +30,13 @@ export async function ensureDefaultOrganization(): Promise<Organization> {
 
   if (isFirestoreEnabled()) {
     await getFirestore().collection('organizations').doc(organization.id).set(organization);
+  } else if (isMysqlEnabled()) {
+    await getMysqlPool().query(
+      `INSERT INTO organizations (id, name, status, shared_ai_user_emails, created_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE id = VALUES(id)`,
+      [organization.id, organization.name, organization.status, JSON.stringify([]), organization.createdAt],
+    );
   } else {
     const organizations = await readOrganizations();
     organizations.push(organization);
@@ -43,6 +51,11 @@ export async function getOrganization(id: string): Promise<Organization | null> 
     const snapshot = await getFirestore().collection('organizations').doc(id).get();
     return snapshot.exists ? normalizeOrganization(snapshot.data() as Organization) : null;
   }
+  if (isMysqlEnabled()) {
+    const [rows] = await getMysqlPool().query('SELECT * FROM organizations WHERE id = ?', [id]);
+    const row = (rows as Array<Record<string, unknown>>)[0];
+    return row ? normalizeOrganization(fromMysqlOrganization(row)) : null;
+  }
   const organization = (await readOrganizations()).find((item) => item.id === id);
   return organization ? normalizeOrganization(organization) : null;
 }
@@ -51,6 +64,10 @@ export async function listOrganizations(): Promise<Organization[]> {
   if (isFirestoreEnabled()) {
     const snapshot = await getFirestore().collection('organizations').orderBy('name').get();
     return snapshot.docs.map((document) => normalizeOrganization(document.data() as Organization));
+  }
+  if (isMysqlEnabled()) {
+    const [rows] = await getMysqlPool().query('SELECT * FROM organizations ORDER BY name');
+    return (rows as Array<Record<string, unknown>>).map((row) => normalizeOrganization(fromMysqlOrganization(row)));
   }
   return (await readOrganizations()).map(normalizeOrganization).sort((left, right) => left.name.localeCompare(right.name));
 }
@@ -61,6 +78,18 @@ export async function updateOrganizationAiSettings(id: string, settings: { provi
     const update: Record<string, unknown> = { sharedAiUserEmails: nextEmails };
     if (settings.provider) update.sharedAiProvider = settings.provider;
     await getFirestore().collection('organizations').doc(id).set(update, { merge: true });
+    return getOrganization(id);
+  }
+
+  if (isMysqlEnabled()) {
+    const fields: string[] = ['shared_ai_user_emails = ?'];
+    const values: unknown[] = [JSON.stringify(nextEmails)];
+    if (settings.provider) {
+      fields.push('shared_ai_provider = ?');
+      values.push(settings.provider);
+    }
+    values.push(id);
+    await getMysqlPool().query(`UPDATE organizations SET ${fields.join(', ')} WHERE id = ?`, values);
     return getOrganization(id);
   }
 
@@ -78,6 +107,28 @@ function normalizeOrganization(organization: Organization): Organization {
     ...organization,
     sharedAiUserEmails: [...new Set((organization.sharedAiUserEmails ?? []).map((email) => email.toLowerCase()))],
   };
+}
+
+function fromMysqlOrganization(row: Record<string, unknown>): Organization {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    status: row.status === 'suspended' ? 'suspended' : 'active',
+    createdAt: String(row.created_at),
+    sharedAiProvider: row.shared_ai_provider === 'claude' ? 'claude' : row.shared_ai_provider === 'openai' ? 'openai' : undefined,
+    sharedAiUserEmails: parseEmailList(row.shared_ai_user_emails),
+  };
+}
+
+function parseEmailList(value: unknown) {
+  if (Array.isArray(value)) return value.map(String);
+  if (typeof value !== 'string') return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
 }
 
 async function readOrganizations(): Promise<Organization[]> {

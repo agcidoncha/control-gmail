@@ -36,7 +36,47 @@ El backend es la fuente de verdad. El HTML solo presenta datos y solicita operac
 
 ## Privacidad del asistente
 
-El asistente recibe solo el contexto de la cuenta activa y trabaja en modo lectura. No puede enviar, borrar, archivar, etiquetar ni modificar mensajes. Su salida distingue hechos, inferencias y acciones propuestas, y marca cuándo hace falta revisión humana.
+El asistente recibe solo el contexto de la cuenta activa. No ejecuta acciones por su cuenta: su salida distingue hechos, inferencias y acciones propuestas, y marca cuándo hace falta revisión humana. Las operaciones de correo se inician únicamente desde la interfaz de Gmail y requieren una decisión explícita del usuario.
+
+## Permisos y operaciones de Gmail
+
+- El OAuth solicita `gmail.modify` para marcar mensajes, archivar y enviar a la papelera, y `gmail.send` para redactar y responder.
+- Las cuentas conectadas antes de activar estos permisos deben volver a autorizarse desde «Cambiar de cuenta»; hasta entonces las acciones devuelven una indicación de reautorización.
+- `PATCH /gmail/messages/:messageId` acepta `markRead`, `markUnread`, `archive`, `unarchive` y `trash`. `unarchive` se usa para deshacer un archivado reciente. La cuenta se obtiene de la sesión y nunca de un parámetro del navegador.
+- `POST /gmail/send` valida destinatario, asunto y cuerpo en backend. Puede crear un correo nuevo o responder dentro del hilo usando `threadId` y los encabezados de respuesta del mensaje padre.
+- En la interfaz, enviar a papelera pide confirmación. El asistente no puede disparar estas rutas.
+- La siguiente ampliación prevista es añadir borradores, etiquetas, destacados y restauración desde papelera, junto con auditoría de acciones sin guardar el contenido del mensaje en los registros.
+
+## Análisis comercial y uso bajo demanda
+
+- `/gmail/insights` genera las fichas iniciales de clientes con remitentes, destinatarios, número de mensajes y última actividad.
+- `/gmail/client-history` carga el historial de un cliente solo cuando el usuario pulsa `Ver historial`; no se consulta todo el historial de todos los clientes al abrir la pantalla.
+- La bandeja comercial es independiente del análisis: puede cargar mensajes por páginas y no queda limitada al periodo de IA.
+- El análisis automático usa por defecto los últimos 30 días (`AI_ANALYSIS_DAYS=30`). Esto limita el contexto que se envía al modelo y ayuda a controlar el consumo.
+- Dentro del periodo elegido el backend recorre las páginas de Gmail, no solo los 10 mensajes visibles. `AI_MAX_MESSAGES=100` establece el límite de protección por bandeja; se puede subir conscientemente si la organización acepta el coste y el tiempo adicional.
+- `POST /assistant/ask` acepta `analysisDays` o un rango `analysisFrom`/`analysisTo` en formato `AAAA-MM-DD`. La interfaz ofrece un mes, tres meses, seis meses, un año o un rango personalizado; al ampliar el periodo avisa de que puede aumentar el consumo y pide confirmación.
+- `POST /assistant/ask` también acepta `analysisScope`: `mailbox` (bandeja y enviados, opción predeterminada), `all` (todos los mensajes, incluidos los archivados) o `spam`. Los dos últimos alcances consultan Gmail directamente y avisan en la interfaz de que pueden aumentar las consultas y el coste.
+- Los seguimientos, compromisos y fichas de clientes también parten de la ventana por defecto de 30 días. El historial de un cliente se mantiene bajo demanda y puede consultar mensajes anteriores.
+- Cada mensaje de hilo conserva indicios de fechas y plazos para apoyar la revisión de compromisos.
+- Los compromisos se clasifican como posibles incumplimientos, pendientes de revisión o pendientes de respuesta según las fechas detectadas y la existencia de mensajes posteriores. Son heurísticas y siempre requieren revisión humana.
+- La categoría `Briefing pendiente` se detecta en seguimientos y se puede filtrar desde la pantalla de Seguimientos.
+- El botón `Analizar necesidades` prepara una consulta en `/consultar-ia`, pero no llama al proveedor ni consume API hasta que el usuario pulsa `Analizar correos`.
+- Los contadores del menú reutilizan durante 30 segundos los resultados de esa sesión del navegador para evitar duplicar consultas Gmail al cambiar de pantalla.
+- Si Gmail devuelve una limitación de cuota, el backend la transforma en un aviso entendible y no expone el mensaje técnico completo en la interfaz.
+
+## Persistencia y sincronización de Gmail
+
+La interfaz no debe consultar Gmail cada vez que se abre una pantalla. El backend mantiene una copia de trabajo por cuenta, separada por correo:
+
+- `gmail_accounts/{email}`: estado de la última sincronización y ventana cubierta.
+- `gmail_accounts/{email}/messages/{messageId}`: metadatos de los mensajes.
+- `gmail_accounts/{email}/threads/{threadId}`: mensajes normalizados de cada hilo.
+
+En local se utiliza `.data/gmail-store.json`; cuando `DATA_STORE=firestore`, se utilizan las colecciones equivalentes de Firestore. Los cuerpos de los mensajes se cifran con `TOKEN_ENCRYPTION_KEY` antes de persistirse. Los mensajes y hilos nunca se devuelven a una sesión distinta de la cuenta autenticada.
+
+La primera sincronización cubre por defecto la ventana de análisis configurada (`AI_ANALYSIS_DAYS`, 30 días), recorre páginas de Gmail y limita la carga a `GMAIL_SYNC_MAX_MESSAGES` por bandeja. Las peticiones posteriores leen la copia persistida mientras no haya vencido `GMAIL_SYNC_INTERVAL_SECONDS` (900 segundos por defecto). Si se solicita un rango de análisis más amplio, el backend sincroniza ese rango antes de analizarlo.
+
+La siguiente evolución de producción será sustituir la resincronización periódica por `historyId` y `users.watch`, para traer únicamente cambios nuevos. Hasta entonces, la ventana y el intervalo son límites explícitos de coste y cuota, no valores ocultos en la interfaz.
 
 ## Estado local y evolución
 
@@ -48,6 +88,12 @@ En local se usan `.data/users.json` y `.data/google-tokens.enc`, ambos ignorados
 - Sesiones persistentes y revocables.
 - Auditoría de accesos sin registrar cuerpos de correo.
 - Límites de uso por usuario y control de costes de OpenAI.
+
+### MySQL en el hosting
+
+El hosting previsto ofrece Node.js y MySQL, por lo que MySQL será el almacén de producción recomendado. El esquema inicial está en `db/migrations/001_initial_mysql_schema.sql` e incluye organizaciones, usuarios, tokens cifrados, conexiones de IA, caché de Gmail e historial de acciones. En local se conserva `DATA_STORE=local` para poder desarrollar sin depender del servidor; al desplegar se usará `DATA_STORE=mysql` y las variables `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD` y `MYSQL_SSL`.
+
+La tabla `gmail_actions` no guarda cuerpos de mensajes ni claves: solo registra quién ejecutó una acción, sobre qué cuenta y mensaje, cuándo terminó y si tuvo éxito. El adaptador Node/MySQL y la migración de datos desde `.data/` son pasos posteriores antes del despliegue; este esquema no implica que se hayan subido datos al hosting.
 
 ## Reglas para nuevas funcionalidades
 

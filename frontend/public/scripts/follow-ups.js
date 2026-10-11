@@ -117,7 +117,7 @@
       })();
       items = result.followUps || [];
       const navCount = document.querySelector('#navFollowUpCount');
-      if (navCount) navCount.textContent = String(items.length);
+      if (navCount) { navCount.textContent = String(items.length); navCount.hidden = false; }
       render();
     } catch (error) {
       listNode.removeAttribute('aria-hidden');
@@ -153,7 +153,7 @@
         item.className = 'thread-message';
         item.append(text('strong', message.subject));
         item.append(text('small', message.from + (message.to ? ' → ' + message.to : '') + ' · ' + formatDate(message.date)));
-        item.append(text('p', message.body));
+        item.append(text('p', window.cleanEmailBody(message.body)));
         thread.append(item);
       });
     } catch (error) {

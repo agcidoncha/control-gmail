@@ -10,6 +10,8 @@ process.env.ADMIN_EMAILS = 'angel.cidoncha@gmail.com';
 const testDataDirectory = await mkdtemp(join(tmpdir(), 'control-gmail-routes-'));
 process.env.USER_STORE_FILE = join(testDataDirectory, 'users.json');
 process.env.ORGANIZATION_STORE_FILE = join(testDataDirectory, 'organizations.json');
+process.env.AI_CONNECTION_STORE_FILE = join(testDataDirectory, 'ai-connections.enc');
+process.env.AI_CONNECTION_ENCRYPTION_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 process.env.OPENAI_API_KEY = 'test-openai-key';
 process.env.CLAUDE_API_KEY = 'test-claude-key';
 await writeFile(process.env.USER_STORE_FILE, JSON.stringify([
@@ -32,16 +34,20 @@ test('las rutas privadas rechazan peticiones sin sesión', async () => {
   const me = await app.inject({ method: 'GET', url: '/me' });
   const users = await app.inject({ method: 'GET', url: '/admin/users' });
   const messages = await app.inject({ method: 'GET', url: '/gmail/messages?account=angel.cidoncha%40gmail.com' });
+  const navCounts = await app.inject({ method: 'GET', url: '/gmail/nav-counts' });
   const insights = await app.inject({ method: 'GET', url: '/gmail/insights' });
   const followUps = await app.inject({ method: 'GET', url: '/gmail/follow-ups' });
   const commitments = await app.inject({ method: 'GET', url: '/gmail/commitments' });
+  const clientHistory = await app.inject({ method: 'GET', url: '/gmail/client-history?email=cliente%40empresa.test' });
 
   assert.equal(me.statusCode, 401);
   assert.equal(users.statusCode, 401);
   assert.equal(messages.statusCode, 401);
+  assert.equal(navCounts.statusCode, 401);
   assert.equal(insights.statusCode, 401);
   assert.equal(followUps.statusCode, 401);
   assert.equal(commitments.statusCode, 401);
+  assert.equal(clientHistory.statusCode, 401);
 });
 
 test('el administrador puede ver usuarios pero no contenido de correos', async () => {
@@ -114,6 +120,7 @@ test('el administrador controla el proveedor global y el acceso por usuario', as
   assert.equal(commercialConnections.statusCode, 200);
   assert.equal(commercialConnections.json().role, 'commercial');
   assert.equal(commercialConnections.json().company.canUse, false);
+  assert.equal(commercialConnections.json().activeConnection, null);
 
   const permission = await app.inject({
     method: 'PATCH',
@@ -126,6 +133,24 @@ test('el administrador controla el proveedor global y el acceso por usuario', as
 
   const grantedConnections = await app.inject({ method: 'GET', url: '/ai/connections', headers: commercialHeaders });
   assert.equal(grantedConnections.json().company.canUse, true);
+  assert.deepEqual(grantedConnections.json().activeConnection, { mode: 'company_shared', provider: 'openai' });
+
+  const personalConnection = await app.inject({
+    method: 'POST',
+    url: '/ai/connections/personal',
+    headers: { ...commercialHeaders, 'content-type': 'application/json' },
+    payload: { provider: 'claude', apiKey: 'test-personal-claude-key' },
+  });
+  assert.equal(personalConnection.statusCode, 200);
+
+  const personalConnections = await app.inject({ method: 'GET', url: '/ai/connections', headers: commercialHeaders });
+  assert.deepEqual(personalConnections.json().activeConnection, { mode: 'user_personal', provider: 'claude' });
+
+  const disconnectedPersonal = await app.inject({ method: 'DELETE', url: '/ai/connections/personal', headers: commercialHeaders });
+  assert.equal(disconnectedPersonal.statusCode, 200);
+
+  const fallbackConnections = await app.inject({ method: 'GET', url: '/ai/connections', headers: commercialHeaders });
+  assert.deepEqual(fallbackConnections.json().activeConnection, { mode: 'company_shared', provider: 'openai' });
 
   const provider = await app.inject({
     method: 'PUT',

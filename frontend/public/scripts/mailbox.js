@@ -3,11 +3,69 @@
   const mailboxNode = document.querySelector('#messageMailbox');
   const searchNode = document.querySelector('#messageSearch');
   const countNode = document.querySelector('#mailboxCount');
+  const loadMoreNode = document.querySelector('#loadMoreMessages');
+  const paginationStatusNode = document.querySelector('#mailboxPaginationStatus');
+  const archivedNoticeNode = document.querySelector('#archivedMailboxNotice');
+  const undoNode = document.querySelector('#mailboxUndo');
+  const undoMessageNode = document.querySelector('#mailboxUndoMessage');
+  const undoButton = document.querySelector('#mailboxUndoButton');
+  const composeButton = document.querySelector('#composeMessageButton');
+  const composeForm = document.querySelector('#composeMessageForm');
+  const composeTitle = document.querySelector('#composeTitle');
+  const composeTo = document.querySelector('#composeTo');
+  const composeSubject = document.querySelector('#composeSubject');
+  const composeBody = document.querySelector('#composeBody');
+  const composeThreadId = document.querySelector('#composeThreadId');
+  const composeReplyToMessageId = document.querySelector('#composeReplyToMessageId');
+  const cancelComposeButton = document.querySelector('#cancelComposeButton');
+  const composeStatus = document.querySelector('#composeStatus');
   const filterButtons = [...document.querySelectorAll('[data-message-filter]')];
   let messages = [];
   let followUps = [];
   let commitments = [];
   let filter = 'all';
+  let nextPageToken = null;
+  let loadingMore = false;
+  let retryBlockedUntil = 0;
+  let retryTimer = null;
+  let undoState = null;
+  let undoTimer = null;
+
+  function clearUndo() {
+    undoState = null;
+    undoButton.disabled = false;
+    undoNode.hidden = true;
+    if (undoTimer) window.clearTimeout(undoTimer);
+    undoTimer = null;
+  }
+
+  function showUndo(message, inverseAction, description) {
+    undoState = { message, inverseAction };
+    undoButton.disabled = false;
+    undoMessageNode.textContent = description;
+    undoNode.hidden = false;
+    if (undoTimer) window.clearTimeout(undoTimer);
+    undoTimer = window.setTimeout(clearUndo, 8000);
+  }
+
+  function openCompose(message = null) {
+    composeForm.hidden = false;
+    composeTitle.textContent = message ? 'Responder al correo' : 'Nuevo correo';
+    const replyTarget = message?.labelIds?.includes('SENT') ? message.to : message?.from;
+    composeTo.value = message ? (replyTarget?.match(/<([^>]+)>/)?.[1] || replyTarget?.match(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i)?.[0] || '') : '';
+    composeSubject.value = message ? (/^re:/i.test(message.subject) ? message.subject : 'Re: ' + message.subject) : '';
+    composeBody.value = '';
+    composeThreadId.value = message?.threadId || '';
+    composeReplyToMessageId.value = message?.id || '';
+    composeStatus.textContent = '';
+    composeTo.focus();
+  }
+
+  function closeCompose() {
+    composeForm.hidden = true;
+    composeForm.reset();
+    composeStatus.textContent = '';
+  }
 
   const text = (tag, value, className = '') => {
     const node = document.createElement(tag);
@@ -16,14 +74,25 @@
     return node;
   };
 
-  async function fetchJson(url) {
-    const response = await fetch(url);
+  async function fetchJson(url, options = {}) {
+    const response = await fetch(url, options);
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'No se pudo cargar la información.');
     return result;
   }
 
   function render() {
+    if (archivedNoticeNode) {
+      if (mailboxNode.value === 'archived') {
+        archivedNoticeNode.textContent = 'Esta vista incluye cualquier correo archivado en Gmail, también si se archivó desde otra aplicación. Puedes usar «Desarchivar» para devolverlo a Recibidos.';
+        archivedNoticeNode.hidden = false;
+      } else if (mailboxNode.value === 'appArchived') {
+        archivedNoticeNode.textContent = 'Esta vista solo incluye correos archivados desde Asistente Comercial. No guarda el contenido del mensaje, solo la acción realizada.';
+        archivedNoticeNode.hidden = false;
+      } else {
+        archivedNoticeNode.hidden = true;
+      }
+    }
     messagesNode.removeAttribute('aria-hidden');
     messagesNode.removeAttribute('aria-busy');
     messagesNode.removeAttribute('aria-label');
@@ -43,7 +112,8 @@
       return matchesQuery && matchesFilter;
     });
 
-    countNode.textContent = filtered.length + ' de ' + messages.length;
+    countNode.textContent = nextPageToken ? filtered.length + ' de ' + messages.length + ' cargados' : filtered.length + ' de ' + messages.length;
+    loadMoreNode.hidden = !nextPageToken;
     messagesNode.replaceChildren();
     if (!filtered.length) {
       messagesNode.append(text('p', query ? 'No hay mensajes que coincidan.' : 'No hay mensajes en la bandeja.', 'muted'));
@@ -64,6 +134,30 @@
       button.className = 'thread-button';
       button.dataset.threadId = message.threadId || '';
       article.append(button);
+      const actions = document.createElement('div');
+      actions.className = 'message-actions';
+      const readButton = text('button', message.labelIds?.includes('UNREAD') ? 'Marcar leído' : 'Marcar no leído');
+      readButton.type = 'button';
+      readButton.dataset.messageAction = message.labelIds?.includes('UNREAD') ? 'markRead' : 'markUnread';
+      readButton.dataset.messageId = message.id;
+      const isArchivedMailbox = mailboxNode.value === 'archived' || mailboxNode.value === 'appArchived';
+      const archiveButton = text('button', isArchivedMailbox ? 'Desarchivar' : 'Archivar');
+      archiveButton.type = 'button';
+      archiveButton.dataset.messageAction = isArchivedMailbox ? 'unarchive' : 'archive';
+      archiveButton.dataset.messageId = message.id;
+      const trashButton = text('button', 'Papelera', 'danger');
+      trashButton.type = 'button';
+      trashButton.dataset.messageAction = 'trash';
+      trashButton.dataset.messageId = message.id;
+      const replyButton = text('button', 'Responder');
+      replyButton.type = 'button';
+      replyButton.dataset.replyMessageId = message.id;
+      actions.append(readButton, archiveButton, trashButton, replyButton);
+      article.append(actions);
+      const actionStatus = document.createElement('p');
+      actionStatus.className = 'message-action-status muted';
+      actionStatus.setAttribute('aria-live', 'polite');
+      article.append(actionStatus);
       const thread = document.createElement('div');
       thread.className = 'thread-inline';
       thread.hidden = true;
@@ -77,23 +171,24 @@
       const shared = mailboxNode.value === 'inbox' && window.__commercialNavDataPromise
         ? await window.__commercialNavDataPromise
         : null;
-      const [messageResult, followUpResult, commitmentResult] = shared
-        ? [shared.messages, shared.followUps, shared.commitments]
-        : await Promise.all([
-          fetchJson('/gmail/messages?max=10&mailbox=' + encodeURIComponent(mailboxNode.value)),
-          fetchJson('/gmail/follow-ups?max=10'),
-          fetchJson('/gmail/commitments?max=10'),
-        ]);
-      if (!messageResult || !followUpResult || !commitmentResult) throw new Error('No se pudo cargar toda la información de la bandeja.');
+      const messageResult = shared?.messages?.messages
+        ? shared.messages
+        : await fetchJson('/gmail/messages?max=10&mailbox=' + encodeURIComponent(mailboxNode.value));
+      const followUpResult = shared?.followUps;
+      const commitmentResult = shared?.commitments;
+      if (!messageResult) {
+        throw new Error(shared?.errors?.messages || 'No se pudieron cargar los mensajes de la bandeja.');
+      }
       messages = messageResult.messages || [];
-      followUps = followUpResult.followUps || [];
-      commitments = commitmentResult.commitments || [];
+      nextPageToken = messageResult.nextPageToken || null;
+      if (followUpResult) followUps = followUpResult.followUps || [];
+      if (commitmentResult) commitments = commitmentResult.commitments || [];
       const navMessageCount = document.querySelector('#navMessageCount');
-      if (navMessageCount) navMessageCount.textContent = String(messages.length);
+      if (navMessageCount) { navMessageCount.textContent = String(messages.length); navMessageCount.hidden = false; }
       const navFollowUpCount = document.querySelector('#navFollowUpCount');
-      if (navFollowUpCount) navFollowUpCount.textContent = String(followUps.length);
+      if (navFollowUpCount && followUpResult) { navFollowUpCount.textContent = String(followUps.length); navFollowUpCount.hidden = false; }
       const navCommitmentCount = document.querySelector('#navCommitmentCount');
-      if (navCommitmentCount) navCommitmentCount.textContent = String(commitments.length);
+      if (navCommitmentCount && commitmentResult) { navCommitmentCount.textContent = String(commitments.length); navCommitmentCount.hidden = false; }
       render();
     } catch (error) {
       messagesNode.removeAttribute('aria-hidden');
@@ -101,10 +196,106 @@
       messagesNode.removeAttribute('aria-label');
       countNode.removeAttribute('aria-label');
       messagesNode.replaceChildren(text('p', error.message || 'No se pudieron cargar los mensajes.', 'muted'));
+      loadMoreNode.hidden = true;
+    }
+  }
+
+  async function loadMore() {
+    if (!nextPageToken || loadingMore || retryBlockedUntil > Date.now()) return;
+    loadingMore = true;
+    loadMoreNode.disabled = true;
+    loadMoreNode.textContent = 'Cargando…';
+    paginationStatusNode.textContent = '';
+    try {
+      const result = await fetchJson('/gmail/messages?max=10&mailbox=' + encodeURIComponent(mailboxNode.value) + '&pageToken=' + encodeURIComponent(nextPageToken));
+      const existingIds = new Set(messages.map((message) => message.id));
+      messages = messages.concat((result.messages || []).filter((message) => !existingIds.has(message.id)));
+      nextPageToken = result.nextPageToken || null;
+      render();
+      paginationStatusNode.textContent = nextPageToken ? '' : 'Has llegado al final de la bandeja.';
+    } catch (error) {
+      paginationStatusNode.textContent = error.message || 'No se pudieron cargar más mensajes.';
+      if (/cuota|limitado temporalmente|rate.?limit/i.test(error.message || '')) {
+        retryBlockedUntil = Date.now() + 15_000;
+        const updateRetryLabel = () => {
+          const remaining = Math.ceil(Math.max(0, retryBlockedUntil - Date.now()) / 1000);
+          if (!remaining) {
+            retryBlockedUntil = 0;
+            loadMoreNode.disabled = false;
+            loadMoreNode.textContent = 'Cargar más mensajes';
+            paginationStatusNode.textContent = 'Ya puedes reintentarlo.';
+            if (retryTimer) window.clearInterval(retryTimer);
+            retryTimer = null;
+            return;
+          }
+          loadMoreNode.disabled = true;
+          loadMoreNode.textContent = 'Reintentar en ' + remaining + ' s';
+          paginationStatusNode.textContent = 'Gmail ha limitado temporalmente las consultas.';
+        };
+        updateRetryLabel();
+        if (retryTimer) window.clearInterval(retryTimer);
+        retryTimer = window.setInterval(updateRetryLabel, 1000);
+      }
+    } finally {
+      loadingMore = false;
+      if (!retryBlockedUntil) {
+        loadMoreNode.disabled = false;
+        loadMoreNode.textContent = 'Cargar más mensajes';
+      }
     }
   }
 
   messagesNode.addEventListener('click', async (event) => {
+    const replyButton = event.target.closest('[data-reply-message-id]');
+    if (replyButton) {
+      const message = messages.find((item) => item.id === replyButton.dataset.replyMessageId);
+      if (message) openCompose(message);
+      return;
+    }
+    const actionButton = event.target.closest('[data-message-action]');
+    if (actionButton) {
+      const action = actionButton.dataset.messageAction;
+      const article = actionButton.closest('.message');
+      const status = article?.querySelector('.message-action-status');
+      if (!action || !article || !status) return;
+      if (action === 'trash' && !window.confirm('¿Enviar este correo a la papelera?')) return;
+      clearUndo();
+      const buttons = article.querySelectorAll('[data-message-action]');
+      buttons.forEach((button) => { button.disabled = true; });
+      status.textContent = 'Aplicando…';
+      try {
+        const result = await fetchJson('/gmail/messages/' + encodeURIComponent(actionButton.dataset.messageId || ''), {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action }),
+        });
+        const target = messages.find((message) => message.id === actionButton.dataset.messageId);
+        if (result.action === 'trash' || (result.action === 'archive' && mailboxNode.value === 'inbox') || (result.action === 'unarchive' && (mailboxNode.value === 'archived' || mailboxNode.value === 'appArchived'))) {
+          messages = messages.filter((message) => message.id !== actionButton.dataset.messageId);
+          if (result.action === 'archive' && target) {
+            showUndo({ ...target, labelIds: [...(target.labelIds || [])] }, 'unarchive', 'Correo archivado.');
+          }
+          if (result.action === 'unarchive' && target) {
+            showUndo({ ...target, labelIds: [...(target.labelIds || [])] }, 'archive', 'Correo desarchivado.');
+          }
+        } else if (result.action === 'archive') {
+          if (target) showUndo({ ...target, labelIds: [...(target.labelIds || [])] }, 'unarchive', 'Correo archivado.');
+        } else if (result.action === 'markRead' || result.action === 'markUnread') {
+          if (target) {
+            target.labelIds = target.labelIds || [];
+            target.labelIds = result.action === 'markRead'
+              ? target.labelIds.filter((label) => label !== 'UNREAD')
+              : [...new Set([...target.labelIds, 'UNREAD'])];
+            showUndo({ ...target, labelIds: [...target.labelIds] }, result.action === 'markRead' ? 'markUnread' : 'markRead', result.action === 'markRead' ? 'Correo marcado como leído.' : 'Correo marcado como no leído.');
+          }
+        }
+        render();
+      } catch (error) {
+        status.textContent = error.message || 'No se pudo aplicar la acción.';
+        buttons.forEach((button) => { button.disabled = false; });
+      }
+      return;
+    }
     const button = event.target.closest('[data-thread-id]');
     if (!button) return;
     const article = button.closest('.message');
@@ -134,11 +325,46 @@
         item.className = 'message';
         item.append(text('strong', message.subject));
         item.append(text('small', message.from + (message.to ? ' → ' + message.to : '') + ' · ' + (message.date || '')));
-        item.append(text('p', message.body));
+        item.append(text('p', window.cleanEmailBody(message.body)));
         thread.append(item);
       });
     } catch (error) {
       thread.replaceChildren(text('p', error.message || 'No se pudo cargar el hilo.', 'muted'));
+    }
+  });
+
+  undoButton.addEventListener('click', async () => {
+    if (!undoState) return;
+    const currentUndo = undoState;
+    undoButton.disabled = true;
+    undoMessageNode.textContent = 'Deshaciendo…';
+    try {
+      await fetchJson('/gmail/messages/' + encodeURIComponent(currentUndo.message.id), {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: currentUndo.inverseAction }),
+      });
+      const restored = { ...currentUndo.message, labelIds: [...(currentUndo.message.labelIds || [])] };
+      if (currentUndo.inverseAction === 'unarchive') {
+        restored.labelIds = [...new Set([...restored.labelIds, 'INBOX'])];
+        if (mailboxNode.value === 'inbox' && !messages.some((message) => message.id === restored.id)) messages = [restored, ...messages];
+      } else if (currentUndo.inverseAction === 'archive') {
+        restored.labelIds = restored.labelIds.filter((label) => label !== 'INBOX');
+        if ((mailboxNode.value === 'archived' || mailboxNode.value === 'appArchived') && !messages.some((message) => message.id === restored.id)) messages = [restored, ...messages];
+      } else if (currentUndo.inverseAction === 'markRead') {
+        restored.labelIds = restored.labelIds.filter((label) => label !== 'UNREAD');
+        const target = messages.find((message) => message.id === restored.id);
+        if (target) target.labelIds = restored.labelIds;
+      } else if (currentUndo.inverseAction === 'markUnread') {
+        restored.labelIds = [...new Set([...restored.labelIds, 'UNREAD'])];
+        const target = messages.find((message) => message.id === restored.id);
+        if (target) target.labelIds = restored.labelIds;
+      }
+      clearUndo();
+      render();
+    } catch (error) {
+      undoMessageNode.textContent = error.message || 'No se pudo deshacer la acción.';
+      undoButton.disabled = false;
     }
   });
 
@@ -148,6 +374,35 @@
     filterButtons.forEach((item) => item.classList.toggle('active', item === button));
     render();
   }));
-  mailboxNode.addEventListener('change', () => { messages = []; render(); load(); });
+  loadMoreNode.addEventListener('click', loadMore);
+  composeButton.addEventListener('click', () => openCompose());
+  cancelComposeButton.addEventListener('click', closeCompose);
+  composeForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const submitButton = composeForm.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    composeStatus.textContent = 'Enviando…';
+    try {
+      await fetchJson('/gmail/send', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          to: composeTo.value,
+          subject: composeSubject.value,
+          body: composeBody.value,
+          threadId: composeThreadId.value || undefined,
+          replyToMessageId: composeReplyToMessageId.value || undefined,
+        }),
+      });
+      composeStatus.textContent = 'Correo enviado.';
+      composeForm.reset();
+      window.setTimeout(closeCompose, 900);
+    } catch (error) {
+      composeStatus.textContent = error.message || 'No se pudo enviar el correo.';
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
+  mailboxNode.addEventListener('change', () => { messages = []; nextPageToken = null; paginationStatusNode.textContent = ''; render(); load(); });
   load();
 })();

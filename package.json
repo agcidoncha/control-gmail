@@ -8,6 +8,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
+    "migrate:mysql": "tsx src/migrate-mysql.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "node --import tsx --test test/*.test.ts"
   },
@@ -16,6 +17,8 @@
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
     "googleapis": "^144.0.0",
+    "mysql2": "^3.15.3",
+    "mysql2": "^3.24.5",
     "openai": "^4.80.1"
   },
   "devDependencies": {

@@ -22,6 +22,7 @@ const pageTitle = currentPath === '/settings/ai' ? 'Configuración de IA' : acti
     <meta name="viewport" content="width=device-width" />
     <title>Asistente Comercial · Gmail</title>
     <script is:inline src="/scripts/nav-counts.js"></script>
+    <script is:inline src="/scripts/email-text.js"></script>
   </head>
   <body>
     <div class="app-shell" data-resizable-shell>
@@ -35,13 +36,13 @@ const pageTitle = currentPath === '/settings/ai' ? 'Configuración de IA' : acti
           {navItems.map((item) => (
             <a class:list={['nav-link', { active: item.key === activeItem.key }]} href={item.href} data-admin-only={item.adminOnly ? 'true' : 'false'} hidden={item.adminOnly ? true : undefined}>
               <span><span class:list={['nav-icon', { 'nav-icon-image': item.icon.startsWith('/') }]} style={item.icon.startsWith('/') ? `--nav-icon-url: url('${item.icon}')` : undefined} aria-hidden="true">{item.icon.startsWith('/') ? '' : item.icon}</span>{item.label}</span>
-              {item.key === '/mailbox' && <b id="navMessageCount">—</b>}
-              {item.key === '/follow-ups' && <b id="navFollowUpCount">—</b>}
-              {item.key === '/commitments' && <b id="navCommitmentCount">—</b>}
+              {item.key === '/mailbox' && <b id="navMessageCount" hidden aria-label="Mensajes">0</b>}
+              {item.key === '/follow-ups' && <b id="navFollowUpCount" hidden aria-label="Seguimientos">0</b>}
+              {item.key === '/commitments' && <b id="navCommitmentCount" hidden aria-label="Compromisos">0</b>}
             </a>
           ))}
         </nav>
-        <div class="sidebar-footer"><span class="connection-dot"></span> Gmail · modo lectura<br /><small>Datos de la cuenta activa</small></div>
+        <div class="sidebar-footer"><span class="connection-dot"></span> Gmail · control seguro<br /><small>Datos de la cuenta activa</small></div>
       </aside>
       <button id="sidebarResizer" class="sidebar-resizer" type="button" role="separator" aria-orientation="vertical" aria-label="Ajustar ancho del menú" aria-valuemin="18" aria-valuemax="42" aria-valuenow="24">
         <span aria-hidden="true"></span>

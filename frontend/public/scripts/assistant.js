@@ -5,7 +5,13 @@
   const connectionStatus = document.querySelector('#assistantConnectionStatus');
   const messageNode = document.querySelector('#assistantMessage');
   const answerNode = document.querySelector('#assistantAnswer');
-  if (!form || !questionNode || !submitButton || !connectionStatus || !messageNode || !answerNode) return;
+  const analysisRangeNode = document.querySelector('#analysisRange');
+  const analysisScopeNode = document.querySelector('#analysisScope');
+  const customDatesNode = document.querySelector('#analysisCustomDates');
+  const analysisFromNode = document.querySelector('#analysisFrom');
+  const analysisToNode = document.querySelector('#analysisTo');
+  const analysisCostNotice = document.querySelector('#analysisCostNotice');
+  if (!form || !questionNode || !submitButton || !connectionStatus || !messageNode || !answerNode || !analysisRangeNode || !analysisScopeNode || !customDatesNode || !analysisFromNode || !analysisToNode || !analysisCostNotice) return;
   const presetButtons = [...document.querySelectorAll('[data-assistant-prompt]')];
 
   const providerLabel = (provider) => provider === 'claude' ? 'Anthropic Claude' : 'OpenAI';
@@ -33,6 +39,59 @@
     connectionStatus.textContent = providerLabel(connection.provider) + (personal ? ' · personal' : ' · empresa');
     connectionStatus.className = 'status-pill';
     showMessage('Conexión disponible para esta cuenta.', 'success');
+  }
+
+  const presetQuestion = new URLSearchParams(window.location.search).get('prompt');
+  if (presetQuestion) questionNode.value = presetQuestion;
+
+  function formatDate(value) {
+    if (!value) return '';
+    const date = new Date(value + 'T00:00:00');
+    return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
+  }
+
+  function customRangeDays() {
+    if (!analysisFromNode.value || !analysisToNode.value) return null;
+    const from = new Date(analysisFromNode.value + 'T00:00:00Z');
+    const to = new Date(analysisToNode.value + 'T00:00:00Z');
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) return null;
+    return Math.floor((to.getTime() - from.getTime()) / 86_400_000) + 1;
+  }
+
+  function updateAnalysisWindow() {
+    const isCustom = analysisRangeNode.value === 'custom';
+    customDatesNode.hidden = !isCustom;
+    analysisFromNode.required = isCustom;
+    analysisToNode.required = isCustom;
+    const days = isCustom ? customRangeDays() : Number(analysisRangeNode.value);
+    if (isCustom && !days) {
+      analysisCostNotice.textContent = 'Elige una fecha inicial y una fecha final válidas.';
+      analysisCostNotice.className = 'analysis-cost-notice warning';
+      return;
+    }
+    const scopeWarning = analysisScopeNode.value === 'all'
+      ? ' Se incluirán también mensajes archivados.'
+      : analysisScopeNode.value === 'spam'
+        ? ' Se consultará la carpeta Spam.'
+        : '';
+    if (days > 30 || analysisScopeNode.value !== 'mailbox') {
+      analysisCostNotice.textContent = `Se analizarán aproximadamente ${days} días.${scopeWarning} Esto puede enviar más contexto al modelo y aumentar el consumo y el coste de IA.`;
+      analysisCostNotice.className = 'analysis-cost-notice warning';
+    } else {
+      analysisCostNotice.textContent = 'Por defecto se analizan los últimos 30 días para controlar el consumo de IA.';
+      analysisCostNotice.className = 'analysis-cost-notice';
+    }
+  }
+
+  function analysisPayload() {
+    if (analysisRangeNode.value === 'custom') {
+      const days = customRangeDays();
+      if (!days) throw new Error('Indica un rango de fechas válido para el análisis.');
+      return { analysisFrom: analysisFromNode.value, analysisTo: analysisToNode.value, analysisScope: analysisScopeNode.value, days };
+    }
+    const days = Number(analysisRangeNode.value);
+    if (!Number.isFinite(days) || days <= 0) throw new Error('Selecciona un periodo de análisis válido.');
+    return { analysisDays: days, analysisScope: analysisScopeNode.value, days };
   }
 
   function addList(parent, title, values) {
@@ -102,6 +161,14 @@
     event.preventDefault();
     const question = questionNode.value.trim();
     if (!question || !canAsk) return;
+    let selectedRange;
+    try {
+      selectedRange = analysisPayload();
+    } catch (error) {
+      showMessage(error.message || 'Revisa el periodo de análisis.', 'error');
+      return;
+    }
+    if (selectedRange.days > 30 && !window.confirm(`Vas a analizar ${selectedRange.days} días de correo. Esto puede aumentar el consumo y el coste de IA. ¿Quieres continuar?`)) return;
     submitButton.disabled = true;
     answerNode.hidden = true;
     showMessage('Analizando los mensajes autorizados…');
@@ -109,12 +176,18 @@
       const response = await fetch('/assistant/ask', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ question, ...selectedRange }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'No se pudo consultar al asistente.');
       renderAnswer(data.analysis);
-      showMessage('Análisis completado.', 'success');
+      const range = data.analysisWindow;
+      const scopeLabel = range?.scope === 'all'
+        ? 'todos los mensajes'
+        : range?.scope === 'spam'
+          ? 'Spam'
+          : 'bandeja y enviados';
+      showMessage(range ? `Análisis completado: ${formatDate(range.from)} a ${formatDate(range.to)} · ${scopeLabel}.` : 'Análisis completado.', 'success');
     } catch (error) {
       showMessage(error.message || 'No se pudo consultar al asistente.', 'error');
     } finally {
@@ -128,6 +201,12 @@
       questionNode.focus();
     });
   });
+
+  analysisRangeNode.addEventListener('change', updateAnalysisWindow);
+  analysisScopeNode.addEventListener('change', updateAnalysisWindow);
+  analysisFromNode.addEventListener('change', updateAnalysisWindow);
+  analysisToNode.addEventListener('change', updateAnalysisWindow);
+  updateAnalysisWindow();
 
   loadConnection();
 })();

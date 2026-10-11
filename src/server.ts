@@ -2,16 +2,29 @@ import 'dotenv/config';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import Fastify from 'fastify';
-import { completeAuthorization, createAuthorizationUrl, getThreadMessages, listAccountInsights, listDetectedCommitments, listPendingFollowUps, listRecentMessages } from './google-oauth.js';
+import { completeAuthorization, createAuthorizationUrl, getAnalysisWindow, getThreadMessages, listAccountInsights, listClientHistory, listDetectedCommitments, listPendingFollowUps, listRecentMessagesPage, modifyGmailMessage, sendGmailMessage, type GmailMailbox, type GmailMessageAction, type GmailSendInput } from './google-oauth.js';
 import { clearSessionCookieHeader, readSession, readSessionContext, sessionCookieHeaderForOrganization } from './session.js';
 import { authorizeUser, getUser, listUsers, upsertUser } from './user-store.js';
 import { askCommercialAssistant } from './assistant.js';
 import { deletePersonalAiConnection, getPersonalAiConnectionStatus, savePersonalAiConnection } from './ai-connection-store.js';
 import { getOrganization, updateOrganizationAiSettings } from './organization-store.js';
 import type { AiProvider } from './ai-connections.js';
+import { getGmailSyncState, listStoredGmailMessages } from './gmail-store.js';
+import { listGmailActions, recordGmailAction, type GmailActionName } from './gmail-action-store.js';
 
 export const app = Fastify({ logger: true });
 const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:4321';
+
+function gmailErrorMessage(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : '';
+  if (/insufficient.*permission|insufficient.*scope|unauthorized|forbidden/i.test(message)) {
+    return 'Esta cuenta necesita volver a autorizar Gmail para usar acciones de correo. Pulsa «Cambiar de cuenta» y acepta los nuevos permisos.';
+  }
+  if (/quota exceeded|user.?rate.?limit|rate.?limit|too many requests/i.test(message)) {
+    return 'Gmail ha limitado temporalmente las consultas. Espera unos segundos y vuelve a intentarlo.';
+  }
+  return message || fallback;
+}
 
 app.get('/brand/logo.svg', async (_request, reply) => {
   return reply.type('image/svg+xml').send(await readFile(resolve('logos/logo-color-simple.svg'), 'utf8'));
@@ -70,7 +83,7 @@ app.get('/', async (_request, reply) => {
               <a class="nav-link" href="#assistantSection"><span><span class="nav-icon" aria-hidden="true">✦</span>Consultar a la IA</span></a>
               <a class="nav-link" href="${frontendUrl}/settings/ai"><span><span class="nav-icon" aria-hidden="true">⚙</span>Configuración IA</span></a>
             </nav>
-            <div class="sidebar-footer"><span class="connection-dot"></span> Gmail · modo lectura<br><small>Datos de la cuenta activa</small></div>
+            <div class="sidebar-footer"><span class="connection-dot"></span> Gmail · control seguro<br><small>Datos de la cuenta activa</small></div>
           </aside>
           <main class="main">
             <header class="topbar">
@@ -79,7 +92,7 @@ app.get('/', async (_request, reply) => {
             </header>
             <div class="content">
               <section id="dashboard" data-screen="dashboard" class="welcome section-card"><div><h2>Tu actividad comercial, en un solo lugar</h2><p>Revisa mensajes, consulta al asistente y trabaja siempre con tu cuenta autorizada.</p></div><a class="button-link" href="#assistantSection">Consultar a la IA</a></section>
-              <section data-screen="dashboard" class="stats" aria-label="Resumen de la cuenta"><article class="stat"><span>Mensajes visibles</span><strong id="statMessageCount">—</strong><small>En la bandeja actual</small></article><article class="stat"><span>Cuenta conectada</span><strong>1</strong><small>Sesión activa</small></article><article class="stat"><span>Modo</span><strong>Solo lectura</strong><small>Sin envíos automáticos</small></article><article class="stat"><span>Permisos</span><strong id="statRole">—</strong><small>Según tu cuenta</small></article></section>
+              <section data-screen="dashboard" class="stats" aria-label="Resumen de la cuenta"><article class="stat"><span>Mensajes visibles</span><strong id="statMessageCount">—</strong><small>En la bandeja actual</small></article><article class="stat"><span>Cuenta conectada</span><strong>1</strong><small>Sesión activa</small></article><article class="stat"><span>Modo</span><strong>Control Gmail</strong><small>Acciones con confirmación</small></article><article class="stat"><span>Permisos</span><strong id="statRole">—</strong><small>Según tu cuenta</small></article></section>
               <div class="dashboard-grid">
                 <section id="mailboxSection" data-screen="mailbox" class="card"><div class="card-header"><div><h2>Correos que requieren atención</h2><p>Filtra por bandeja, asunto, remitente o contenido.</p></div><span id="messageCount" class="muted"></span></div><div class="message-tools"><select id="messageMailbox" aria-label="Tipo de mensajes"><option value="inbox">Recibidos</option><option value="sent">Enviados</option></select><input id="messageSearch" type="search" placeholder="Buscar cliente, empresa o asunto…"></div><div id="messageFilters" class="quick-filters" role="group" aria-label="Filtrar mensajes"><button class="filter-chip active" type="button" data-message-filter="all">Todos</button><button class="filter-chip" type="button" data-message-filter="attention">Atención</button><button class="filter-chip" type="button" data-message-filter="follow-ups">Sin respuesta</button><button class="filter-chip" type="button" data-message-filter="commitments">Compromisos</button></div><div id="messages" class="muted">Cargando mensajes…</div><button id="messageMoreButton" class="list-toggle hidden" type="button"></button></section>
                 <section id="assistantSection" data-screen="assistant" class="card assistant-card"><div class="card-header"><div><h2>Consultar al asistente IA</h2><p>Pregunta sobre la actividad de tu cuenta.</p></div></div><p class="muted">El asistente analiza solo tus mensajes. No envía ni modifica correos.</p><form id="assistantForm"><textarea id="question" placeholder="Ejemplo: ¿Qué seguimientos pendientes detectas?"></textarea><button type="submit">Analizar correos</button></form><div id="assistantAnswer" class="answer hidden"></div></section>
@@ -623,6 +636,12 @@ app.get('/ai/connections', async (request, reply) => {
     ? Boolean(process.env.OPENAI_API_KEY)
     : provider === 'claude' && Boolean(process.env.CLAUDE_API_KEY);
   const canUseCompany = user.role === 'admin' || Boolean(organization?.sharedAiUserEmails?.includes(email.toLowerCase()));
+  const personal = await getPersonalAiConnectionStatus(user.organizationId, email);
+  const activeConnection = personal
+    ? { mode: 'user_personal', provider: personal.provider }
+    : canUseCompany && companyConfigured
+      ? { mode: 'company_shared', provider: provider === 'claude' ? 'claude' : 'openai' }
+      : null;
 
   return {
     account: email,
@@ -635,7 +654,8 @@ app.get('/ai/connections', async (request, reply) => {
       model: provider === 'claude' ? (process.env.CLAUDE_MODEL ?? 'claude-sonnet-4-6') : (process.env.OPENAI_MODEL ?? 'gpt-6-luna'),
       canUse: canUseCompany,
     },
-    personal: await getPersonalAiConnectionStatus(user.organizationId, email),
+    personal,
+    activeConnection,
   };
 });
 
@@ -673,7 +693,7 @@ app.delete('/ai/connections/personal', async (request, reply) => {
   return { connected: false };
 });
 
-app.post<{ Body: { question?: string } }>('/assistant/ask', async (request, reply) => {
+app.post<{ Body: { question?: string; analysisDays?: number; analysisFrom?: string; analysisTo?: string; analysisScope?: 'mailbox' | 'all' | 'spam' } }>('/assistant/ask', async (request, reply) => {
   const email = readSession(request.headers.cookie);
   if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
   const question = request.body?.question?.trim();
@@ -681,74 +701,182 @@ app.post<{ Body: { question?: string } }>('/assistant/ask', async (request, repl
 
   try {
     const context = readSessionContext(request.headers.cookie);
-    return { account: email, organizationId: context?.organizationId, analysis: await askCommercialAssistant(email, question, context?.organizationId) };
+    const analysisWindow = getAnalysisWindow({
+      days: request.body?.analysisDays,
+      from: request.body?.analysisFrom,
+      to: request.body?.analysisTo,
+      scope: request.body?.analysisScope,
+    });
+    return {
+      account: email,
+      organizationId: context?.organizationId,
+      analysisWindow: { from: analysisWindow.from, to: analysisWindow.to, days: analysisWindow.days, scope: analysisWindow.scope },
+      analysis: await askCommercialAssistant(email, question, context?.organizationId, analysisWindow),
+    };
   } catch (error) {
+    if (error instanceof Error && /fecha|rango máximo/.test(error.message)) {
+      return reply.code(400).send({ error: error.message });
+    }
     return reply.code(500).send({
       error: error instanceof Error ? error.message : 'No se pudo consultar al asistente.',
     });
   }
 });
 
-app.get<{ Querystring: { max?: string; mailbox?: string } }>(
+app.get<{ Querystring: { max?: string; mailbox?: string; pageToken?: string } }>(
   '/gmail/messages',
   async (request, reply) => {
     const account = readSession(request.headers.cookie);
     if (!account) return reply.code(401).send({ error: 'Sesión no iniciada.' });
 
     try {
-      const mailbox = request.query.mailbox === 'sent'
+      const mailbox: GmailMailbox = request.query.mailbox === 'sent'
         ? 'sent'
         : request.query.mailbox === 'spam'
           ? 'spam'
-          : 'inbox';
-      const messages = await listRecentMessages(account, Number(request.query.max ?? 10), mailbox);
-      return { account, mailbox, messages };
+          : request.query.mailbox === 'archived'
+            ? 'archived'
+            : request.query.mailbox === 'appArchived'
+              ? 'appArchived'
+            : 'inbox';
+      const context = readSessionContext(request.headers.cookie);
+      const page = await listRecentMessagesPage(account, Number(request.query.max ?? 10), mailbox, request.query.pageToken, context?.organizationId);
+      return { account, mailbox, messages: page.messages, nextPageToken: page.nextPageToken };
     } catch (error) {
       return reply.code(500).send({
-        error: error instanceof Error ? error.message : 'No se pudieron leer los mensajes.',
+        error: gmailErrorMessage(error, 'No se pudieron leer los mensajes.'),
       });
     }
   },
 );
 
-app.get<{ Querystring: { max?: string } }>('/gmail/insights', async (request, reply) => {
+app.get<{ Querystring: { action?: GmailActionName; outcome?: 'success' | 'error'; max?: string } }>('/gmail/actions', async (request, reply) => {
+  const context = readSessionContext(request.headers.cookie);
+  if (!context) return reply.code(401).send({ error: 'Sesión no iniciada.' });
+  try {
+    return {
+      account: context.email,
+      actions: await listGmailActions({
+        organizationId: context.organizationId,
+        userEmail: context.email,
+        accountEmail: context.email,
+        action: request.query.action,
+        outcome: request.query.outcome,
+        limit: Number(request.query.max ?? 100),
+      }),
+    };
+  } catch (error) {
+    return reply.code(500).send({ error: error instanceof Error ? error.message : 'No se pudo cargar la auditoría.' });
+  }
+});
+
+app.get('/gmail/nav-counts', async (request, reply) => {
   const account = readSession(request.headers.cookie);
   if (!account) return reply.code(401).send({ error: 'Sesión no iniciada.' });
 
   try {
-    const insights = await listAccountInsights(account, Number(request.query.max ?? 25));
-    return { account, insights };
+    // Los contadores no deben iniciar tres análisis de Gmail en paralelo.
+    // Cada pantalla carga su propio módulo al abrirse.
+    const syncState = await getGmailSyncState(account);
+    const storedMessages = syncState ? await listStoredGmailMessages(account, 'inbox', 10) : null;
+    const analysisWindow = getAnalysisWindow();
+    const [followUps, commitments] = syncState
+      ? await Promise.all([
+          listPendingFollowUps(account, 1000, analysisWindow, false),
+          listDetectedCommitments(account, 1000, analysisWindow, false),
+        ])
+      : [null, null];
+    return {
+      account,
+      // La bandeja necesita conservar su paginación real de Gmail. Compartimos
+      // el contador, pero dejamos que mailbox.js solicite la primera página y
+      // reciba su nextPageToken para poder cargar más mensajes.
+      messages: null,
+      followUps: followUps ? { followUps } : null,
+      commitments: commitments ? { commitments } : null,
+      messageCount: storedMessages ? storedMessages.messages.length : null,
+      followUpCount: followUps ? followUps.length : null,
+      commitmentCount: commitments ? commitments.length : null,
+    };
   } catch (error) {
     return reply.code(500).send({
-      error: error instanceof Error ? error.message : 'No se pudo preparar el informe.',
+      error: gmailErrorMessage(error, 'No se pudieron cargar los contadores.'),
     });
   }
 });
 
-app.get<{ Querystring: { max?: string } }>('/gmail/follow-ups', async (request, reply) => {
+app.get<{ Querystring: { max?: string; days?: string; from?: string; to?: string } }>('/gmail/insights', async (request, reply) => {
   const account = readSession(request.headers.cookie);
   if (!account) return reply.code(401).send({ error: 'Sesión no iniciada.' });
 
   try {
-    const followUps = await listPendingFollowUps(account, Number(request.query.max ?? 10));
-    return { account, followUps };
+    const analysisWindow = getAnalysisWindow({
+      days: request.query.days ? Number(request.query.days) : undefined,
+      from: request.query.from,
+      to: request.query.to,
+    });
+    const insights = await listAccountInsights(account, Number(request.query.max ?? 25), analysisWindow);
+    return { account, analysisWindow: { from: analysisWindow.from, to: analysisWindow.to, days: analysisWindow.days }, insights };
   } catch (error) {
+    if (error instanceof Error && /fecha|rango máximo/.test(error.message)) return reply.code(400).send({ error: error.message });
     return reply.code(500).send({
-      error: error instanceof Error ? error.message : 'No se pudieron detectar seguimientos.',
+      error: gmailErrorMessage(error, 'No se pudo preparar el informe.'),
     });
   }
 });
 
-app.get<{ Querystring: { max?: string } }>('/gmail/commitments', async (request, reply) => {
+app.get<{ Querystring: { max?: string; days?: string; from?: string; to?: string } }>('/gmail/follow-ups', async (request, reply) => {
   const account = readSession(request.headers.cookie);
   if (!account) return reply.code(401).send({ error: 'Sesión no iniciada.' });
 
   try {
-    const commitments = await listDetectedCommitments(account, Number(request.query.max ?? 10));
-    return { account, commitments };
+    const analysisWindow = getAnalysisWindow({
+      days: request.query.days ? Number(request.query.days) : undefined,
+      from: request.query.from,
+      to: request.query.to,
+    });
+    const followUps = await listPendingFollowUps(account, Number(request.query.max ?? 10), analysisWindow);
+    return { account, analysisWindow: { from: analysisWindow.from, to: analysisWindow.to, days: analysisWindow.days }, followUps };
+  } catch (error) {
+    if (error instanceof Error && /fecha|rango máximo/.test(error.message)) return reply.code(400).send({ error: error.message });
+    return reply.code(500).send({
+      error: gmailErrorMessage(error, 'No se pudieron detectar seguimientos.'),
+    });
+  }
+});
+
+app.get<{ Querystring: { max?: string; days?: string; from?: string; to?: string } }>('/gmail/commitments', async (request, reply) => {
+  const account = readSession(request.headers.cookie);
+  if (!account) return reply.code(401).send({ error: 'Sesión no iniciada.' });
+
+  try {
+    const analysisWindow = getAnalysisWindow({
+      days: request.query.days ? Number(request.query.days) : undefined,
+      from: request.query.from,
+      to: request.query.to,
+    });
+    const commitments = await listDetectedCommitments(account, Number(request.query.max ?? 10), analysisWindow);
+    return { account, analysisWindow: { from: analysisWindow.from, to: analysisWindow.to, days: analysisWindow.days }, commitments };
+  } catch (error) {
+    if (error instanceof Error && /fecha|rango máximo/.test(error.message)) return reply.code(400).send({ error: error.message });
+    return reply.code(500).send({
+      error: gmailErrorMessage(error, 'No se pudieron detectar compromisos.'),
+    });
+  }
+});
+
+app.get<{ Querystring: { email?: string; max?: string } }>('/gmail/client-history', async (request, reply) => {
+  const account = readSession(request.headers.cookie);
+  if (!account) return reply.code(401).send({ error: 'Sesión no iniciada.' });
+  const clientEmail = request.query.email?.trim();
+  if (!clientEmail) return reply.code(400).send({ error: 'Indica el correo del cliente.' });
+
+  try {
+    const messages = await listClientHistory(account, clientEmail, Number(request.query.max ?? 50));
+    return { account, clientEmail, messages };
   } catch (error) {
     return reply.code(500).send({
-      error: error instanceof Error ? error.message : 'No se pudieron detectar compromisos.',
+      error: gmailErrorMessage(error, 'No se pudo cargar el historial del cliente.'),
     });
   }
 });
@@ -761,7 +889,73 @@ app.get<{ Params: { threadId: string } }>('/gmail/threads/:threadId', async (req
     return { account: email, messages: await getThreadMessages(email, request.params.threadId) };
   } catch (error) {
     return reply.code(500).send({
-      error: error instanceof Error ? error.message : 'No se pudo leer el hilo.',
+      error: gmailErrorMessage(error, 'No se pudo leer el hilo.'),
+    });
+  }
+});
+
+app.patch<{ Params: { messageId: string }; Body: { action?: GmailMessageAction } }>(
+  '/gmail/messages/:messageId',
+  async (request, reply) => {
+    const email = readSession(request.headers.cookie);
+    if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
+
+    const action = request.body?.action;
+    if (!action || !['markRead', 'markUnread', 'archive', 'unarchive', 'trash'].includes(action)) {
+      return reply.code(400).send({ error: 'Acción de correo no válida.' });
+    }
+
+    try {
+      const context = readSessionContext(request.headers.cookie);
+      const result = await modifyGmailMessage(email, request.params.messageId, action);
+      if (context) {
+        try {
+          await recordGmailAction({
+            organizationId: context.organizationId,
+            userEmail: context.email,
+            accountEmail: email,
+            messageId: request.params.messageId,
+            action,
+            outcome: 'success',
+          });
+        } catch (auditError) {
+          request.log.error({ err: auditError }, 'No se pudo registrar la acción de Gmail');
+        }
+      }
+      return { account: email, ...result };
+    } catch (error) {
+      const context = readSessionContext(request.headers.cookie);
+      if (context) {
+        try {
+          await recordGmailAction({
+            organizationId: context.organizationId,
+            userEmail: context.email,
+            accountEmail: email,
+            messageId: request.params.messageId,
+            action,
+            outcome: 'error',
+            errorCode: error instanceof Error ? error.name : 'UNKNOWN',
+          });
+        } catch (auditError) {
+          request.log.error({ err: auditError }, 'No se pudo registrar el error de Gmail');
+        }
+      }
+      return reply.code(500).send({
+        error: gmailErrorMessage(error, 'No se pudo aplicar la acción al correo.'),
+      });
+    }
+  },
+);
+
+app.post<{ Body: GmailSendInput }>('/gmail/send', async (request, reply) => {
+  const email = readSession(request.headers.cookie);
+  if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
+
+  try {
+    return { account: email, ...(await sendGmailMessage(email, request.body ?? { to: '', subject: '', body: '' })) };
+  } catch (error) {
+    return reply.code(500).send({
+      error: gmailErrorMessage(error, 'No se pudo enviar el correo.'),
     });
   }
 });
@@ -787,6 +981,9 @@ app.get<{ Querystring: { code?: string; state?: string; error?: string } }>(
     const { code, state, error } = request.query;
 
     if (error) {
+      if (error === 'access_denied') {
+        return reply.redirect(frontendUrl + '/?authError=access_denied');
+      }
       return reply.code(400).send({ error: `Google rechazó la autorización: ${error}` });
     }
 

@@ -5,6 +5,7 @@
   const companyDescriptionNode = document.querySelector('#companyAiDescription');
   const personalNameNode = document.querySelector('#personalAiName');
   const personalStatusNode = document.querySelector('#personalAiStatus');
+  const personalDescriptionNode = document.querySelector('#personalAiDescription');
   const personalCard = document.querySelector('#personalAiConnection');
   const form = document.querySelector('#personalAiForm');
   const personalProviderNode = document.querySelector('#personalAiProvider');
@@ -16,7 +17,7 @@
   const globalProviderStatusNode = document.querySelector('#globalAiProviderStatus');
   const sharedUsersNode = document.querySelector('#sharedAiUsers');
   const adminMessageNode = document.querySelector('#adminAiMessage');
-  if (!accountNode || !companyNameNode || !companyStatusNode || !companyDescriptionNode || !personalNameNode || !personalStatusNode || !personalCard || !form || !personalProviderNode || !keyNode || !disconnectButton || !messageNode || !adminControls || !globalProviderNode || !globalProviderStatusNode || !sharedUsersNode || !adminMessageNode) return;
+  if (!accountNode || !companyNameNode || !companyStatusNode || !companyDescriptionNode || !personalNameNode || !personalStatusNode || !personalDescriptionNode || !personalCard || !form || !personalProviderNode || !keyNode || !disconnectButton || !messageNode || !adminControls || !globalProviderNode || !globalProviderStatusNode || !sharedUsersNode || !adminMessageNode) return;
 
   const providerLabel = (provider) => provider === 'claude' ? 'Claude' : 'OpenAI';
   const statusLabel = (status) => status === 'active' ? 'Activa' : status === 'not_configured' ? 'No configurada' : 'No conectada';
@@ -46,16 +47,23 @@
     personalCard.hidden = data.role === 'admin';
     companyNameNode.textContent = providerLabel(data.company.provider) + ' · ' + (data.company.model || 'modelo configurado');
     const canUseCompany = data.company.canUse;
-    companyStatusNode.textContent = !canUseCompany ? 'Sin acceso' : statusLabel(data.company.status);
-    companyStatusNode.className = 'status-pill' + (data.company.status !== 'active' || !canUseCompany ? ' status-warning' : '');
-    companyDescriptionNode.textContent = !canUseCompany
-      ? 'La conexión global está configurada, pero el administrador todavía no te ha concedido acceso.'
-      : 'La administra la organización. Ningún usuario verá la clave global.';
-
     const personal = data.personal;
+    const personalIsActive = data.activeConnection?.mode === 'user_personal';
+    const companyIsActive = data.activeConnection?.mode === 'company_shared';
+    companyStatusNode.textContent = personalIsActive ? 'Disponible' : !canUseCompany ? 'Sin acceso' : companyIsActive ? 'Activa' : statusLabel(data.company.status);
+    companyStatusNode.className = 'status-pill' + (personalIsActive ? ' status-neutral' : data.company.status !== 'active' || !canUseCompany ? ' status-warning' : '');
+    companyDescriptionNode.textContent = personalIsActive
+      ? 'La conexión personal está activa para esta cuenta. La conexión de empresa queda disponible como alternativa.'
+      : !canUseCompany
+      ? 'La conexión global está configurada, pero el administrador todavía no te ha concedido acceso.'
+      : 'La administra la organización. Ningún usuario verá la clave global y se usará mientras no haya una conexión personal.';
+
     personalNameNode.textContent = personal ? providerLabel(personal.provider) : 'No conectada';
-    personalStatusNode.textContent = personal ? 'Conectada' : 'No conectada';
+    personalStatusNode.textContent = personal ? 'Activa' : 'No conectada';
     personalStatusNode.className = 'status-pill' + (personal ? '' : ' status-neutral');
+    personalDescriptionNode.textContent = personal
+      ? 'Esta cuenta usa ahora su conexión personal. La clave se cifra en el servidor y no se muestra después de guardarla. Si la desconectas, volverás a la conexión de empresa.'
+      : 'La clave se cifra en el servidor y solo se usará para tus peticiones. Nunca se muestra después de guardarla.';
     disconnectButton.disabled = !personal;
     disconnectButton.textContent = personal ? 'Volver a conexión de empresa' : 'Desconectar conexión personal';
     disconnectButton.title = personal ? 'Borra tu conexión personal y vuelve a la conexión compartida de la empresa' : 'No hay una conexión personal que desconectar';

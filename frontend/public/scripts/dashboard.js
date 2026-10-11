@@ -13,19 +13,22 @@
   }
 
   function setCount(node, value) {
-    if (node) node.textContent = String(value);
+    if (node) {
+      node.textContent = String(value);
+      node.hidden = false;
+    }
   }
 
   const sharedPromise = window.__commercialNavDataPromise;
-  (sharedPromise ? sharedPromise.then((data) => ({
-    messagesResult: data.messages,
-    followUpsResult: data.followUps,
-    commitmentsResult: data.commitments,
-  })) : Promise.allSettled([
-    fetchJson('/gmail/messages?max=10&mailbox=inbox'),
-    fetchJson('/gmail/follow-ups?max=10'),
-    fetchJson('/gmail/commitments?max=10'),
-  ]).then(([messagesResult, followUpsResult, commitmentsResult]) => ({ messagesResult, followUpsResult, commitmentsResult }))).then(({ messagesResult, followUpsResult, commitmentsResult }) => {
+  (sharedPromise
+    ? sharedPromise.then((data) => data.messages?.messages
+      ? data
+      : fetchJson('/gmail/messages?max=10&mailbox=inbox').then((messages) => ({ ...data, messages }))).then((data) => ({
+        messagesResult: data.messages,
+        followUpsResult: data.followUps,
+        commitmentsResult: data.commitments,
+      }))
+    : fetchJson('/gmail/messages?max=10&mailbox=inbox').then((messagesResult) => ({ messagesResult, followUpsResult: null, commitmentsResult: null }))).then(({ messagesResult, followUpsResult, commitmentsResult }) => {
     if (messagesResult && (messagesResult.status === undefined || messagesResult.status === 'fulfilled')) {
       const messages = messagesResult.messages || messagesResult.value?.messages || [];
       setCount(statMessageCount, messages.length);

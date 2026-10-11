@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { getFirestore, isFirestoreEnabled } from './firestore.js';
+import { getMysqlPool, isMysqlEnabled } from './mysql.js';
 
 type GoogleTokens = Record<string, unknown>;
 type StoredAccounts = Record<string, GoogleTokens>;
@@ -26,6 +27,15 @@ export async function saveGoogleTokens(email: string, tokens: GoogleTokens) {
     });
     return;
   }
+  if (isMysqlEnabled()) {
+    await getMysqlPool().query(
+      `INSERT INTO google_tokens (email, payload_ciphertext, updated_at)
+       VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE payload_ciphertext = VALUES(payload_ciphertext), updated_at = VALUES(updated_at)`,
+      [email, encryptPayload(tokens), new Date().toISOString()],
+    );
+    return;
+  }
 
   const accounts = await readAccounts();
   accounts[email] = tokens;
@@ -41,6 +51,10 @@ export async function listConnectedAccounts() {
     const snapshot = await getFirestore().collection('google_tokens').select('email').get();
     return snapshot.docs.map((document) => document.data().email as string).sort();
   }
+  if (isMysqlEnabled()) {
+    const [rows] = await getMysqlPool().query('SELECT email FROM google_tokens ORDER BY email');
+    return (rows as Array<Record<string, unknown>>).map((row) => String(row.email));
+  }
   return Object.keys(await readAccounts());
 }
 
@@ -49,6 +63,11 @@ export async function loadGoogleTokens(email: string) {
     const snapshot = await getFirestore().collection('google_tokens').doc(email).get();
     if (!snapshot.exists) return null;
     const payload = snapshot.data()?.payload;
+    return typeof payload === 'string' ? decryptPayload(payload) as GoogleTokens : null;
+  }
+  if (isMysqlEnabled()) {
+    const [rows] = await getMysqlPool().query('SELECT payload_ciphertext FROM google_tokens WHERE email = ?', [email]);
+    const payload = (rows as Array<Record<string, unknown>>)[0]?.payload_ciphertext;
     return typeof payload === 'string' ? decryptPayload(payload) as GoogleTokens : null;
   }
   const accounts = await readAccounts();

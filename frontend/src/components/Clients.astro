@@ -6,7 +6,7 @@
     </div>
     <span id="clientCount" class="muted" aria-label="Cargando cantidad de clientes"><span class="skeleton skeleton-inline" aria-hidden="true"></span></span>
   </div>
-  <p class="clients-note">Fichas básicas generadas con remitentes y destinatarios visibles. Las necesidades y preferencias requieren análisis adicional.</p>
+  <p class="clients-note">Fichas generadas con la actividad visible de la cuenta. El historial y el análisis de necesidades se consultan bajo demanda.</p>
   <div id="clients" class="clients-list skeleton-list" aria-live="polite" aria-busy="true" aria-label="Cargando clientes" aria-hidden="true">
     <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line short"></span></div>
     <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line short"></span></div>
@@ -23,5 +23,15 @@
   .client-card strong, .client-card small, .client-card p { overflow-wrap: anywhere; }
   .client-card small { color: var(--muted); }
   .client-card p { margin: 0; color: var(--body-copy); font-size: 13px; }
+  .client-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .client-actions button, .client-actions a { padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--orange-dark); background: var(--warm); font: inherit; font-size: 12px; text-decoration: none; cursor: pointer; }
+  .client-actions button:hover, .client-actions button:focus-visible, .client-actions a:hover, .client-actions a:focus-visible { color: var(--ink); background: var(--orange-light); }
+  .client-history { grid-column: 1 / -1; padding: 12px; border-top: 1px solid var(--border); }
+  .client-history p { margin: 0 0 8px; }
+  .client-history-message { padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .client-history-message:last-child { border-bottom: 0; }
+  .client-history-message strong, .client-history-message small, .client-history-message span { display: block; overflow-wrap: anywhere; }
+  .client-history-message small { margin-top: 3px; color: var(--muted); }
+  .client-history-message span { margin-top: 5px; white-space: pre-wrap; }
   html[data-theme='dark'] .client-card { background: var(--surface-soft); }
 </style>

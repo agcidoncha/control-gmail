@@ -1,5 +1,6 @@
 ---
 const connected = Astro.url.searchParams.get('connected');
+const authError = Astro.url.searchParams.get('authError');
 ---
 
 <!doctype html>
@@ -19,6 +20,7 @@ const connected = Astro.url.searchParams.get('connected');
         <a class="google-login" href="/auth/google">Iniciar sesión con Google</a>
         <p class="login-note">Cada usuario entra con su propia cuenta. Solo verá los datos de su sesión.</p>
         {connected && <p class="login-status">Cuenta conectada: {connected}</p>}
+        {authError === 'access_denied' && <p class="login-error">No se han aceptado los nuevos permisos de Gmail. Vuelve a iniciar sesión y pulsa «Permitir» para activar las acciones de correo.</p>}
       </section>
     </main>
     <script is:inline src="/scripts/landing.js"></script>
@@ -39,5 +41,6 @@ const connected = Astro.url.searchParams.get('connected');
   .google-login:hover, .google-login:focus-visible { background: var(--orange-dark); transform: translateY(-1px); outline: none; }
   .login-note, .login-status { margin: 16px 0 0; color: var(--muted); font-size: 12px; }
   .login-status { color: #28683B; }
+  .login-error { margin: 16px 0 0; padding: 11px 12px; border-radius: 10px; color: #8D321F; background: #FCE9E3; font-size: 13px; }
   @media (max-width: 560px) { .login-page { padding: 14px; } .login-card { padding: 30px 22px; border-radius: 18px; } .login-logo { margin-bottom: 38px; } }
 </style>

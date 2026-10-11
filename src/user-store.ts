@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { getFirestore, isFirestoreEnabled } from './firestore.js';
+import { getMysqlPool, isMysqlEnabled } from './mysql.js';
 import { defaultOrganizationId, ensureDefaultOrganization } from './organization-store.js';
 
 export type UserRole = 'commercial' | 'admin';
@@ -21,6 +22,7 @@ export async function upsertUser(email: string) {
   await ensureDefaultOrganization();
   const normalizedEmail = normalizeEmail(email);
   if (isFirestoreEnabled()) return upsertFirestoreUser(normalizedEmail);
+  if (isMysqlEnabled()) return upsertMysqlUser(normalizedEmail);
 
   const users = await readUsers();
   const now = new Date().toISOString();
@@ -54,6 +56,7 @@ export async function authorizeUser(email: string, role: UserRole = 'commercial'
   await ensureDefaultOrganization();
   const normalizedEmail = normalizeEmail(email);
   if (isFirestoreEnabled()) return authorizeFirestoreUser(normalizedEmail, role, organizationId);
+  if (isMysqlEnabled()) return authorizeMysqlUser(normalizedEmail, role, organizationId);
 
   const users = await readUsers();
   const now = new Date().toISOString();
@@ -75,6 +78,11 @@ export async function getUser(email: string) {
     const snapshot = await getFirestore().collection('users').doc(email).get();
     return snapshot.exists ? normalizeUser(snapshot.data() as AppUser) : null;
   }
+  if (isMysqlEnabled()) {
+    const [rows] = await getMysqlPool().query('SELECT * FROM users WHERE email = ?', [normalizeEmail(email)]);
+    const row = (rows as Array<Record<string, unknown>>)[0];
+    return row ? fromMysqlUser(row) : null;
+  }
   const user = (await readUsers()).find((item) => item.email === email);
   return user ? normalizeUser(user) : null;
 }
@@ -86,6 +94,10 @@ export async function listUsers() {
       const user = document.data() as AppUser;
       return { ...normalizeUser(user), organizationId: user.organizationId ?? defaultOrganizationId };
     });
+  }
+  if (isMysqlEnabled()) {
+    const [rows] = await getMysqlPool().query('SELECT * FROM users ORDER BY email');
+    return (rows as Array<Record<string, unknown>>).map(fromMysqlUser);
   }
   return (await readUsers()).map(normalizeUser);
 }
@@ -126,6 +138,67 @@ async function authorizeFirestoreUser(email: string, role: UserRole, organizatio
   };
   await reference.set(user, { merge: true });
   return user;
+}
+
+async function upsertMysqlUser(email: string) {
+  const pool = getMysqlPool();
+  const existing = await getMysqlUser(email);
+  const now = new Date().toISOString();
+  if (existing && existing.accessStatus !== 'active' && !isAdminEmail(email)) {
+    throw new Error('Esta cuenta no está autorizada por el administrador.');
+  }
+  if (!existing && !isAdminEmail(email)) throw new Error('Esta cuenta no está autorizada por el administrador.');
+  const role: UserRole = isAdminEmail(email) ? 'admin' : existing?.role ?? 'commercial';
+  if (existing) {
+    await pool.query(
+      'UPDATE users SET role = ?, access_status = ?, last_login_at = ? WHERE email = ?',
+      [role, 'active', now, email],
+    );
+  } else {
+    await pool.query(
+      `INSERT INTO users (email, organization_id, role, access_status, created_at, last_login_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [email, defaultOrganizationId, role, 'active', now, now],
+    );
+  }
+  return (await getMysqlUser(email))!;
+}
+
+async function authorizeMysqlUser(email: string, role: UserRole, organizationId: string) {
+  const pool = getMysqlPool();
+  const existing = await getMysqlUser(email);
+  const now = new Date().toISOString();
+  const nextRole: UserRole = isAdminEmail(email) ? 'admin' : role;
+  if (existing) {
+    await pool.query(
+      'UPDATE users SET organization_id = ?, role = ?, access_status = ? WHERE email = ?',
+      [organizationId, nextRole, 'active', email],
+    );
+  } else {
+    await pool.query(
+      `INSERT INTO users (email, organization_id, role, access_status, created_at, last_login_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [email, organizationId, nextRole, 'active', now, now],
+    );
+  }
+  return (await getMysqlUser(email))!;
+}
+
+async function getMysqlUser(email: string) {
+  const [rows] = await getMysqlPool().query('SELECT * FROM users WHERE email = ?', [email]);
+  const row = (rows as Array<Record<string, unknown>>)[0];
+  return row ? fromMysqlUser(row) : null;
+}
+
+function fromMysqlUser(row: Record<string, unknown>): AppUser {
+  return normalizeUser({
+    email: String(row.email),
+    organizationId: String(row.organization_id),
+    role: row.role === 'admin' ? 'admin' : 'commercial',
+    accessStatus: row.access_status === 'revoked' ? 'revoked' : row.access_status === 'pending' ? 'pending' : 'active',
+    createdAt: String(row.created_at),
+    lastLoginAt: String(row.last_login_at),
+  });
 }
 
 function normalizeUser(user: AppUser): AppUser {

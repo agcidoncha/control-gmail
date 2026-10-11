@@ -11,6 +11,7 @@ const message = (subject: string, body: string) => ({
   date: '2026-10-01T10:00:00.000Z',
   internalDate: Date.parse('2026-10-01T10:00:00.000Z'),
   body,
+    dateHints: [],
 });
 
 test('clasifica como presupuesto un seguimiento comercial con variantes de precio', () => {
@@ -26,4 +27,8 @@ test('clasifica como propuesta un seguimiento pendiente de una oferta comercial'
 test('mantiene otras categorías de seguimiento', () => {
   assert.equal(classifyFollowUp([message('Información pendiente', 'Confírmame los detalles y el alcance.')]), 'Solicitud de información');
   assert.equal(classifyFollowUp([message('Seguimiento', 'Quedo pendiente de tus noticias.')]), 'Seguimiento general');
+});
+
+test('detecta una solicitud de briefing como categoría propia', () => {
+  assert.equal(classifyFollowUp([message('Briefing de campaña', 'Quedo pendiente del briefing para preparar la propuesta.')]), 'Briefing pendiente');
 });

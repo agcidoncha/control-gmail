@@ -1,6 +1,26 @@
 (() => {
   if (window.__commercialNavDataPromise) return;
 
+  const cacheKey = 'commercial-nav-counts-v4';
+  const cacheTtlMs = 30_000;
+
+  function readCache() {
+    try {
+      const cached = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
+      return cached && cached.expiresAt > Date.now() ? cached.data : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeCache(data) {
+    try {
+      sessionStorage.setItem(cacheKey, JSON.stringify({ data, expiresAt: Date.now() + cacheTtlMs }));
+    } catch {
+      // La caché es solo una optimización; si el navegador la bloquea, seguimos con la red.
+    }
+  }
+
   async function fetchJson(url) {
     const response = await fetch(url);
     const data = await response.json();
@@ -8,32 +28,26 @@
     return data;
   }
 
-  const dataPromise = fetchJson('/me').then(async (account) => {
-    const [messages, followUps, commitments] = await Promise.allSettled([
-      fetchJson('/gmail/messages?max=10&mailbox=inbox'),
-      fetchJson('/gmail/follow-ups?max=10'),
-      fetchJson('/gmail/commitments?max=10'),
-    ]);
-
-    return {
-      account,
-      messages: messages.status === 'fulfilled' ? messages.value : null,
-      followUps: followUps.status === 'fulfilled' ? followUps.value : null,
-      commitments: commitments.status === 'fulfilled' ? commitments.value : null,
-    };
+  const cached = readCache();
+  const dataPromise = cached ? Promise.resolve(cached) : fetchJson('/gmail/nav-counts').then((data) => {
+    writeCache(data);
+    return data;
   });
 
   window.__commercialNavDataPromise = dataPromise;
 
   function setCount(selector, value) {
     const node = document.querySelector(selector);
-    if (node && value !== null && value !== undefined) node.textContent = String(value);
+    if (node && value !== null && value !== undefined) {
+      node.textContent = String(value);
+      node.hidden = false;
+    }
   }
 
   function applyCounts(data) {
-    setCount('#navMessageCount', data.messages?.messages?.length);
-    setCount('#navFollowUpCount', data.followUps?.followUps?.length);
-    setCount('#navCommitmentCount', data.commitments?.commitments?.length);
+    setCount('#navMessageCount', data.messageCount ?? data.messages?.count);
+    setCount('#navFollowUpCount', data.followUpCount ?? data.followUps?.count);
+    setCount('#navCommitmentCount', data.commitmentCount ?? data.commitments?.count);
   }
 
   const applyWhenReady = () => dataPromise.then(applyCounts).catch(() => undefined);
