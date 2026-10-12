@@ -51,6 +51,21 @@ services:
       - default
       - easypanel
 
+  # Panel visual temporal para consultar la base de datos desde el navegador.
+  # No se publica por puerto del VPS; se expone únicamente mediante un dominio
+  # o ruta protegida configurada en EasyPanel.
+  adminer:
+    image: adminer:4
+    restart: unless-stopped
+    environment:
+      ADMINER_DEFAULT_SERVER: mysql
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - default
+      - easypanel
+
 volumes:
   mysql_data:
 
