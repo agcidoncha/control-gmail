@@ -6,6 +6,7 @@ RUN npm ci
 
 COPY tsconfig.json ./
 COPY src ./src
+COPY db ./db
 COPY docs ./docs
 COPY logos ./logos
 RUN npm run build
@@ -20,6 +21,7 @@ ENV PORT=8080
 COPY package*.json ./
 RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/db ./db
 COPY --from=build /app/docs ./docs
 COPY --from=build /app/logos ./logos
 

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { getFirestore, isFirestoreEnabled } from './firestore.js';
-import { getMysqlPool, isMysqlEnabled } from './mysql.js';
+import { getMysqlPool, isMysqlEnabled, mysqlDateTime } from './mysql.js';
 
 export type GmailActionName = 'markRead' | 'markUnread' | 'archive' | 'unarchive' | 'trash' | 'send';
 export type GmailActionOutcome = 'success' | 'error';
@@ -41,7 +41,7 @@ export async function recordGmailAction(input: Omit<GmailActionRecord, 'id' | 'c
       `INSERT INTO gmail_actions
         (id, organization_id, user_email, account_email, message_id, action, outcome, error_code, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [record.id, record.organizationId, record.userEmail, record.accountEmail, record.messageId, record.action, record.outcome, record.errorCode ?? null, record.createdAt],
+      [record.id, record.organizationId, record.userEmail, record.accountEmail, record.messageId, record.action, record.outcome, record.errorCode ?? null, mysqlDateTime(record.createdAt)],
     );
     return record;
   }

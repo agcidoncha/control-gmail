@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { getFirestore, isFirestoreEnabled } from './firestore.js';
-import { getMysqlPool, isMysqlEnabled } from './mysql.js';
+import { getMysqlPool, isMysqlEnabled, mysqlDateTime } from './mysql.js';
 
 export const defaultOrganizationId = process.env.DEFAULT_ORGANIZATION_ID ?? 'org_publicidad_segmentada_tv';
 export const defaultOrganizationName = process.env.DEFAULT_ORGANIZATION_NAME ?? 'Publicidad Segmentada TV';
@@ -35,7 +35,7 @@ export async function ensureDefaultOrganization(): Promise<Organization> {
       `INSERT INTO organizations (id, name, status, shared_ai_user_emails, created_at)
        VALUES (?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE id = VALUES(id)`,
-      [organization.id, organization.name, organization.status, JSON.stringify([]), organization.createdAt],
+      [organization.id, organization.name, organization.status, JSON.stringify([]), mysqlDateTime(organization.createdAt)],
     );
   } else {
     const organizations = await readOrganizations();

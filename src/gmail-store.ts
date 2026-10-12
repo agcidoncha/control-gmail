@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { getFirestore, isFirestoreEnabled } from './firestore.js';
-import { getMysqlPool, isMysqlEnabled } from './mysql.js';
+import { getMysqlPool, isMysqlEnabled, mysqlDateTime } from './mysql.js';
 
 export type StoredMailbox = 'inbox' | 'sent' | 'spam';
 
@@ -129,7 +129,7 @@ export async function saveGmailSyncSnapshot(input: {
         `INSERT INTO gmail_accounts (account_email, organization_id, sync_state, updated_at)
          VALUES (?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE sync_state = VALUES(sync_state), updated_at = VALUES(updated_at)`,
-        [accountEmail, process.env.DEFAULT_ORGANIZATION_ID ?? 'org_publicidad_segmentada_tv', JSON.stringify(input.syncState), updatedAt],
+        [accountEmail, process.env.DEFAULT_ORGANIZATION_ID ?? 'org_publicidad_segmentada_tv', JSON.stringify(input.syncState), mysqlDateTime(updatedAt)],
       );
       for (const message of input.messages) {
         await connection.query(
@@ -140,7 +140,7 @@ export async function saveGmailSyncSnapshot(input: {
             thread_id = VALUES(thread_id), mailbox = VALUES(mailbox), subject = VALUES(subject), sender = VALUES(sender),
             recipients = VALUES(recipients), message_date = VALUES(message_date), sort_timestamp = VALUES(sort_timestamp),
             snippet = VALUES(snippet), label_ids = VALUES(label_ids), important = VALUES(important), bounced = VALUES(bounced), synced_at = VALUES(synced_at)`,
-          [accountEmail, message.id, message.threadId, message.mailbox, message.subject, message.from, message.to, message.date, message.sortTimestamp, message.snippet, JSON.stringify(message.labelIds), message.important, message.bounced, message.syncedAt],
+          [accountEmail, message.id, message.threadId, message.mailbox, message.subject, message.from, message.to, message.date, message.sortTimestamp, message.snippet, JSON.stringify(message.labelIds), message.important, message.bounced, mysqlDateTime(message.syncedAt)],
         );
       }
       for (const messageId of input.removedMessageIds ?? []) {
@@ -153,7 +153,7 @@ export async function saveGmailSyncSnapshot(input: {
           `INSERT INTO gmail_threads (account_email, thread_id, messages_ciphertext, updated_at)
            VALUES (?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE messages_ciphertext = VALUES(messages_ciphertext), updated_at = VALUES(updated_at)`,
-          [accountEmail, threadId, JSON.stringify(messages.map(toPersistedThreadMessage)), updatedAt],
+          [accountEmail, threadId, JSON.stringify(messages.map(toPersistedThreadMessage)), mysqlDateTime(updatedAt)],
         );
       }
       await connection.commit();

@@ -2,6 +2,12 @@ import mysql, { type Pool } from 'mysql2/promise';
 
 let pool: Pool | undefined;
 
+export function mysqlDateTime(value: Date | string = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Error(`Fecha inválida para MySQL: ${value}`);
+  return date.toISOString().replace('T', ' ').replace('Z', '');
+}
+
 export function isMysqlEnabled() {
   return (process.env.DATA_STORE ?? 'local').toLowerCase() === 'mysql';
 }

@@ -4,7 +4,8 @@ import { resolve } from 'node:path';
 import Fastify from 'fastify';
 import { completeAuthorization, createAuthorizationUrl, getAnalysisWindow, getThreadMessages, listAccountInsights, listClientHistory, listDetectedCommitments, listPendingFollowUps, listRecentMessagesPage, modifyGmailMessage, sendGmailMessage, type GmailMailbox, type GmailMessageAction, type GmailSendInput } from './google-oauth.js';
 import { clearSessionCookieHeader, readSession, readSessionContext, sessionCookieHeaderForOrganization } from './session.js';
-import { authorizeUser, getUser, listUsers, upsertUser } from './user-store.js';
+import { authorizeUser, deleteUser, disconnectUser, getUser, listUsers, upsertUser } from './user-store.js';
+import { deleteGoogleTokens } from './token-store.js';
 import { askCommercialAssistant } from './assistant.js';
 import { deletePersonalAiConnection, getPersonalAiConnectionStatus, savePersonalAiConnection } from './ai-connection-store.js';
 import { getOrganization, updateOrganizationAiSettings } from './organization-store.js';
@@ -14,6 +15,18 @@ import { listGmailActions, recordGmailAction, type GmailActionName } from './gma
 
 export const app = Fastify({ logger: true });
 const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:4321';
+
+app.addHook('preHandler', async (request, reply) => {
+  const route = request.routeOptions.url ?? '';
+  if (!route.startsWith('/gmail') && !route.startsWith('/assistant') && !route.startsWith('/ai') && !route.startsWith('/admin') && route !== '/me') return;
+  const email = readSession(request.headers.cookie);
+  if (!email) return;
+  const user = await getUser(email);
+  if (!user || user.accessStatus === 'revoked') {
+    reply.header('Set-Cookie', clearSessionCookieHeader());
+    return reply.code(403).send({ error: 'Tu acceso ha sido desconectado por el administrador.' });
+  }
+});
 
 function gmailErrorMessage(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : '';
@@ -562,6 +575,45 @@ app.post<{ Body: { email?: string; role?: string } }>('/admin/users', async (req
   return { user: { email: target.email, organizationId: target.organizationId, role: target.role, accessStatus: target.accessStatus } };
 });
 
+app.post<{ Params: { email: string } }>('/admin/users/:email/disconnect', async (request, reply) => {
+  const email = readSession(request.headers.cookie);
+  if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
+  const user = await getUser(email);
+  if (user?.role !== 'admin') return reply.code(403).send({ error: 'No tienes permisos de administración.' });
+  const targetEmail = request.params.email.trim().toLowerCase();
+  if (targetEmail === email.toLowerCase()) return reply.code(400).send({ error: 'No puedes desconectar tu propia cuenta de administrador.' });
+  const target = await getUser(targetEmail);
+  if (!target || target.organizationId !== user.organizationId) return reply.code(404).send({ error: 'Usuario no encontrado.' });
+  const updated = await disconnectUser(targetEmail);
+  await deleteGoogleTokens(targetEmail);
+  const organization = await getOrganization(user.organizationId);
+  await updateOrganizationAiSettings(user.organizationId, {
+    provider: organization?.sharedAiProvider,
+    sharedAiUserEmails: (organization?.sharedAiUserEmails ?? []).filter((item) => item.toLowerCase() !== targetEmail),
+  });
+  return { user: updated };
+});
+
+app.delete<{ Params: { email: string } }>('/admin/users/:email', async (request, reply) => {
+  const email = readSession(request.headers.cookie);
+  if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
+  const user = await getUser(email);
+  if (user?.role !== 'admin') return reply.code(403).send({ error: 'No tienes permisos de administración.' });
+  const targetEmail = request.params.email.trim().toLowerCase();
+  if (targetEmail === email.toLowerCase()) return reply.code(400).send({ error: 'No puedes eliminar tu propia cuenta de administrador.' });
+  const target = await getUser(targetEmail);
+  if (!target || target.organizationId !== user.organizationId) return reply.code(404).send({ error: 'Usuario no encontrado.' });
+  const deleted = await deleteUser(targetEmail);
+  await deletePersonalAiConnection(user.organizationId, targetEmail);
+  await deleteGoogleTokens(targetEmail);
+  const organization = await getOrganization(user.organizationId);
+  await updateOrganizationAiSettings(user.organizationId, {
+    provider: organization?.sharedAiProvider,
+    sharedAiUserEmails: (organization?.sharedAiUserEmails ?? []).filter((item) => item.toLowerCase() !== targetEmail),
+  });
+  return { user: deleted };
+});
+
 app.get('/admin/ai', async (request, reply) => {
   const email = readSession(request.headers.cookie);
   if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
@@ -1000,6 +1052,7 @@ app.get<{ Querystring: { code?: string; state?: string; error?: string } }>(
       reply.header('Set-Cookie', sessionCookieHeaderForOrganization(profile.emailAddress, user.organizationId));
       return reply.redirect(frontendUrl + '/mailbox?connected=' + encodeURIComponent(profile.emailAddress));
     } catch (callbackError) {
+      request.log.error({ err: callbackError }, 'Falló el callback OAuth de Google');
       if (callbackError instanceof Error && callbackError.message.includes('no está autorizada')) {
         return reply.code(403).send({ error: callbackError.message });
       }

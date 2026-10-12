@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { getFirestore, isFirestoreEnabled } from './firestore.js';
-import { getMysqlPool, isMysqlEnabled } from './mysql.js';
+import { getMysqlPool, isMysqlEnabled, mysqlDateTime } from './mysql.js';
 import type { AiProvider } from './ai-connections.js';
 
 export type PersonalAiConnection = {
@@ -37,7 +37,7 @@ export async function savePersonalAiConnection(connection: Omit<PersonalAiConnec
       `INSERT INTO ai_connections (organization_id, user_email, provider, api_key_ciphertext, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE provider = VALUES(provider), api_key_ciphertext = VALUES(api_key_ciphertext), updated_at = VALUES(updated_at)`,
-      [next.organizationId, next.userEmail.toLowerCase(), next.provider, encryptValue(next.apiKey), next.createdAt, next.updatedAt],
+      [next.organizationId, next.userEmail.toLowerCase(), next.provider, encryptValue(next.apiKey), mysqlDateTime(next.createdAt), mysqlDateTime(next.updatedAt)],
     );
     return;
   }

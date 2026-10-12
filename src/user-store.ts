@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { getFirestore, isFirestoreEnabled } from './firestore.js';
-import { getMysqlPool, isMysqlEnabled } from './mysql.js';
+import { getMysqlPool, isMysqlEnabled, mysqlDateTime } from './mysql.js';
 import { defaultOrganizationId, ensureDefaultOrganization } from './organization-store.js';
 
 export type UserRole = 'commercial' | 'admin';
@@ -71,6 +71,70 @@ export async function authorizeUser(email: string, role: UserRole = 'commercial'
   }
   await writeUsers(users);
   return normalizeUser(users.find((user) => user.email.toLowerCase() === normalizedEmail)!);
+}
+
+export async function disconnectUser(email: string) {
+  await ensureDefaultOrganization();
+  const normalizedEmail = normalizeEmail(email);
+  if (isFirestoreEnabled()) {
+    const reference = getFirestore().collection('users').doc(normalizedEmail);
+    const snapshot = await reference.get();
+    if (!snapshot.exists) return null;
+    await reference.set({ accessStatus: 'revoked' }, { merge: true });
+    return normalizeUser({ ...(snapshot.data() as AppUser), accessStatus: 'revoked' });
+  }
+  if (isMysqlEnabled()) {
+    const pool = getMysqlPool();
+    const existing = await getMysqlUser(normalizedEmail);
+    if (!existing) return null;
+    await pool.query('UPDATE users SET access_status = ? WHERE email = ?', ['revoked', normalizedEmail]);
+    return { ...existing, accessStatus: 'revoked' as const };
+  }
+
+  const users = await readUsers();
+  const existing = users.find((user) => user.email.toLowerCase() === normalizedEmail);
+  if (!existing) return null;
+  existing.accessStatus = 'revoked';
+  await writeUsers(users);
+  return normalizeUser(existing);
+}
+
+export async function deleteUser(email: string) {
+  await ensureDefaultOrganization();
+  const normalizedEmail = normalizeEmail(email);
+  if (isFirestoreEnabled()) {
+    const reference = getFirestore().collection('users').doc(normalizedEmail);
+    const snapshot = await reference.get();
+    if (!snapshot.exists) return null;
+    await reference.delete();
+    return normalizeUser(snapshot.data() as AppUser);
+  }
+  if (isMysqlEnabled()) {
+    const pool = getMysqlPool();
+    const existing = await getMysqlUser(normalizedEmail);
+    if (!existing) return null;
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.query('DELETE FROM ai_connections WHERE user_email = ?', [normalizedEmail]);
+      await connection.query('DELETE FROM gmail_actions WHERE user_email = ?', [normalizedEmail]);
+      await connection.query('DELETE FROM users WHERE email = ?', [normalizedEmail]);
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+    return existing;
+  }
+
+  const users = await readUsers();
+  const index = users.findIndex((user) => user.email.toLowerCase() === normalizedEmail);
+  if (index < 0) return null;
+  const [deleted] = users.splice(index, 1);
+  await writeUsers(users);
+  return normalizeUser(deleted);
 }
 
 export async function getUser(email: string) {
@@ -143,7 +207,7 @@ async function authorizeFirestoreUser(email: string, role: UserRole, organizatio
 async function upsertMysqlUser(email: string) {
   const pool = getMysqlPool();
   const existing = await getMysqlUser(email);
-  const now = new Date().toISOString();
+  const now = mysqlDateTime();
   if (existing && existing.accessStatus !== 'active' && !isAdminEmail(email)) {
     throw new Error('Esta cuenta no está autorizada por el administrador.');
   }
@@ -167,7 +231,7 @@ async function upsertMysqlUser(email: string) {
 async function authorizeMysqlUser(email: string, role: UserRole, organizationId: string) {
   const pool = getMysqlPool();
   const existing = await getMysqlUser(email);
-  const now = new Date().toISOString();
+  const now = mysqlDateTime();
   const nextRole: UserRole = isAdminEmail(email) ? 'admin' : role;
   if (existing) {
     await pool.query(

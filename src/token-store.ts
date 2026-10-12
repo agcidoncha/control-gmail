@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { getFirestore, isFirestoreEnabled } from './firestore.js';
-import { getMysqlPool, isMysqlEnabled } from './mysql.js';
+import { getMysqlPool, isMysqlEnabled, mysqlDateTime } from './mysql.js';
 
 type GoogleTokens = Record<string, unknown>;
 type StoredAccounts = Record<string, GoogleTokens>;
@@ -32,7 +32,7 @@ export async function saveGoogleTokens(email: string, tokens: GoogleTokens) {
       `INSERT INTO google_tokens (email, payload_ciphertext, updated_at)
        VALUES (?, ?, ?)
        ON DUPLICATE KEY UPDATE payload_ciphertext = VALUES(payload_ciphertext), updated_at = VALUES(updated_at)`,
-      [email, encryptPayload(tokens), new Date().toISOString()],
+      [email, encryptPayload(tokens), mysqlDateTime()],
     );
     return;
   }
@@ -56,6 +56,25 @@ export async function listConnectedAccounts() {
     return (rows as Array<Record<string, unknown>>).map((row) => String(row.email));
   }
   return Object.keys(await readAccounts());
+}
+
+export async function deleteGoogleTokens(email: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (isFirestoreEnabled()) {
+    await getFirestore().collection('google_tokens').doc(normalizedEmail).delete();
+    return;
+  }
+  if (isMysqlEnabled()) {
+    await getMysqlPool().query('DELETE FROM google_tokens WHERE email = ?', [normalizedEmail]);
+    return;
+  }
+
+  const accounts = await readAccounts();
+  if (!(normalizedEmail in accounts)) return;
+  delete accounts[normalizedEmail];
+  const payload = encryptPayload(accounts);
+  await mkdir(dirname(tokenFile), { recursive: true });
+  await writeFile(tokenFile, payload, { encoding: 'utf8', mode: 0o600 });
 }
 
 export async function loadGoogleTokens(email: string) {
