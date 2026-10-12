@@ -40,10 +40,14 @@ import AppShell from '../../layouts/AppShell.astro';
   .user-form label { display: block; margin-bottom: 7px; font-size: 13px; font-weight: 750; }
   .user-form input, .user-form select { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; }
   .authorized-users { display: grid; gap: 8px; margin-top: 16px; }
-  .authorized-user { display: flex; justify-content: space-between; gap: 12px; padding: 13px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--warm); }
-  .authorized-user small { color: var(--muted); }
+  .authorized-user { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--warm); }
+  .authorized-user small { display: block; margin-top: 3px; color: var(--muted); }
+  .user-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+  .user-actions button { padding: 7px 10px; font-size: 12px; }
+  .danger-button { color: #A33C28; background: #FFF0EC; border: 1px solid #E6B9AE; }
+  .danger-button:hover, .danger-button:focus-visible { color: #fff; background: #A33C28; }
   .form-message { min-height: 20px; color: var(--muted); font-size: 13px; }
   .form-message.error { color: #A33C28; }
   .form-message.success { color: #28683B; }
-  @media (max-width: 700px) { .user-form { grid-template-columns: 1fr; align-items: stretch; } .user-form button { width: 100%; } .authorized-user { align-items: flex-start; flex-direction: column; } }
+  @media (max-width: 700px) { .user-form { grid-template-columns: 1fr; align-items: stretch; } .user-form button { width: 100%; } .authorized-user { align-items: flex-start; flex-direction: column; } .user-actions { justify-content: flex-start; } }
 </style>
