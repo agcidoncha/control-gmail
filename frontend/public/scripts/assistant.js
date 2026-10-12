@@ -16,6 +16,7 @@
 
   const providerLabel = (provider) => provider === 'claude' ? 'Anthropic Claude' : 'OpenAI';
   let canAsk = false;
+  let confirmedSubmission = false;
 
   function showMessage(value, type = '') {
     messageNode.textContent = value;
@@ -94,6 +95,15 @@
     return { analysisDays: days, analysisScope: analysisScopeNode.value, days };
   }
 
+  function confirmAnalysis(selectedRange) {
+    const scopeLabel = selectedRange.analysisScope === 'all'
+      ? 'todos los mensajes'
+      : selectedRange.analysisScope === 'spam'
+        ? 'la carpeta Spam'
+        : 'bandeja de entrada y enviados';
+    return window.confirm(`Esta acción consultará la IA y puede consumir crédito. Se revisarán ${selectedRange.days} días de ${scopeLabel}. ¿Quieres ejecutar el análisis ahora?`);
+  }
+
   function addList(parent, title, values) {
     if (!Array.isArray(values) || values.length === 0) return;
     const heading = document.createElement('h4');
@@ -168,7 +178,8 @@
       showMessage(error.message || 'Revisa el periodo de análisis.', 'error');
       return;
     }
-    if (selectedRange.days > 30 && !window.confirm(`Vas a analizar ${selectedRange.days} días de correo. Esto puede aumentar el consumo y el coste de IA. ¿Quieres continuar?`)) return;
+    if (!confirmedSubmission && !confirmAnalysis(selectedRange)) return;
+    confirmedSubmission = false;
     submitButton.disabled = true;
     answerNode.hidden = true;
     showMessage('Analizando los mensajes autorizados…');
@@ -198,6 +209,21 @@
   presetButtons.forEach((button) => {
     button.addEventListener('click', () => {
       questionNode.value = button.dataset.assistantPrompt || '';
+      if (!canAsk) {
+        showMessage('Conecta una clave IA antes de iniciar el análisis.', 'error');
+        questionNode.focus();
+        return;
+      }
+      let selectedRange;
+      try {
+        selectedRange = analysisPayload();
+      } catch (error) {
+        showMessage(error.message || 'Revisa el periodo de análisis.', 'error');
+        return;
+      }
+      if (!confirmAnalysis(selectedRange)) return;
+      confirmedSubmission = true;
+      form.requestSubmit();
       questionNode.focus();
     });
   });

@@ -24,3 +24,20 @@ test('normaliza una respuesta JSON válida de la IA', () => {
   assert.equal(analysis.requiere_revision, false);
   assert.equal(analysis.fuentes[0].mensaje_id, 'message-1');
 });
+
+test('desenvuelve JSON anidado y limpia Markdown escapado', () => {
+  const analysis = parseCommercialAnalysis(JSON.stringify({
+    respuesta: JSON.stringify({
+      respuesta: '### Resultado\\n\\- Hay una oportunidad.',
+      hechos: ['**El cliente respondió**.'],
+      inferencias: [],
+      acciones_propuestas: ['Revisar la propuesta.'],
+      requiere_revision: false,
+      fuentes: [],
+    }),
+  }));
+
+  assert.equal(analysis.respuesta, 'Resultado\nHay una oportunidad.');
+  assert.deepEqual(analysis.hechos, ['El cliente respondió.']);
+  assert.equal(analysis.requiere_revision, false);
+});

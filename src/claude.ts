@@ -32,7 +32,7 @@ export async function askClaude(input: {
     },
     body: JSON.stringify({
       model: input.model,
-      max_tokens: 4096,
+      max_tokens: 1600,
       system: input.instructions,
       messages: [{ role: 'user', content: input.prompt }],
     }),
@@ -58,27 +58,68 @@ export function parseCommercialAnalysis(text: string): CommercialAnalysis {
   try {
     const parsed = JSON.parse(cleaned) as Partial<CommercialAnalysis>;
     if (parsed && typeof parsed === 'object' && typeof parsed.respuesta === 'string') {
-      return {
-        respuesta: parsed.respuesta,
-        hechos: Array.isArray(parsed.hechos) ? parsed.hechos.filter((item): item is string => typeof item === 'string') : [],
-        inferencias: Array.isArray(parsed.inferencias) ? parsed.inferencias.filter((item): item is string => typeof item === 'string') : [],
-        acciones_propuestas: Array.isArray(parsed.acciones_propuestas) ? parsed.acciones_propuestas.filter((item): item is string => typeof item === 'string') : [],
-        requiere_revision: parsed.requiere_revision !== false,
-        fuentes: Array.isArray(parsed.fuentes) ? parsed.fuentes.filter(isAnalysisSource) : [],
-      };
+      const nested = parseNestedAnalysis(parsed.respuesta);
+      return normalizeAnalysis(nested ?? parsed);
     }
   } catch {
     // Algunos proveedores pueden devolver texto plano pese a las instrucciones de formato.
   }
 
   return {
-    respuesta: text.trim(),
+    respuesta: cleanPlainText(text),
     hechos: [],
     inferencias: [],
     acciones_propuestas: [],
     requiere_revision: true,
     fuentes: [],
   };
+}
+
+function normalizeAnalysis(parsed: Partial<CommercialAnalysis>): CommercialAnalysis {
+  return {
+    respuesta: cleanPlainText(parsed.respuesta ?? ''),
+    hechos: cleanStringList(parsed.hechos),
+    inferencias: cleanStringList(parsed.inferencias),
+    acciones_propuestas: cleanStringList(parsed.acciones_propuestas),
+    requiere_revision: parsed.requiere_revision !== false,
+    fuentes: Array.isArray(parsed.fuentes)
+      ? parsed.fuentes.filter(isAnalysisSource).map((source) => ({
+        mensaje_id: source.mensaje_id,
+        asunto: cleanPlainText(source.asunto),
+        motivo: cleanPlainText(source.motivo),
+      }))
+      : [],
+  };
+}
+
+function cleanStringList(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string').map(cleanPlainText)
+    : [];
+}
+
+function parseNestedAnalysis(value: string): Partial<CommercialAnalysis> | null {
+  const candidate = value.trim();
+  if (!candidate.startsWith('{') || !candidate.endsWith('}')) return null;
+  try {
+    const parsed = JSON.parse(candidate) as Partial<CommercialAnalysis>;
+    return parsed && typeof parsed === 'object' && typeof parsed.respuesta === 'string' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function cleanPlainText(value: string) {
+  return value
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '')
+    .replace(/\\([\\`*_{}\[\]()#+.!|>~-])/g, '$1')
+    .replace(/\*\*([\s\S]*?)\*\*/g, '$1')
+    .replace(/__([\s\S]*?)__/g, '$1')
+    .replace(/^\s*#{1,6}\s*/gm, '')
+    .replace(/^\s*[-*]\s+/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function isAnalysisSource(value: unknown): value is { mensaje_id: string; asunto: string; motivo: string } {

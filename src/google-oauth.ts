@@ -135,7 +135,7 @@ export function getAnalysisDays() {
 
 export function getAnalysisMessageLimit() {
   const configured = Number.parseInt(process.env.AI_MAX_MESSAGES ?? '', 10);
-  return Number.isFinite(configured) && configured > 0 ? Math.min(configured, 1000) : 100;
+  return Number.isFinite(configured) && configured > 0 ? Math.min(configured, 1000) : 30;
 }
 
 function formatGmailDate(date: Date) {
