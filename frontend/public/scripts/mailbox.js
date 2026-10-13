@@ -40,6 +40,7 @@
   let undoTimer = null;
   let syncing = false;
   let syncTimer = null;
+  const syncIntervalMs = 10 * 60 * 1000;
 
   const requestedMailbox = new URLSearchParams(window.location.search).get('mailbox');
   if (requestedMailbox && [...mailboxNode.options].some((option) => option.value === requestedMailbox)) {
@@ -277,26 +278,34 @@
   function formatSyncDate(value) {
     if (!value) return '';
     const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat('es-ES', { hour: '2-digit', minute: '2-digit' }).format(date);
+    return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date);
+  }
+
+  function setSyncStatus(state, message, syncedAt = null) {
+    syncStatusNode.dataset.syncState = state;
+    syncStatusNode.textContent = message;
+    syncStatusNode.title = syncedAt ? `Última sincronización: ${new Date(syncedAt).toLocaleString('es-ES')}` : message;
   }
 
   async function syncMailbox(showErrors = true) {
     if (syncing) return;
     syncing = true;
     refreshButton.disabled = true;
-    syncStatusNode.textContent = 'Actualizando Gmail…';
+    refreshButton.textContent = 'Actualizando…';
+    setSyncStatus('syncing', 'Actualizando Gmail…');
     try {
       const result = await fetchJson('/gmail/sync', { method: 'POST' });
       messages = [];
       nextPageToken = null;
       render();
       await load(true);
-      syncStatusNode.textContent = 'Actualizado a las ' + formatSyncDate(result.syncedAt);
+      setSyncStatus('success', 'Actualizado el ' + formatSyncDate(result.syncedAt), result.syncedAt);
     } catch (error) {
-      syncStatusNode.textContent = showErrors ? (error.message || 'No se pudo actualizar Gmail.') : 'No se pudo actualizar Gmail.';
+      setSyncStatus('error', showErrors ? (error.message || 'No se pudo actualizar Gmail.') : 'No se pudo actualizar Gmail. Pulsa «Actualizar Gmail».');
     } finally {
       syncing = false;
       refreshButton.disabled = false;
+      refreshButton.textContent = 'Actualizar Gmail';
     }
   }
 
@@ -498,5 +507,5 @@
   confirmComposeButton.addEventListener('click', sendComposeMessage);
   mailboxNode.addEventListener('change', () => { messages = []; nextPageToken = null; paginationStatusNode.textContent = ''; render(); load(); });
   syncMailbox(true);
-  syncTimer = window.setInterval(() => syncMailbox(false), 10 * 60 * 1000);
+  syncTimer = window.setInterval(() => syncMailbox(false), syncIntervalMs);
 })();

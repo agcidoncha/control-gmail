@@ -39,4 +39,11 @@ test('registra acciones sin guardar contenido del correo y filtra por cuenta', a
   const raw = await readFile(process.env.GMAIL_ACTION_STORE_FILE!, 'utf8');
   assert.equal(raw.includes('subject'), false);
   assert.equal(raw.includes('body'), false);
+
+  const organizationActions = await listGmailActions({
+    organizationId: 'org-test',
+    allUsers: true,
+  });
+  assert.equal(organizationActions.length, 2);
+  assert.deepEqual(new Set(organizationActions.map((action) => action.userEmail)), new Set(['comercial@example.com', 'otro@example.com']));
 });

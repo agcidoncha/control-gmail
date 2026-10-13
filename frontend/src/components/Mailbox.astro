@@ -1,7 +1,7 @@
 <section class="card mailbox-screen">
   <div class="card-header">
     <div><h2>Correos que requieren atención</h2><p>Filtra por bandeja, asunto, remitente o contenido.</p></div>
-    <div class="mailbox-header-actions"><span id="mailboxCount" class="muted" aria-label="Cargando cantidad de mensajes"><span class="skeleton skeleton-inline" aria-hidden="true"></span></span><span id="mailboxSyncStatus" class="mailbox-sync-status muted" role="status" aria-live="polite">Sincronizando…</span><button id="mailboxRefreshButton" class="secondary-button" type="button">Actualizar Gmail</button><button id="composeMessageButton" type="button">Nuevo correo</button></div>
+    <div class="mailbox-header-actions"><span id="mailboxCount" class="muted" aria-label="Cargando cantidad de mensajes"><span class="skeleton skeleton-inline" aria-hidden="true"></span></span><span id="mailboxSyncStatus" class="mailbox-sync-status muted" data-sync-state="syncing" role="status" aria-live="polite">Sincronizando Gmail…</span><button id="mailboxRefreshButton" class="secondary-button" type="button" title="Actualizar ahora los mensajes de Gmail">Actualizar Gmail</button><button id="composeMessageButton" type="button">Nuevo correo</button></div>
   </div>
   <div class="message-tools">
     <select id="messageMailbox" aria-label="Tipo de mensajes">
@@ -63,6 +63,14 @@
   .mailbox-screen { margin-top: 18px; }
   .mailbox-header-actions { display: flex; align-items: center; gap: 10px; }
   .mailbox-header-actions > span { display: inline-flex; align-items: center; height: 40px; color: var(--muted); font-size: 12px; line-height: 1; white-space: nowrap; }
+  .mailbox-sync-status { gap: 6px; }
+  .mailbox-sync-status::before { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--muted); content: ''; }
+  .mailbox-sync-status[data-sync-state='syncing']::before { background: var(--orange); animation: mailbox-sync-pulse 1.2s ease-in-out infinite; }
+  .mailbox-sync-status[data-sync-state='success'] { color: var(--success); }
+  .mailbox-sync-status[data-sync-state='success']::before { background: var(--success); }
+  .mailbox-sync-status[data-sync-state='error'] { color: var(--danger); }
+  .mailbox-sync-status[data-sync-state='error']::before { background: var(--danger); }
+  @keyframes mailbox-sync-pulse { 50% { opacity: .35; } }
   .mailbox-header-actions button { height: 40px; min-height: 40px; padding: 0 12px; font-size: 12px; line-height: 1; }
   .mailbox-header-actions .secondary-button { color: var(--orange-dark); background: var(--warm); border: 1px solid var(--border); }
   .message-tools { display: flex; align-items: center; gap: 12px; margin: 18px 0 4px; }

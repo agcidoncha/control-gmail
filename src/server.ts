@@ -818,16 +818,20 @@ app.get<{ Querystring: { max?: string; mailbox?: string; pageToken?: string; ref
   },
 );
 
-app.get<{ Querystring: { action?: GmailActionName; outcome?: 'success' | 'error'; max?: string } }>('/gmail/actions', async (request, reply) => {
+app.get<{ Querystring: { action?: GmailActionName; outcome?: 'success' | 'error'; max?: string; scope?: string } }>('/gmail/actions', async (request, reply) => {
   const context = readSessionContext(request.headers.cookie);
   if (!context) return reply.code(401).send({ error: 'Sesión no iniciada.' });
   try {
+    const user = await getUser(context.email);
+    const allUsers = request.query.scope === 'organization' && user?.role === 'admin';
     return {
       account: context.email,
+      scope: allUsers ? 'organization' : 'user',
       actions: await listGmailActions({
         organizationId: context.organizationId,
         userEmail: context.email,
-        accountEmail: context.email,
+        allUsers,
+        accountEmail: allUsers ? undefined : context.email,
         action: request.query.action,
         outcome: request.query.outcome,
         limit: Number(request.query.max ?? 100),

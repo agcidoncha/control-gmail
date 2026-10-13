@@ -1,0 +1,75 @@
+<section class="card activity-screen">
+  <div class="card-header">
+    <div>
+      <span class="eyebrow">Control y privacidad</span>
+      <h2>Panel de actividad</h2>
+      <p>Consulta quién ha realizado acciones desde la aplicación, sin mostrar el contenido de los correos.</p>
+    </div>
+    <button id="activityRefresh" class="secondary-button" type="button">Actualizar</button>
+  </div>
+
+  <div class="activity-note">
+    <strong>Solo se registra la acción.</strong>
+    <span>No guardamos ni mostramos aquí asuntos, textos o conversaciones privadas.</span>
+  </div>
+
+  <div class="activity-tools">
+    <label>
+      <span>Acción</span>
+      <select id="activityAction" aria-label="Filtrar actividad por acción">
+        <option value="">Todas las acciones</option>
+        <option value="send">Envíos</option>
+        <option value="archive">Archivados</option>
+        <option value="unarchive">Desarchivados</option>
+        <option value="trash">Enviados a papelera</option>
+        <option value="restore">Restaurados</option>
+        <option value="markRead">Marcados como leídos</option>
+        <option value="markUnread">Marcados como no leídos</option>
+      </select>
+    </label>
+    <label>
+      <span>Resultado</span>
+      <select id="activityOutcome" aria-label="Filtrar actividad por resultado">
+        <option value="">Todos</option>
+        <option value="success">Correctas</option>
+        <option value="error">Con error</option>
+      </select>
+    </label>
+  </div>
+
+  <p id="activityScope" class="activity-scope muted">Cargando alcance del registro…</p>
+  <div id="activityList" class="activity-list" aria-live="polite" aria-busy="true">
+    <div class="activity-skeleton"></div>
+    <div class="activity-skeleton"></div>
+    <div class="activity-skeleton"></div>
+  </div>
+  <p id="activityMessage" class="form-message" role="status" aria-live="polite"></p>
+</section>
+
+<script is:inline src="/scripts/activity.js"></script>
+
+<style is:global>
+  .activity-screen { margin-top: 18px; }
+  .activity-screen h2 { margin: 0 0 5px; }
+  .activity-screen .card-header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .activity-screen .secondary-button { color: var(--orange-dark); background: var(--warm); border: 1px solid var(--border); font-size: 13px; }
+  .activity-screen .secondary-button:hover, .activity-screen .secondary-button:focus-visible { color: var(--ink); background: var(--surface-alt); }
+  .activity-note { display: grid; gap: 3px; margin-top: 22px; padding: 13px 15px; border: 1px solid var(--border); border-radius: 11px; color: var(--body-copy); background: var(--surface-soft); font-size: 13px; }
+  .activity-note strong { color: var(--ink); }
+  .activity-tools { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
+  .activity-tools label { display: grid; gap: 6px; min-width: 190px; color: var(--muted); font-size: 12px; font-weight: 750; }
+  .activity-tools select { width: 100%; min-height: 40px; background: var(--surface-input); color: var(--ink); }
+  .activity-scope { margin: 18px 0 5px; font-size: 12px; }
+  .activity-list { display: grid; gap: 0; }
+  .activity-list[aria-busy='true'] { min-height: 180px; }
+  .activity-skeleton { height: 62px; margin: 10px 0; border-radius: 10px; background: linear-gradient(90deg, var(--skeleton-base) 25%, var(--skeleton-highlight) 37%, var(--skeleton-base) 63%); background-size: 400% 100%; animation: skeleton-shimmer 1.25s ease-in-out infinite; }
+  .activity-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; padding: 15px 0; border-bottom: 1px solid var(--border); }
+  .activity-row:last-child { border-bottom: 0; }
+  .activity-row strong, .activity-row small { display: block; overflow-wrap: anywhere; }
+  .activity-row small { margin-top: 4px; color: var(--muted); font-size: 12px; }
+  .activity-row time { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .activity-row .activity-error { color: var(--danger); }
+  .activity-empty { margin: 18px 0 0; color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { .activity-skeleton { animation: none; } }
+  @media (max-width: 640px) { .activity-screen .card-header { align-items: stretch; flex-direction: column; } .activity-screen .card-header button { width: 100%; } .activity-row { grid-template-columns: 1fr; gap: 4px; } .activity-row time { order: -1; } .activity-tools { display: grid; grid-template-columns: 1fr; } .activity-tools label { min-width: 0; } }
+</style>
