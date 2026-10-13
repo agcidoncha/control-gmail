@@ -752,7 +752,7 @@ app.delete('/ai/connections/personal', async (request, reply) => {
   return { connected: false };
 });
 
-app.post<{ Body: { question?: string; analysisDays?: number; analysisFrom?: string; analysisTo?: string; analysisScope?: 'mailbox' | 'all' | 'spam' } }>('/assistant/ask', async (request, reply) => {
+app.post<{ Body: { question?: string; clientEmail?: string; analysisDays?: number; analysisFrom?: string; analysisTo?: string; analysisScope?: 'mailbox' | 'all' | 'spam' } }>('/assistant/ask', async (request, reply) => {
   const email = readSession(request.headers.cookie);
   if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
   const question = request.body?.question?.trim();
@@ -760,6 +760,7 @@ app.post<{ Body: { question?: string; analysisDays?: number; analysisFrom?: stri
 
   try {
     const context = readSessionContext(request.headers.cookie);
+    const clientEmail = request.body?.clientEmail?.trim() || undefined;
     const analysisWindow = getAnalysisWindow({
       days: request.body?.analysisDays,
       from: request.body?.analysisFrom,
@@ -771,7 +772,8 @@ app.post<{ Body: { question?: string; analysisDays?: number; analysisFrom?: stri
       account: email,
       organizationId: context?.organizationId,
       analysisWindow: { from: analysisWindow.from, to: analysisWindow.to, days: analysisWindow.days, scope: analysisWindow.scope },
-      analysis: await askCommercialAssistant(email, question, context?.organizationId, analysisWindow),
+      clientEmail,
+      analysis: await askCommercialAssistant(email, question, context?.organizationId, analysisWindow, clientEmail),
     };
   } catch (error) {
     if (error instanceof Error && /fecha|rango máximo/.test(error.message)) {
@@ -796,7 +798,7 @@ app.post('/gmail/sync', async (request, reply) => {
   }
 });
 
-app.get<{ Querystring: { max?: string; mailbox?: string; pageToken?: string; refresh?: string } }>(
+app.get<{ Querystring: { max?: string; mailbox?: string; pageToken?: string; refresh?: string; from?: string; to?: string; all?: string } }>(
   '/gmail/messages',
   async (request, reply) => {
     const account = readSession(request.headers.cookie);
@@ -815,9 +817,12 @@ app.get<{ Querystring: { max?: string; mailbox?: string; pageToken?: string; ref
                 ? 'trash'
             : 'inbox';
       const context = readSessionContext(request.headers.cookie);
-      const page = await listRecentMessagesPage(account, Number(request.query.max ?? 10), mailbox, request.query.pageToken, context?.organizationId, request.query.refresh === '1');
-      return { account, mailbox, messages: page.messages, nextPageToken: page.nextPageToken };
+      const page = await listRecentMessagesPage(account, Number(request.query.max ?? 10), mailbox, request.query.pageToken, context?.organizationId, request.query.refresh === '1', request.query.from, request.query.to, request.query.all === '1');
+      return { account, mailbox, messages: page.messages, nextPageToken: page.nextPageToken, truncated: page.truncated ?? false };
     } catch (error) {
+      if (error instanceof Error && /fecha/.test(error.message.toLowerCase())) {
+        return reply.code(400).send({ error: error.message });
+      }
       return reply.code(500).send({
         error: gmailErrorMessage(error, 'No se pudieron leer los mensajes.'),
       });

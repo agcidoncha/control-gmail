@@ -11,12 +11,17 @@
   const analysisFromNode = document.querySelector('#analysisFrom');
   const analysisToNode = document.querySelector('#analysisTo');
   const analysisCostNotice = document.querySelector('#analysisCostNotice');
-  if (!form || !questionNode || !submitButton || !connectionStatus || !messageNode || !answerNode || !analysisRangeNode || !analysisScopeNode || !customDatesNode || !analysisFromNode || !analysisToNode || !analysisCostNotice) return;
+  const clientNode = document.querySelector('#assistantClient');
+  const clientStatusNode = document.querySelector('#assistantClientStatus');
+  if (!form || !questionNode || !submitButton || !connectionStatus || !messageNode || !answerNode || !analysisRangeNode || !analysisScopeNode || !customDatesNode || !analysisFromNode || !analysisToNode || !analysisCostNotice || !clientNode || !clientStatusNode) return;
   const presetButtons = [...document.querySelectorAll('[data-assistant-prompt]')];
 
   const providerLabel = (provider) => provider === 'claude' ? 'Anthropic Claude' : 'OpenAI';
+  const allClientsValue = '__all__';
+  const selectedClient = () => clientNode.value && clientNode.value !== allClientsValue ? clientNode.value : undefined;
   let canAsk = false;
   let confirmedSubmission = false;
+  const requestedClient = new URLSearchParams(window.location.search).get('client')?.trim().toLowerCase() || '';
 
   function showMessage(value, type = '') {
     messageNode.textContent = value;
@@ -88,11 +93,11 @@
     if (analysisRangeNode.value === 'custom') {
       const days = customRangeDays();
       if (!days) throw new Error('Indica un rango de fechas válido para el análisis.');
-      return { analysisFrom: analysisFromNode.value, analysisTo: analysisToNode.value, analysisScope: analysisScopeNode.value, days };
+      return { analysisFrom: analysisFromNode.value, analysisTo: analysisToNode.value, analysisScope: analysisScopeNode.value, clientEmail: selectedClient(), days };
     }
     const days = Number(analysisRangeNode.value);
     if (!Number.isFinite(days) || days <= 0) throw new Error('Selecciona un periodo de análisis válido.');
-    return { analysisDays: days, analysisScope: analysisScopeNode.value, days };
+    return { analysisDays: days, analysisScope: analysisScopeNode.value, clientEmail: selectedClient(), days };
   }
 
   function confirmAnalysis(selectedRange) {
@@ -101,7 +106,8 @@
       : selectedRange.analysisScope === 'spam'
         ? 'la carpeta Spam'
         : 'bandeja de entrada y enviados';
-    return window.confirm(`Esta acción consultará la IA y puede consumir crédito. Se revisarán ${selectedRange.days} días de ${scopeLabel}. ¿Quieres ejecutar el análisis ahora?`);
+    const clientLabel = selectedRange.clientEmail ? ` exclusivamente para ${selectedRange.clientEmail}` : '';
+    return window.confirm(`Esta acción consultará la IA y puede consumir crédito. Se revisarán ${selectedRange.days} días de ${scopeLabel}${clientLabel}. ¿Quieres ejecutar el análisis ahora?`);
   }
 
   function addList(parent, title, values) {
@@ -123,7 +129,13 @@
     if (analysis.requiere_revision) {
       const note = document.createElement('div');
       note.className = 'review-note';
-      note.textContent = '⚠ Requiere revisión humana';
+      const icon = document.createElement('img');
+      icon.src = '/icons/home/alert-triangle.svg';
+      icon.alt = '';
+      icon.setAttribute('aria-hidden', 'true');
+      const label = document.createElement('span');
+      label.textContent = 'Requiere revisión humana';
+      note.append(icon, label);
       answerNode.append(note);
     }
     const title = document.createElement('h3');
@@ -171,6 +183,10 @@
     event.preventDefault();
     const question = questionNode.value.trim();
     if (!question || !canAsk) return;
+    if (!clientNode.value) {
+      showMessage('Selecciona un cliente antes de lanzar el análisis. También puedes elegir el análisis general.', 'error');
+      return;
+    }
     let selectedRange;
     try {
       selectedRange = analysisPayload();
@@ -198,7 +214,8 @@
         : range?.scope === 'spam'
           ? 'Spam'
           : 'bandeja y enviados';
-      showMessage(range ? `Análisis completado: ${formatDate(range.from)} a ${formatDate(range.to)} · ${scopeLabel}.` : 'Análisis completado.', 'success');
+      const clientLabel = selectedRange.clientEmail ? ` · Cliente: ${selectedRange.clientEmail}` : '';
+      showMessage(range ? `Análisis completado: ${formatDate(range.from)} a ${formatDate(range.to)} · ${scopeLabel}${clientLabel}.` : 'Análisis completado.', 'success');
     } catch (error) {
       showMessage(error.message || 'No se pudo consultar al asistente.', 'error');
     } finally {
@@ -232,7 +249,45 @@
   analysisScopeNode.addEventListener('change', updateAnalysisWindow);
   analysisFromNode.addEventListener('change', updateAnalysisWindow);
   analysisToNode.addEventListener('change', updateAnalysisWindow);
+  clientNode.addEventListener('change', () => {
+    if (selectedClient()) {
+      clientStatusNode.textContent = `La próxima consulta se limitará a ${selectedClient()}.`;
+    } else if (clientNode.value === allClientsValue) {
+      clientStatusNode.textContent = 'Se analizará el conjunto disponible de conversaciones.';
+    } else {
+      clientStatusNode.textContent = 'Selecciona un cliente o el análisis general.';
+    }
+  });
   updateAnalysisWindow();
 
   loadConnection();
+
+  async function loadClients() {
+    try {
+      const response = await fetch('/gmail/insights?max=1000');
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'No se pudieron cargar los clientes.');
+      const clients = (data.insights?.clients || []).sort((left, right) => left.email.localeCompare(right.email));
+      clients.forEach((client) => {
+        const option = document.createElement('option');
+        option.value = client.email;
+        option.textContent = `${client.email} (${client.messages} ${client.messages === 1 ? 'mensaje' : 'mensajes'})`;
+        clientNode.append(option);
+      });
+      if (requestedClient && clients.some((client) => client.email.toLowerCase() === requestedClient)) {
+        clientNode.value = requestedClient;
+      }
+      clientStatusNode.textContent = clients.length
+        ? clientNode.value
+          ? selectedClient()
+            ? `La consulta está preparada para ${selectedClient()}.`
+            : 'Selecciona un cliente para limitar el análisis o elige el análisis general.'
+          : `${clients.length} clientes detectados. Puedes escribir en el selector para localizar uno.`
+        : 'No hay clientes detectados en el periodo revisado.';
+    } catch (error) {
+      clientStatusNode.textContent = error.message || 'No se pudieron cargar los clientes.';
+    }
+  }
+
+  loadClients();
 })();

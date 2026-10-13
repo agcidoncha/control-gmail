@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Guía visual de la arquitectura del Asistente Comercial conectado a Gmail.">
+  <title>Arquitectura · Asistente Comercial</title>
+  <style>
+    :root {
+      --ink: #211d1b;
+      --muted: #756b65;
+      --paper: #fbf8f4;
+      --panel: #ffffff;
+      --soft: #f4ece3;
+      --soft-2: #fff4e7;
+      --line: #e5dbd2;
+      --orange: #c87520;
+      --orange-dark: #9f5714;
+      --green: #2d7445;
+      --green-bg: #e6f3e9;
+      --blue: #315f9c;
+      --blue-bg: #eaf2ff;
+      --red: #a94332;
+      --red-bg: #fae9e5;
+      --shadow: 0 18px 55px rgba(49, 35, 24, .08);
+      --radius: 18px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; color: var(--ink); background: var(--paper); line-height: 1.6; }
+    a { color: inherit; }
+    button, input { font: inherit; }
+    .shell { display: grid; grid-template-columns: 290px minmax(0, 1fr); min-height: 100vh; }
+    .sidebar { position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 28px 20px; background: #25201e; color: #fff; }
+    .brand { display: flex; align-items: center; gap: 11px; margin-bottom: 28px; }
+    .brand-mark { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 13px; color: #fff; background: var(--orange); font-weight: 900; font-size: 20px; }
+    .brand strong { display: block; font-size: 14px; letter-spacing: .02em; }
+    .brand small { display: block; color: #cbbdb4; font-size: 11px; }
+    .sidebar-label { margin: 24px 10px 8px; color: #bfaaa0; font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+    .toc { display: grid; gap: 3px; }
+    .toc a { display: block; padding: 9px 11px; border-radius: 9px; color: #e9dfda; text-decoration: none; font-size: 13px; }
+    .toc a:hover, .toc a.active { color: #fff; background: rgba(200, 117, 32, .25); }
+    .side-note { margin-top: 26px; padding: 14px; border: 1px solid #4c413c; border-radius: 13px; color: #d9cbc3; font-size: 12px; }
+    .main { min-width: 0; padding: 38px clamp(20px, 5vw, 72px) 80px; }
+    .topline { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-bottom: 26px; color: var(--muted); font-size: 12px; }
+    .topline a { color: var(--orange-dark); font-weight: 750; }
+    .search { display: flex; align-items: center; gap: 8px; width: min(360px, 100%); padding: 9px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); }
+    .search input { width: 100%; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 13px; }
+    .eyebrow { margin: 0 0 9px; color: var(--orange-dark); font-size: 12px; font-weight: 850; letter-spacing: .15em; text-transform: uppercase; }
+    h1 { max-width: 950px; margin: 0; font-size: clamp(39px, 6vw, 78px); letter-spacing: -.065em; line-height: .98; }
+    h2 { margin: 0 0 12px; font-size: clamp(28px, 3.4vw, 45px); letter-spacing: -.045em; line-height: 1.05; }
+    h3 { margin: 0 0 7px; font-size: 18px; letter-spacing: -.02em; }
+    h4 { margin: 0 0 5px; font-size: 14px; }
+    p { margin: 0 0 13px; }
+    .lead { max-width: 820px; margin-top: 24px; color: var(--muted); font-size: clamp(17px, 2vw, 22px); }
+    .hero { padding: clamp(26px, 5vw, 62px); border: 1px solid var(--line); border-radius: 28px; background: linear-gradient(135deg, #fff 0%, #fff7ed 100%); box-shadow: var(--shadow); }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+    .button { display: inline-flex; align-items: center; justify-content: center; padding: 10px 15px; border-radius: 10px; text-decoration: none; font-size: 13px; font-weight: 800; }
+    .button.primary { color: #fff; background: var(--orange); }
+    .button.secondary { border: 1px solid var(--line); background: var(--panel); }
+    .section { padding-top: 82px; scroll-margin-top: 20px; }
+    .section-intro { max-width: 760px; margin-bottom: 25px; color: var(--muted); font-size: 16px; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 15px; }
+    .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .card { padding: 21px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: 0 8px 26px rgba(49, 35, 24, .04); }
+    .card p:last-child { margin-bottom: 0; }
+    .card strong { color: var(--orange-dark); }
+    .card .icon { display: grid; place-items: center; width: 34px; height: 34px; margin-bottom: 13px; border-radius: 10px; color: var(--orange-dark); background: var(--soft-2); font-weight: 900; }
+    .callout { margin: 22px 0; padding: 19px 21px; border-left: 4px solid var(--orange); border-radius: 0 13px 13px 0; background: var(--soft-2); }
+    .callout.success { border-left-color: var(--green); background: var(--green-bg); }
+    .callout.warning { border-left-color: var(--red); background: var(--red-bg); }
+    .callout p:last-child { margin-bottom: 0; }
+    .diagram { overflow-x: auto; padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); background: #2a2523; color: #fff; }
+    .diagram-flow { display: flex; align-items: stretch; justify-content: center; min-width: 820px; gap: 9px; }
+    .node { display: flex; flex: 1; flex-direction: column; justify-content: center; min-height: 102px; padding: 15px; border: 1px solid #65564d; border-radius: 13px; background: #3b312d; }
+    .node small { margin-top: 4px; color: #cdbdb3; font-size: 11px; }
+    .node.accent { border-color: #e39a50; background: #6b3d19; }
+    .arrow { align-self: center; color: #e39a50; font-size: 22px; }
+    .flow-list { display: grid; gap: 10px; counter-reset: flow; }
+    .flow-step { display: grid; grid-template-columns: 36px 1fr; gap: 13px; align-items: start; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+    .flow-step::before { counter-increment: flow; content: counter(flow); display: grid; place-items: center; width: 31px; height: 31px; border-radius: 50%; color: #fff; background: var(--orange); font-weight: 850; }
+    .flow-step p { margin: 0; color: var(--muted); font-size: 14px; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+    table { width: 100%; min-width: 680px; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 14px 16px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); background: var(--soft); font-size: 12px; text-transform: uppercase; letter-spacing: .07em; }
+    tr:last-child td { border-bottom: 0; }
+    code { padding: 2px 5px; border-radius: 5px; color: #753d12; background: #fff0df; font-size: .92em; }
+    pre { overflow-x: auto; margin: 12px 0 0; padding: 16px; border-radius: 12px; color: #f7eee8; background: #292321; font-size: 12px; line-height: 1.55; }
+    .badge { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 800; }
+    .badge.done { color: var(--green); background: var(--green-bg); }
+    .badge.next { color: var(--blue); background: var(--blue-bg); }
+    .badge.care { color: var(--red); background: var(--red-bg); }
+    .status-list { display: grid; gap: 9px; }
+    .status-list div { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding-bottom: 9px; border-bottom: 1px solid var(--line); }
+    .status-list div:last-child { border-bottom: 0; }
+    .faq details { padding: 15px 0; border-bottom: 1px solid var(--line); }
+    .faq summary { cursor: pointer; font-weight: 800; }
+    .faq details p { max-width: 800px; margin: 10px 0 0; color: var(--muted); }
+    .quote { margin: 0; padding: 22px; border-radius: 15px; color: #fff; background: #292321; font-size: 17px; }
+    .quote strong { color: #f2a45b; }
+    .footer { margin-top: 85px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+    .no-results { display: none; padding: 30px; color: var(--muted); text-align: center; }
+    @media (max-width: 980px) { .shell { grid-template-columns: 220px minmax(0, 1fr); } .grid, .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 700px) { .shell { display: block; } .sidebar { position: static; height: auto; padding: 18px; } .toc { display: flex; overflow-x: auto; gap: 5px; padding-bottom: 3px; } .toc a { flex: 0 0 auto; white-space: nowrap; } .side-note, .sidebar-label { display: none; } .main { padding: 19px 15px 55px; } .topline { align-items: flex-start; flex-direction: column-reverse; } .grid, .grid.two { grid-template-columns: 1fr; } .hero { border-radius: 19px; } .section { padding-top: 56px; } }
+    @media print { .sidebar, .topline, .hero-actions, .search { display: none; } .shell { display: block; } .main { padding: 0; } .section { padding-top: 32px; break-inside: avoid; } .card, .table-wrap, .diagram { box-shadow: none; break-inside: avoid; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">+</div>
+        <div><strong>Asistente Comercial</strong><small>Guía de arquitectura</small></div>
+      </div>
+      <div class="sidebar-label">Índice de la guía</div>
+      <nav class="toc" aria-label="Índice de arquitectura">
+        <a href="#resumen">01 · Resumen rápido</a>
+        <a href="#mapa">02 · Mapa general</a>
+        <a href="#usuarios">03 · Usuarios y seguridad</a>
+        <a href="#gmail">04 · Gmail y sincronización</a>
+        <a href="#ia">05 · Inteligencia artificial</a>
+        <a href="#pantallas">06 · Qué hace cada pantalla</a>
+        <a href="#datos">07 · Datos y MySQL</a>
+        <a href="#despliegue">08 · Local y remoto</a>
+        <a href="#copias">09 · Copias y recuperación</a>
+        <a href="#trabajo">10 · Cómo se mantiene</a>
+        <a href="#estado">11 · Estado y próximos pasos</a>
+        <a href="#faq">12 · Preguntas frecuentes</a>
+      </nav>
+      <div class="side-note"><strong>Idea clave</strong><br>La aplicación ayuda a trabajar con Gmail, pero cada usuario solo puede ver y operar sobre su propia cuenta autorizada.</div>
+    </aside>
+
+    <main class="main">
+      <div class="topline">
+        <span>Documento vivo · octubre de 2026</span>
+        <label class="search" aria-label="Buscar en la guía">⌕ <input id="search" type="search" placeholder="Buscar en la guía…"></label>
+      </div>
+
+      <header class="hero" data-search="asistente comercial arquitectura guía proyecto gmail correo ventas">
+        <p class="eyebrow">Manual para explicar el proyecto</p>
+        <h1>Cómo funciona el Asistente Comercial, de principio a fin.</h1>
+        <p class="lead">Esta aplicación convierte el trabajo diario con Gmail en un espacio comercial ordenado: cada comercial trabaja con su propia cuenta, revisa lo importante, puede responder o redactar mensajes y recibe ayuda de IA para detectar oportunidades, seguimientos y compromisos.</p>
+        <div class="hero-actions">
+          <a class="button primary" href="#resumen">Empezar por lo esencial</a>
+          <a class="button secondary" href="#mapa">Ver el mapa completo</a>
+          <a class="button secondary" href="#faq">Ir a preguntas frecuentes</a>
+        </div>
+      </header>
+
+      <section id="resumen" class="section" data-search="resumen explicación dos minutos qué es valor comercial">
+        <p class="eyebrow">01 · Resumen rápido</p>
+        <h2>La explicación para alguien que pregunta: «¿qué habéis construido?»</h2>
+        <p class="section-intro">Puedes explicar el proyecto con estas palabras. No hace falta hablar de Docker, OAuth o bases de datos en la primera conversación.</p>
+        <blockquote class="quote">«Es una <strong>herramienta comercial conectada a Gmail</strong>. Ordena los correos de cada comercial, permite actuar sobre ellos y usa inteligencia artificial para convertir conversaciones en información útil: clientes, seguimientos y compromisos. La aplicación respeta la privacidad: cada persona solo ve su propia cuenta.»</blockquote>
+        <div class="grid" style="margin-top:15px">
+          <article class="card"><div class="icon">1</div><h3>Revisa lo importante</h3><p>La bandeja muestra recibidos, enviados, hilos completos, filtros, papelera y acciones como marcar, archivar o responder.</p></article>
+          <article class="card"><div class="icon">2</div><h3>Actúa desde el mismo lugar</h3><p>El comercial puede responder a un hilo o escribir un correo nuevo. Antes de enviar se muestra una vista previa y se pide confirmación.</p></article>
+          <article class="card"><div class="icon">3</div><h3>Convierte correo en trabajo</h3><p>El sistema ayuda a localizar clientes, seguimientos y compromisos para que el correo no se quede en una bandeja sin organizar.</p></article>
+        </div>
+        <div class="callout success"><strong>Lo importante:</strong> no sustituye Gmail ni decide por el comercial. Es una capa de trabajo comercial encima de Gmail, con controles y revisión humana.</div>
+      </section>
+
+      <section id="mapa" class="section" data-search="mapa arquitectura capas frontend api gmail mysql oauth openai claude docker">
+        <p class="eyebrow">02 · Mapa general</p>
+        <h2>Las piezas y cómo se hablan entre ellas</h2>
+        <p class="section-intro">La aplicación está separada en capas. Esta separación permite cambiar la interfaz sin tocar la seguridad de Gmail y cambiar el proveedor de IA sin rehacer toda la aplicación.</p>
+        <div class="diagram" role="img" aria-label="Diagrama de arquitectura desde el navegador hasta Gmail y MySQL">
+          <div class="diagram-flow">
+            <div class="node"><strong>Persona comercial</strong><small>Usa la aplicación desde el navegador</small></div>
+            <span class="arrow">→</span>
+            <div class="node accent"><strong>Frontend Astro</strong><small>Pantallas, filtros, formularios y UX</small></div>
+            <span class="arrow">→</span>
+            <div class="node accent"><strong>API Fastify / Node</strong><small>Sesión, permisos, Gmail, IA y reglas</small></div>
+            <span class="arrow">→</span>
+            <div class="node"><strong>Servicios protegidos</strong><small>Google Gmail · OpenAI/Claude · MySQL</small></div>
+          </div>
+        </div>
+        <div class="grid" style="margin-top:15px">
+          <article class="card"><h3>Frontend</h3><p>Es la parte que ves: menú, bandeja, clientes, IA, usuarios y ayudas. Pide datos a la API, pero <strong>no decide permisos</strong> ni guarda claves.</p><p><code>frontend/src</code></p></article>
+          <article class="card"><h3>Backend / API</h3><p>Es la parte que manda. Valida la sesión, comprueba el rol, decide qué cuenta Gmail corresponde y ejecuta operaciones autorizadas.</p><p><code>src/server.ts</code></p></article>
+          <article class="card"><h3>Almacenamiento</h3><p>MySQL guarda usuarios, organización, tokens cifrados, mensajes sincronizados, conexiones de IA y auditoría de acciones.</p><p><code>db/migrations</code></p></article>
+        </div>
+        <div class="callout"><strong>Regla de arquitectura:</strong> el navegador solicita; el backend comprueba y ejecuta. Nunca confiamos en un email, rol o cuenta que venga escrito libremente desde el navegador.</div>
+      </section>
+
+      <section id="usuarios" class="section" data-search="usuarios admin administrador comercial permisos privacidad seguridad sesión oauth cuenta autorizada">
+        <p class="eyebrow">03 · Usuarios y seguridad</p>
+        <h2>Quién puede entrar y qué puede ver</h2>
+        <p class="section-intro">La empresa tiene usuarios autorizados, pero autorizar a una persona no significa darle acceso al Gmail de otra.</p>
+        <div class="flow-list">
+          <div class="flow-step"><div><h3>Inicio con Google</h3><p>La persona pulsa «Entrar con Google». Google autentica la identidad y devuelve un código temporal al servidor.</p></div></div>
+          <div class="flow-step"><div><h3>Validación OAuth</h3><p>El backend comprueba el estado de seguridad, intercambia el código por tokens y consulta el perfil de Gmail autorizado.</p></div></div>
+          <div class="flow-step"><div><h3>Sesión propia</h3><p>Se crea una sesión firmada y protegida. A partir de ese momento, las rutas privadas obtienen el email desde la sesión, no desde la URL.</p></div></div>
+          <div class="flow-step"><div><h3>Cuenta Gmail vinculada</h3><p>Las llamadas a Gmail buscan los tokens cifrados de esa cuenta. Si la sesión es de dev@, la aplicación trabaja con dev@.</p></div></div>
+        </div>
+        <div class="grid two" style="margin-top:15px">
+          <article class="card"><h3>Administrador</h3><p>Puede autorizar o eliminar usuarios, asignar rol, desconectar accesos y configurar la conexión de IA de empresa.</p><p><span class="badge done">Puede administrar</span> <span class="badge care">No lee Gmail ajeno</span></p></article>
+          <article class="card"><h3>Comercial</h3><p>Puede trabajar con su cuenta autorizada, revisar sus correos, responder, redactar y usar las funciones disponibles para su organización.</p><p><span class="badge done">Trabaja con su cuenta</span> <span class="badge care">No ve otras cuentas</span></p></article>
+        </div>
+        <div class="callout warning"><strong>Privacidad fundamental:</strong> incluso el administrador no puede leer los correos de otros usuarios desde la aplicación. Puede gestionar quién tiene acceso, pero no recibe el contenido privado de esas cuentas.</div>
+        <h3 style="margin-top:28px">Qué protege cada mecanismo</h3>
+        <div class="table-wrap">
+          <table><thead><tr><th>Mecanismo</th><th>Qué evita</th><th>Dónde vive</th></tr></thead><tbody>
+            <tr><td><strong>OAuth + state</strong></td><td>Que alguien falsifique o reutilice un inicio de sesión.</td><td>Google y <code>src/google-oauth.ts</code></td></tr>
+            <tr><td><strong>Cookie de sesión</strong></td><td>Que el navegador elija libremente qué cuenta consultar.</td><td><code>src/session.ts</code></td></tr>
+            <tr><td><strong>Tokens cifrados</strong></td><td>Guardar credenciales Google en claro.</td><td><code>src/token-store.ts</code> y MySQL</td></tr>
+            <tr><td><strong>Roles backend</strong></td><td>Que un comercial entre en administración.</td><td><code>src/user-store.ts</code> y rutas protegidas</td></tr>
+            <tr><td><strong>Auditoría</strong></td><td>Perder el rastro de acciones como archivar, borrar o enviar.</td><td>Tabla <code>gmail_actions</code></td></tr>
+          </tbody></table>
+        </div>
+      </section>
+
+      <section id="gmail" class="section" data-search="gmail correo bandeja sincronización actualizar refrescar enviar responder papelera archivo hilo">
+        <p class="eyebrow">04 · Gmail y sincronización</p>
+        <h2>Qué ocurre cuando se abre la bandeja</h2>
+        <p class="section-intro">La aplicación no muestra una fotografía inventada: consulta y mantiene una copia de trabajo para que la experiencia sea rápida y controlable.</p>
+        <div class="flow-list">
+          <div class="flow-step"><div><h3>1. Se identifica la cuenta activa</h3><p>La sesión indica qué cuenta Gmail está conectada. Esa cuenta es la única fuente válida para la operación.</p></div></div>
+          <div class="flow-step"><div><h3>2. Se sincronizan mensajes</h3><p>El backend pide a Gmail recibidos, enviados o papelera según la pantalla y guarda metadatos normalizados en MySQL.</p></div></div>
+          <div class="flow-step"><div><h3>3. La interfaz muestra el resultado</h3><p>La bandeja presenta hilos, fechas, remitentes, asunto, etiquetas de trabajo y estado de actualización.</p></div></div>
+          <div class="flow-step"><div><h3>4. Se puede actualizar manualmente</h3><p>«Actualizar Gmail» fuerza una nueva sincronización. También existe una actualización automática de seguridad, pero el usuario puede pedirla al entrar o cuando lo necesite.</p></div></div>
+        </div>
+        <div class="grid" style="margin-top:15px">
+          <article class="card"><h3>Recibidos y enviados</h3><p>La bandeja comercial permite revisar mensajes de entrada y salida, buscar y abrir el hilo completo.</p></article>
+          <article class="card"><h3>Responder y nuevo correo</h3><p>El backend construye el mensaje, mantiene el hilo cuando corresponde y exige revisión explícita antes de enviarlo.</p></article>
+          <article class="card"><h3>Papelera</h3><p>La papelera utiliza la etiqueta de Gmail correspondiente. Desde ahí se puede restaurar según las acciones soportadas.</p></article>
+        </div>
+        <div class="callout"><strong>Por qué importa la fecha de actualización:</strong> si el usuario acaba de recibir un correo y la aplicación no se ha sincronizado, el análisis podría no verlo. Por eso la interfaz debe mostrar cuándo se actualizó y ofrecer una acción manual clara.</div>
+        <h3 style="margin-top:28px">Acciones disponibles desde un hilo</h3>
+        <div class="table-wrap"><table><thead><tr><th>Acción</th><th>Qué hace</th><th>Protección</th></tr></thead><tbody>
+          <tr><td>Marcar leído / no leído</td><td>Cambia el estado del mensaje en Gmail.</td><td>Sesión activa + permiso <code>gmail.modify</code></td></tr>
+          <tr><td>Archivar</td><td>Quita el mensaje de recibidos sin borrarlo.</td><td>Confirmación de la interfaz y auditoría</td></tr>
+          <tr><td>Papelera</td><td>Mueve el mensaje a la papelera de Gmail.</td><td>Acción explícita y cuenta activa</td></tr>
+          <tr><td>Responder</td><td>Escribe una respuesta dentro del hilo.</td><td>Vista previa, confirmación y <code>gmail.send</code></td></tr>
+          <tr><td>Nuevo correo</td><td>Redacta un mensaje desde cero.</td><td>Validación de destinatario, asunto, cuerpo y confirmación</td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section id="ia" class="section" data-search="ia inteligencia artificial openai claude coste proveedor análisis hechos inferencias acciones revisión humana">
+        <p class="eyebrow">05 · Inteligencia artificial</p>
+        <h2>La IA ayuda a pensar; el comercial decide</h2>
+        <p class="section-intro">La aplicación puede usar OpenAI o Claude mediante un adaptador común. El proveedor recibe solo el contexto autorizado de la cuenta activa y nunca decide acciones de Gmail por su cuenta.</p>
+        <div class="diagram"><div class="diagram-flow">
+          <div class="node"><strong>Pregunta del comercial</strong><small>Ej.: «¿Qué seguimientos están pendientes?»</small></div><span class="arrow">→</span>
+          <div class="node accent"><strong>Backend</strong><small>Sincroniza, limita el alcance y prepara contexto</small></div><span class="arrow">→</span>
+          <div class="node"><strong>OpenAI o Claude</strong><small>Analiza el contexto recibido</small></div><span class="arrow">→</span>
+          <div class="node accent"><strong>Resultado revisable</strong><small>Hechos · inferencias · acciones</small></div>
+        </div></div>
+        <div class="grid two" style="margin-top:15px">
+          <article class="card"><h3>OpenAI</h3><p>Es la opción práctica para análisis habituales de correo: resúmenes, clasificación, seguimientos y consultas comerciales. El coste depende del modelo y de la cantidad de texto enviado.</p><p><span class="badge done">Uso habitual</span></p></article>
+          <article class="card"><h3>Claude</h3><p>Puede reservarse para análisis largos o especialmente complejos. No hace falta usarlo para cada búsqueda sencilla.</p><p><span class="badge next">Uso especializado</span></p></article>
+        </div>
+        <h3 style="margin-top:28px">Cómo se controla el coste</h3>
+        <div class="grid">
+          <article class="card"><h3>Ventana temporal</h3><p>Por defecto se analizan los últimos 30 días. Ampliar a meses o años aumenta el contexto y el coste.</p></article>
+          <article class="card"><h3>Alcance del buzón</h3><p>Se puede analizar bandeja y enviados. Incluir archivados o spam debe ser una decisión consciente.</p></article>
+          <article class="card"><h3>Límite de mensajes</h3><p>Existe un límite de protección para no enviar una bandeja completa al modelo sin control.</p></article>
+        </div>
+        <div class="callout warning"><strong>La salida nunca es una verdad automática:</strong> la interfaz separa hechos, inferencias, acciones propuestas y fuentes, y muestra «requiere revisión humana» cuando corresponde.</div>
+        <h3 style="margin-top:28px">Qué significa cada botón de IA</h3>
+        <div class="table-wrap"><table><thead><tr><th>Función</th><th>Para qué sirve</th><th>Qué no significa</th></tr></thead><tbody>
+          <tr><td>Analizar correos</td><td>Responder a una pregunta concreta usando el contexto seleccionado.</td><td>No ejecuta cambios en Gmail.</td></tr>
+          <tr><td>Resumir conversaciones largas</td><td>Reducir un hilo a los puntos principales y próximos pasos.</td><td>No sustituye la revisión del mensaje original.</td></tr>
+          <tr><td>Interpretar necesidades</td><td>Separar señales comerciales, hechos e inferencias.</td><td>No inventa clientes si el buzón solo contiene newsletters.</td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section id="pantallas" class="section" data-search="pantallas bandeja dashboard clientes seguimientos compromisos actividad usuarios informes papelera configuración ayuda ux">
+        <p class="eyebrow">06 · Qué hace cada pantalla</p>
+        <h2>El mapa funcional que ve un usuario</h2>
+        <p class="section-intro">Cada sección responde a una pregunta comercial. El menú no es una colección de pantallas sueltas: es un recorrido de trabajo.</p>
+        <div class="grid">
+          <article class="card"><h3>Resumen comercial</h3><p>Primera visión del trabajo pendiente: mensajes, seguimientos, compromisos y accesos rápidos.</p></article>
+          <article class="card"><h3>Bandeja comercial</h3><p>Centro de trabajo con Gmail: recibidos, enviados, hilos, búsqueda, acciones y redacción.</p></article>
+          <article class="card"><h3>Seguimientos</h3><p>Detecta conversaciones que pueden necesitar una respuesta o una revisión posterior.</p></article>
+          <article class="card"><h3>Compromisos</h3><p>Reúne posibles fechas, promesas y tareas que conviene comprobar con el cliente.</p></article>
+          <article class="card"><h3>Clientes</h3><p>Agrupa señales por remitente y permite buscar clientes, paginar resultados y consultar historial bajo demanda.</p></article>
+          <article class="card"><h3>Actividad</h3><p>Registra quién archivó, eliminó, restauró o envió, sin guardar el contenido privado del correo.</p></article>
+          <article class="card"><h3>Papelera</h3><p>Vista de mensajes enviados a la papelera, con posibilidad de restaurar cuando Gmail y la acción lo permiten.</p></article>
+          <article class="card"><h3>Consultar a la IA</h3><p>Pregunta sobre la cuenta activa con alcance y periodo visibles antes de consumir IA.</p></article>
+          <article class="card"><h3>Configuración IA</h3><p>Define proveedor de empresa y conexiones personales sin exponer claves en pantalla.</p></article>
+          <article class="card"><h3>Usuarios</h3><p>Solo para administración: autorizar, desconectar, eliminar y filtrar comerciales o administradores.</p></article>
+          <article class="card"><h3>Cómo usarlo</h3><p>Guía accesible desde el icono de ayuda para explicar cada sección a personas no técnicas.</p></article>
+          <article class="card"><h3>Cambiar de cuenta</h3><p>Cierra la cuenta activa y comienza un nuevo OAuth; no cambia silenciosamente de buzón.</p></article>
+        </div>
+      </section>
+
+      <section id="datos" class="section" data-search="datos mysql tablas base de datos esquema almacenamiento tokens mensajes organizaciones usuarios auditoría">
+        <p class="eyebrow">07 · Datos y MySQL</p>
+        <h2>Qué se guarda y para qué sirve</h2>
+        <p class="section-intro">La base de datos no es una copia indiscriminada del correo. Guarda lo necesario para que la aplicación sea útil, rápida y auditable, manteniendo separados usuario, empresa y cuenta.</p>
+        <div class="table-wrap"><table><thead><tr><th>Tabla</th><th>Qué representa</th><th>Qué debemos recordar</th></tr></thead><tbody>
+          <tr><td><code>organizations</code></td><td>La empresa o espacio comercial.</td><td>Permite evolucionar de una empresa a varias.</td></tr>
+          <tr><td><code>users</code></td><td>Personas autorizadas, email, rol y organización.</td><td>El administrador gestiona usuarios, no sus correos.</td></tr>
+          <tr><td><code>google_tokens</code></td><td>Tokens OAuth asociados a cuentas Gmail.</td><td>Se almacenan cifrados; nunca se muestran al frontend.</td></tr>
+          <tr><td><code>gmail_accounts</code></td><td>Estado de sincronización de cada cuenta.</td><td>Permite saber cuándo está desactualizada.</td></tr>
+          <tr><td><code>gmail_messages</code></td><td>Mensajes normalizados para la bandeja.</td><td>Siempre se filtran por la cuenta de la sesión.</td></tr>
+          <tr><td><code>gmail_threads</code></td><td>Relación de mensajes que forman una conversación.</td><td>Facilita ver el hilo completo.</td></tr>
+          <tr><td><code>gmail_actions</code></td><td>Auditoría de acciones de correo.</td><td>No guarda cuerpos ni claves; guarda resultado y responsable.</td></tr>
+          <tr><td><code>ai_connections</code></td><td>Conexiones de IA de empresa o personales.</td><td>Las credenciales permanecen cifradas en backend.</td></tr>
+        </tbody></table></div>
+        <div class="grid two" style="margin-top:15px">
+          <article class="card"><h3>Local</h3><p>Durante el desarrollo se puede usar almacenamiento local y la configuración de la máquina. Sirve para trabajar rápido sin depender del servidor remoto.</p><p><code>DATA_STORE=local</code></p></article>
+          <article class="card"><h3>Remoto</h3><p>En el VPS la aplicación usa MySQL dentro de Docker. El volumen <code>mysql_data</code> conserva la base aunque se reconstruyan los contenedores.</p><p><code>DATA_STORE=mysql</code></p></article>
+        </div>
+        <div class="callout"><strong>Adminer:</strong> es una herramienta visual opcional para consultar MySQL desde el navegador. No sustituye a la base de datos ni a la aplicación; solo es una ventana de administración y debe mantenerse protegida.</div>
+      </section>
+
+      <section id="despliegue" class="section" data-search="despliegue local remoto github push docker easypanel hostinger traefik dns dominio https producción">
+        <p class="eyebrow">08 · Local y remoto</p>
+        <h2>Cómo llega el código al servidor</h2>
+        <p class="section-intro">La regla de trabajo es local primero. El remoto se actualiza solo después de probar, revisar y confirmar la versión.</p>
+        <div class="diagram"><div class="diagram-flow">
+          <div class="node"><strong>Mac local</strong><small>Editar · npm test · npm run build</small></div><span class="arrow">→</span>
+          <div class="node accent"><strong>GitHub</strong><small>Repositorio control-gmail · historial</small></div><span class="arrow">→</span>
+          <div class="node"><strong>EasyPanel</strong><small>Construye los servicios Docker</small></div><span class="arrow">→</span>
+          <div class="node accent"><strong>Hostinger VPS</strong><small>lab.thelocalhost.es en producción de prueba</small></div>
+        </div></div>
+        <div class="flow-list" style="margin-top:18px">
+          <div class="flow-step"><div><h3>Se trabaja en local</h3><p>Se cambia el código, se ejecutan las pruebas y se revisa visualmente la aplicación en <code>localhost</code>.</p></div></div>
+          <div class="flow-step"><div><h3>Se confirma una versión</h3><p>Se hace commit con un mensaje claro. El commit identifica exactamente qué se ha probado.</p></div></div>
+          <div class="flow-step"><div><h3>Se sube a GitHub</h3><p>El push deja el código versionado y disponible para el despliegue. El workflow de verificación comprueba tests y build.</p></div></div>
+          <div class="flow-step"><div><h3>EasyPanel construye</h3><p>Levanta MySQL, API y frontend con Docker Compose. Los healthchecks impiden considerar sano un servicio que no responde.</p></div></div>
+          <div class="flow-step"><div><h3>Traefik publica la aplicación</h3><p>El dominio <code>lab.thelocalhost.es</code> llega al frontend y HTTPS protege el acceso externo.</p></div></div>
+        </div>
+        <h3 style="margin-top:28px">Diferencia entre local y remoto</h3>
+        <div class="table-wrap"><table><thead><tr><th>Entorno</th><th>Para qué sirve</th><th>Qué no debemos hacer</th></tr></thead><tbody>
+          <tr><td><strong>Local</strong><br><span class="badge done">Desarrollo</span></td><td>Probar ideas, corregir UX, ejecutar tests y aprender la arquitectura.</td><td>No asumir que porque funciona local está desplegado.</td></tr>
+          <tr><td><strong>Remoto</strong><br><span class="badge next">Prueba real</span></td><td>Validar Docker, dominio, OAuth, Gmail, MySQL y comportamiento con usuarios.</td><td>No editar archivos a mano sin dejarlo reflejado en Git.</td></tr>
+          <tr><td><strong>Producción comercial</strong><br><span class="badge care">Pendiente</span></td><td>Entorno estable para clientes reales, con secretos y backups maduros.</td><td>No tratar el servidor de pruebas como si fuera la única copia del proyecto.</td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section id="copias" class="section" data-search="copias backup recuperación restaurar cron mysql seguridad desastre datos">
+        <p class="eyebrow">09 · Copias y recuperación</p>
+        <h2>Qué pasa si algo se rompe</h2>
+        <p class="section-intro">Una copia solo es útil si se puede restaurar. Por eso ya hemos probado una restauración real en una base temporal sin tocar producción.</p>
+        <div class="grid two">
+          <article class="card"><h3>Copia automática</h3><p><code>scripts/backup-mysql.sh</code> genera un archivo comprimido de MySQL. El cron del VPS lo ejecuta cada día y conserva las copias dentro del periodo configurado.</p><p><span class="badge done">Configurado</span></p></article>
+          <article class="card"><h3>Prueba de restauración</h3><p>La copia se importó en <code>restore_check_20261013</code>, aparecieron las 8 tablas esperadas y después se eliminó la base temporal.</p><p><span class="badge done">Verificado</span></p></article>
+          <article class="card"><h3>Qué protege</h3><p>Usuarios, organización, conexiones, mensajes sincronizados, hilos y auditoría almacenados en MySQL.</p></article>
+          <article class="card"><h3>Qué todavía hay que madurar</h3><p>Separar copias fuera del VPS, probar recuperación completa del volumen y documentar un procedimiento de emergencia con tiempos objetivo.</p><p><span class="badge next">Siguiente mejora</span></p></article>
+        </div>
+        <pre>1. Detener o aislar el servicio afectado
+2. Conservar la copia original
+3. Crear una base temporal o un entorno aislado
+4. Importar y comprobar tablas y datos
+5. Solo después valorar una recuperación de producción
+6. Registrar qué ocurrió y qué se ha recuperado</pre>
+        <div class="callout success"><strong>Principio:</strong> nunca probamos una restauración directamente encima de la base real si podemos hacerlo en un entorno temporal.</div>
+      </section>
+
+      <section id="trabajo" class="section" data-search="mantenimiento git github commit push pruebas workflow código documentación cómo trabajar">
+        <p class="eyebrow">10 · Cómo se mantiene</p>
+        <h2>La rutina segura para seguir desarrollando</h2>
+        <div class="flow-list">
+          <div class="flow-step"><div><h3>Elegir un bloque pequeño</h3><p>Por ejemplo: mejorar la UX de clientes o añadir el botón de actualizar Gmail. No mezclar cinco cambios grandes.</p></div></div>
+          <div class="flow-step"><div><h3>Implementar en local</h3><p>Modificar código, comprobar la pantalla en navegador y probar el caso normal y el caso de error.</p></div></div>
+          <div class="flow-step"><div><h3>Ejecutar controles</h3><p><code>npm test</code>, <code>npm run build</code> y, si afecta a Docker, construir el contenedor.</p></div></div>
+          <div class="flow-step"><div><h3>Commit y push</h3><p>Guardar una versión identificable en GitHub. El despliegue remoto debe corresponder a ese commit.</p></div></div>
+          <div class="flow-step"><div><h3>Verificar remoto</h3><p>Comprobar healthchecks, login, pantalla afectada y una acción real no destructiva. Si algo falla, parar antes de seguir añadiendo funciones.</p></div></div>
+          <div class="flow-step"><div><h3>Actualizar esta guía</h3><p>Si cambia una pieza importante, se actualiza la arquitectura para que el conocimiento no dependa de una sola persona.</p></div></div>
+        </div>
+        <div class="grid two" style="margin-top:15px">
+          <article class="card"><h3>Comandos locales habituales</h3><pre>npm install
+npm test
+npm run build
+npm run dev</pre></article>
+          <article class="card"><h3>Archivos que conviene conocer</h3><p><code>src/server.ts</code> · rutas API</p><p><code>src/google-oauth.ts</code> · Gmail/OAuth</p><p><code>src/assistant.ts</code> · asistente IA</p><p><code>frontend/src</code> · interfaz</p><p><code>docker-compose.*.yml</code> · servicios</p></article>
+        </div>
+      </section>
+
+      <section id="estado" class="section" data-search="estado actual implementado pendiente roadmap futuro vender comercial producción">
+        <p class="eyebrow">11 · Estado y próximos pasos</p>
+        <h2>Qué tenemos y qué falta para convertirlo en producto</h2>
+        <div class="status-list card">
+          <div><span>Login Google y sesiones separadas</span><span class="badge done">Hecho</span></div>
+          <div><span>Roles administrador y comercial</span><span class="badge done">Hecho</span></div>
+          <div><span>Bandeja, hilos, enviar, responder y papelera</span><span class="badge done">Hecho</span></div>
+          <div><span>IA con OpenAI y conexión preparada para Claude</span><span class="badge done">Hecho</span></div>
+          <div><span>Clientes, seguimientos, compromisos y actividad</span><span class="badge done">Base hecha</span></div>
+          <div><span>Sincronización manual y aviso de actualización</span><span class="badge next">Mejorar UX</span></div>
+          <div><span>Historial de consultas y coste por organización</span><span class="badge next">Siguiente bloque</span></div>
+          <div><span>Copias fuera del VPS y recuperación completa ensayada</span><span class="badge next">Pendiente</span></div>
+          <div><span>Secretos y almacenamiento de producción endurecidos</span><span class="badge care">Antes de vender</span></div>
+          <div><span>Planes, límites de uso y facturación</span><span class="badge care">Fase comercial</span></div>
+        </div>
+        <h3 style="margin-top:28px">Orden recomendado a partir de ahora</h3>
+        <div class="grid">
+          <article class="card"><div class="icon">A</div><h3>Estabilizar</h3><p>Terminar sincronización, UX de bandeja y pruebas local/remoto.</p></article>
+          <article class="card"><div class="icon">B</div><h3>Medir</h3><p>Historial de IA, coste, proveedor, actividad y errores comprensibles.</p></article>
+          <article class="card"><div class="icon">C</div><h3>Preparar venta</h3><p>Empresa, comerciales, límites, onboarding, soporte y seguridad de producción.</p></article>
+        </div>
+      </section>
+
+      <section id="faq" class="section faq" data-search="preguntas frecuentes dudas arquitectura explicación admin correo gmail workspace dominio servidor">
+        <p class="eyebrow">12 · Preguntas frecuentes</p>
+        <h2>Respuestas sencillas para las dudas habituales</h2>
+        <details open><summary>¿Esto reemplaza Gmail?</summary><p>No. Gmail sigue siendo el servicio de correo y Google sigue almacenando los mensajes. La aplicación es una interfaz comercial especializada que trabaja sobre la cuenta autorizada.</p></details>
+        <details><summary>¿Puede el administrador leer el correo de un comercial?</summary><p>No desde esta aplicación. El administrador puede gestionar la autorización y el rol, pero cada sesión consulta exclusivamente la cuenta Gmail que la propia persona ha autorizado.</p></details>
+        <details><summary>¿Dónde están los correos?</summary><p>El original está en Gmail. La aplicación mantiene una copia de trabajo de los datos necesarios para presentar la bandeja, relacionar hilos y ofrecer análisis. Esa copia se guarda en MySQL en remoto.</p></details>
+        <details><summary>¿Qué es EasyPanel?</summary><p>Es el panel visual que administra los contenedores Docker del VPS. Permite ver y desplegar frontend, API y MySQL sin tener que ejecutar cada operación desde el terminal.</p></details>
+        <details><summary>¿Qué es Traefik?</summary><p>Es la puerta de entrada web del VPS. Recibe una petición para <code>lab.thelocalhost.es</code>, la envía al frontend correcto y gestiona el acceso HTTPS.</p></details>
+        <details><summary>¿Qué es MySQL?</summary><p>Es la base de datos estructurada. Guarda usuarios, sincronización, acciones y datos normalizados; no es el servidor de correo.</p></details>
+        <details><summary>¿Por qué no se puede hacer todo solo con el frontend?</summary><p>Porque el navegador no debe tener autoridad para elegir otra cuenta, leer tokens o saltarse permisos. Esas decisiones deben estar en el backend.</p></details>
+        <details><summary>¿Cuándo se puede ofrecer a clientes?</summary><p>Cuando el almacenamiento de secretos, backups fuera del VPS, recuperación, límites de consumo, privacidad y despliegue estén revisados con usuarios reales. La funcionalidad es prometedora, pero vender requiere ese último nivel de garantía.</p></details>
+        <div class="callout success" style="margin-top:25px"><strong>Frase final:</strong> es un espacio comercial seguro sobre Gmail: cada comercial trabaja con su propio correo, la aplicación ordena el trabajo y la IA ayuda a priorizarlo, pero las decisiones importantes siguen en manos de la persona.</div>
+      </section>
+
+      <p class="no-results" id="noResults">No hay resultados en esta guía para esa búsqueda.</p>
+      <footer class="footer">Documento generado para el proyecto Asistente Comercial · Mantenerlo actualizado cuando cambien la arquitectura, los permisos o el despliegue.</footer>
+    </main>
+  </div>
+  <script>
+    const search = document.querySelector('#search');
+    const sections = [...document.querySelectorAll('[data-search]')];
+    const noResults = document.querySelector('#noResults');
+    search.addEventListener('input', () => {
+      const query = search.value.trim().toLocaleLowerCase('es');
+      let visible = 0;
+      sections.forEach((section) => {
+        const haystack = `${section.dataset.search} ${section.textContent}`.toLocaleLowerCase('es');
+        const match = !query || haystack.includes(query);
+        section.hidden = !match;
+        if (match) visible += 1;
+      });
+      noResults.style.display = visible ? 'none' : 'block';
+    });
+    const links = [...document.querySelectorAll('.toc a')];
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        links.forEach((link) => link.classList.toggle('active', link.getAttribute('href') === `#${entry.target.id}`));
+      });
+    }, { rootMargin: '-15% 0px -70% 0px' });
+    document.querySelectorAll('.section').forEach((section) => observer.observe(section));
+  </script>
+</body>
+</html>

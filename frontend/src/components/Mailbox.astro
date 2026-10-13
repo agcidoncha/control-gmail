@@ -14,6 +14,43 @@
     </select>
     <input id="messageSearch" type="search" placeholder="Buscar cliente, empresa o asunto…" />
   </div>
+  <form id="messageRangeForm" class="message-range" aria-label="Elegir mensajes y fechas">
+    <label id="messagePageSizeField" class="message-range-control">
+      <span>Mostrar</span>
+      <select id="messagePageSize">
+        <option value="10" selected>10</option>
+        <option value="25">25</option>
+        <option value="50">50</option>
+      </select>
+      <span>mensajes</span>
+    </label>
+    <label class="message-range-control message-date-mode-control">
+      <span>Buscar por fecha</span>
+      <select id="messageDateMode">
+        <option value="all" selected>Último mes</option>
+        <option value="day">Un día concreto</option>
+        <option value="range">Un periodo</option>
+      </select>
+      <small id="messageSyncWindow" class="message-sync-window muted">Último mes: consultando…</small>
+    </label>
+    <label id="messageExactDateField" class="message-range-control" hidden>
+      <span>Fecha</span>
+      <input id="messageExactDate" type="date" />
+    </label>
+    <div id="messageDateRangeFields" class="message-date-range" hidden>
+      <label class="message-range-control">
+        <span>Desde</span>
+        <input id="messageDateFrom" type="date" />
+      </label>
+      <label class="message-range-control">
+        <span>Hasta</span>
+        <input id="messageDateTo" type="date" />
+      </label>
+    </div>
+    <button id="applyMessageRange" type="submit">Aplicar</button>
+    <button id="clearMessageRange" class="secondary-button" type="button" hidden>Limpiar fechas</button>
+  </form>
+  <p class="message-range-help muted">“Último mes” muestra los últimos 30 días disponibles. Para consultar otra fecha, elige “Un día concreto” o “Un periodo”.</p>
   <div id="messageFilters" class="quick-filters" role="group" aria-label="Filtrar mensajes">
     <button class="filter-chip active" type="button" data-message-filter="all">Todos</button>
     <button class="filter-chip" type="button" data-message-filter="attention">Atención</button>
@@ -52,7 +89,6 @@
     <button id="mailboxUndoButton" type="button">Deshacer</button>
   </div>
   <div class="mailbox-pagination">
-    <button id="loadMoreMessages" type="button" hidden>Cargar más mensajes</button>
     <span id="mailboxPaginationStatus" class="muted" aria-live="polite"></span>
   </div>
 </section>
@@ -76,11 +112,26 @@
   .message-tools { display: flex; align-items: center; gap: 12px; margin: 18px 0 4px; }
   .message-tools input, .message-tools select { min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; background: #fff; color: var(--ink); }
   .message-tools input { flex: 1; }
+  .message-range { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 10px 14px; margin: 14px 0 4px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-soft); }
+  .message-range [hidden] { display: none; }
+  .message-range-control { display: grid; flex: 0 0 auto; align-items: center; grid-template-columns: auto auto auto; gap: 7px; color: var(--muted); font-size: 12px; }
+  .message-range-control > span:first-child { color: var(--ink); font-weight: 700; }
+  .message-range-control select, .message-range-control input { min-height: 36px; min-width: 0; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; color: var(--ink); background: var(--surface-input); font: inherit; }
+  .message-date-mode-control { min-width: 0; grid-template-columns: auto minmax(190px, auto) auto; }
+  .message-sync-window { font-size: 11px; white-space: nowrap; }
+  .message-date-range { display: flex; flex-wrap: wrap; gap: 10px; }
+  .message-date-range .message-range-control { grid-template-columns: auto minmax(140px, 1fr); }
+  .message-range button { min-height: 36px; padding: 7px 11px; border: 1px solid var(--border); border-radius: 8px; color: #fff; background: var(--orange); font: inherit; font-size: 12px; cursor: pointer; }
+  .message-range button.secondary-button { color: var(--orange-dark); background: var(--warm); }
+  .message-range button:hover, .message-range button:focus-visible { background: var(--orange-dark); }
+  .message-range button.secondary-button:hover, .message-range button.secondary-button:focus-visible { color: var(--ink); background: var(--orange-light); }
+  .message-range button:disabled { cursor: wait; opacity: .65; }
+  .message-range-help { margin: 8px 0 0; font-size: 12px; }
+  #mailboxRefreshButton, #composeMessageButton { font-weight: 500; }
   .quick-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 4px; }
-  .filter-chip { padding: 7px 11px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); background: #fff; font-size: 12px; }
+  .filter-chip { padding: 7px 11px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); background: #fff; font-family: var(--font-body); font-size: 12px; font-weight: 400; }
   .filter-chip:hover, .filter-chip:focus-visible, .filter-chip.active { color: var(--orange-dark); background: #FFF1E2; border-color: var(--border); }
-  .message { min-width: 0; padding: 18px 0; border-bottom: 1px solid var(--border); }
-  .message:last-child { border-bottom: 0; }
+  .message { min-width: 0; margin: 12px 0; padding: 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); box-shadow: 0 8px 22px rgba(49, 35, 24, .045); }
   .message strong { display: block; margin-bottom: 4px; overflow-wrap: anywhere; }
   .message-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .message-importance { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 999px; color: var(--orange-dark); background: #FFF1E2; font-size: 11px; font-weight: 800; white-space: nowrap; }
@@ -108,7 +159,7 @@
   .message-action-bar { display: flex; align-items: center; flex-wrap: nowrap; gap: 10px; width: 100%; min-width: 0; margin-top: 12px; }
   .message-action-divider { flex: 0 0 auto; color: var(--border); font-size: 20px; font-weight: 300; line-height: 1; }
   .message-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px; margin-left: 0; }
-  .message-actions button { height: 34px; min-height: 34px; padding: 0 10px; border: 1px solid var(--border); color: var(--ink); background: var(--warm); font-size: 12px; line-height: 1; }
+  .message-actions button { height: 34px; min-height: 34px; padding: 0 10px; border: 1px solid var(--border); color: var(--ink); background: var(--warm); font-family: var(--font-body); font-size: 12px; font-weight: 400; line-height: 1; }
   .message-actions button:hover, .message-actions button:focus-visible { color: var(--ink); background: var(--orange-light); }
   .message-actions button.message-action-unread { color: var(--action-unread-fg); background: var(--action-unread-bg); border-color: var(--action-unread-border); }
   .message-actions button.message-action-unread:hover, .message-actions button.message-action-unread:focus-visible { color: var(--action-unread-fg); background: var(--action-unread-hover); }
@@ -121,10 +172,10 @@
   .mailbox-undo[hidden] { display: none; }
   .mailbox-undo button { flex: 0 0 auto; padding: 6px 10px; border: 1px solid var(--border); color: var(--ink); background: var(--warm); font-size: 12px; }
   .mailbox-undo button:hover, .mailbox-undo button:focus-visible { background: var(--orange-light); }
-  .message.is-open { background: #FCFAF8; }
-  .thread-button { flex: 0 0 auto; height: 34px; min-height: 34px; margin-top: 0; padding: 0 11px; border-radius: 10px; background: var(--panel-dark); font-size: 12px; line-height: 1; }
+  .message.is-open { background: var(--surface-hover); box-shadow: 0 10px 28px rgba(49, 35, 24, .08); }
+  .thread-button { flex: 0 0 auto; height: 34px; min-height: 34px; margin-top: 0; padding: 0 11px; border-radius: 10px; background: var(--panel-dark); font-family: var(--font-body); font-size: 12px; font-weight: 400; line-height: 1; }
   .thread-inline { margin-top: 18px; padding: 16px 18px 4px; border: 1px solid var(--border); border-radius: 12px; background: var(--warm); overflow-wrap: anywhere; }
-  .thread-inline .message { padding: 12px 0; }
+  .thread-inline .message { margin: 0; padding: 12px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
   .thread-inline .message:first-child { padding-top: 0; }
   .thread-inline .message:last-child { padding-bottom: 0; }
   .mailbox-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 42px; margin-top: 14px; }
@@ -133,5 +184,5 @@
   .mailbox-pagination button:hover, .mailbox-pagination button:focus-visible { color: var(--ink); background: var(--orange-light); }
   html[data-theme='dark'] .message-importance { color: var(--orange-light); background: var(--surface-alt); }
   html[data-theme='dark'] .message-bounce { color: var(--danger); background: var(--neutral-bg); }
-  @media (max-width: 640px) { .message-tools { align-items: stretch; flex-direction: column; } .message-tools select, .message-tools input { width: 100%; } .message-action-bar { align-items: flex-start; flex-wrap: wrap; } .message-actions { margin-left: 0; justify-content: flex-start; } }
+  @media (max-width: 640px) { .message-tools { align-items: stretch; flex-direction: column; } .message-tools select, .message-tools input { width: 100%; } .message-range { align-items: stretch; flex-direction: column; } .message-range-control, .message-date-mode-control, .message-date-range .message-range-control { grid-template-columns: minmax(110px, auto) minmax(0, 1fr) auto; } .message-sync-window { grid-column: 1 / -1; white-space: normal; } .message-date-range { flex-direction: column; } .message-range button { width: 100%; } .message-action-bar { align-items: flex-start; flex-wrap: wrap; } .message-actions { margin-left: 0; justify-content: flex-start; } }
 </style>

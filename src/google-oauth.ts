@@ -142,6 +142,23 @@ function formatGmailDate(date: Date) {
   return `${date.getUTCFullYear()}/${String(date.getUTCMonth() + 1).padStart(2, '0')}/${String(date.getUTCDate()).padStart(2, '0')}`;
 }
 
+function getMailboxDateQuery(fromValue?: string, toValue?: string) {
+  if (!fromValue && !toValue) return '';
+  const from = fromValue ? parseDateInput(fromValue, 'La fecha inicial') : null;
+  const to = toValue ? parseDateInput(toValue, 'La fecha final') : null;
+  if (from && to && from > to) throw new Error('La fecha inicial no puede ser posterior a la fecha final.');
+  const clauses: string[] = [];
+  if (from) {
+    from.setUTCDate(from.getUTCDate() - 1);
+    clauses.push(`after:${formatGmailDate(from)}`);
+  }
+  if (to) {
+    to.setUTCDate(to.getUTCDate() + 1);
+    clauses.push(`before:${formatGmailDate(to)}`);
+  }
+  return clauses.join(' ');
+}
+
 function parseDateInput(value: string, field: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error(`${field} debe tener el formato AAAA-MM-DD.`);
   const date = new Date(`${value}T00:00:00.000Z`);
@@ -293,7 +310,11 @@ export async function refreshGmailAccount(email: string) {
   await ensureGmailSnapshot(email, true);
   clearAccountCaches(email);
   const state = await getGmailSyncState(email);
-  return { syncedAt: state?.lastSyncedAt ?? new Date().toISOString() };
+  return {
+    syncedAt: state?.lastSyncedAt ?? new Date().toISOString(),
+    from: state?.from ?? null,
+    to: state?.to ?? null,
+  };
 }
 
 function syncStateCoversWindow(state: { from: string; to: string }, requestedWindow: AnalysisWindow) {
@@ -610,32 +631,60 @@ export async function listRecentMessagesPage(
   pageToken?: string,
   organizationId = process.env.DEFAULT_ORGANIZATION_ID ?? 'org_publicidad_segmentada_tv',
   forceRefresh = false,
+  dateFrom?: string,
+  dateTo?: string,
+  fetchAll = false,
 ) {
+  const dateQuery = getMailboxDateQuery(dateFrom, dateTo);
   if (mailbox === 'appArchived') {
+    if (fetchAll && dateQuery) {
+      const messages: GmailListMessage[] = [];
+      let offset = 0;
+      while (true) {
+        const page = await listAppArchivedMessages(email, organizationId, 50, offset, dateFrom, dateTo);
+        messages.push(...page.messages);
+        if (page.nextOffset === null) return { messages, nextPageToken: null, truncated: false };
+        if (messages.length >= mailboxDateResultLimit) {
+          return { messages: messages.slice(0, mailboxDateResultLimit), nextPageToken: null, truncated: true };
+        }
+        offset = page.nextOffset;
+      }
+    }
     const offset = decodePageOffset(pageToken);
-    const page = await listAppArchivedMessages(email, organizationId, maxResults, offset);
+    const page = await listAppArchivedMessages(email, organizationId, maxResults, offset, dateFrom, dateTo);
     return {
       messages: page.messages,
       nextPageToken: page.nextOffset === null ? null : encodePageOffset(page.nextOffset),
+      truncated: false,
     };
   }
   if (mailbox === 'archived' || mailbox === 'spam' || mailbox === 'trash') {
-    const cacheKey = messageCacheKey(email, mailbox);
+    const cacheKey = messageCacheKey(email, mailbox, dateQuery);
     if (forceRefresh) {
       messageCache.delete(cacheKey);
       nextPageTokenCache.delete(cacheKey);
     }
     if (!pageToken) {
-      const messages = await listRecentMessages(email, maxResults, mailbox);
+      const messages = await listRecentMessages(email, maxResults, mailbox, dateQuery);
       return {
         messages,
         nextPageToken: nextPageTokenCache.get(cacheKey) ?? null,
+        truncated: false,
       };
     }
 
     const gmail = await getGmailClient(email);
     const label = mailbox === 'spam' ? 'SPAM' : mailbox === 'trash' ? 'TRASH' : undefined;
-    return listMessagesForLabel(gmail, label, maxResults, pageToken, mailbox === 'archived' ? archivedMailboxQuery : '');
+    const query = [mailbox === 'archived' ? archivedMailboxQuery : '', dateQuery].filter(Boolean).join(' ');
+    if (fetchAll && dateQuery) return listAllMessagesForLabel(gmail, label, query);
+    return listMessagesForLabel(gmail, label, maxResults, pageToken, query);
+  }
+
+  if (dateQuery) {
+    const gmail = await getGmailClient(email);
+    const label = mailbox === 'sent' ? 'SENT' : 'INBOX';
+    if (fetchAll) return listAllMessagesForLabel(gmail, label, dateQuery);
+    return listMessagesForLabel(gmail, label, maxResults, pageToken, dateQuery);
   }
 
   await ensureGmailSnapshot(email, forceRefresh);
@@ -643,10 +692,31 @@ export async function listRecentMessagesPage(
   return {
     messages: page.messages.map(fromStoredMessage),
     nextPageToken: page.nextOffset === null ? null : encodePageOffset(page.nextOffset),
+    truncated: false,
   };
 }
 
-async function listAppArchivedMessages(email: string, organizationId: string, maxResults: number, offset = 0) {
+const mailboxDateResultLimit = 1000;
+
+async function listAllMessagesForLabel(
+  gmail: ReturnType<typeof google.gmail>,
+  label: 'INBOX' | 'SENT' | 'SPAM' | 'TRASH' | undefined,
+  query: string,
+) {
+  const messages: GmailListMessage[] = [];
+  let pageToken: string | undefined;
+  while (true) {
+    const page = await listMessagesForLabel(gmail, label, 50, pageToken, query);
+    messages.push(...page.messages);
+    if (!page.nextPageToken) return { messages, nextPageToken: null, truncated: false };
+    if (messages.length >= mailboxDateResultLimit) {
+      return { messages: messages.slice(0, mailboxDateResultLimit), nextPageToken: null, truncated: true };
+    }
+    pageToken = page.nextPageToken;
+  }
+}
+
+async function listAppArchivedMessages(email: string, organizationId: string, maxResults: number, offset = 0, dateFrom?: string, dateTo?: string) {
   const actions = await listGmailActions({
     organizationId,
     userEmail: email,
@@ -675,7 +745,12 @@ async function listAppArchivedMessages(email: string, organizationId: string, ma
   });
   const archived = currentMessages.filter((message): message is GmailListMessage => {
     if (!message) return false;
-    return !message.labelIds.includes('INBOX')
+    const fromTimestamp = dateFrom ? parseDateInput(dateFrom, 'La fecha inicial').getTime() : Number.NEGATIVE_INFINITY;
+    const toTimestamp = dateTo ? parseDateInput(dateTo, 'La fecha final').getTime() + 86_400_000 - 1 : Number.POSITIVE_INFINITY;
+    const timestamp = messageTimestamp(message);
+    return timestamp >= fromTimestamp
+      && timestamp <= toTimestamp
+      && !message.labelIds.includes('INBOX')
       && !message.labelIds.includes('TRASH')
       && !message.labelIds.includes('SPAM');
   });
@@ -1000,6 +1075,59 @@ export async function listClientHistory(email: string, clientEmail: string, maxR
     .slice(0, Math.min(Math.max(maxResults, 1), 100));
 }
 
+export async function listClientAnalysisContext(email: string, clientEmail: string, analysisWindow = getAnalysisWindow(), maxResults = 100): Promise<AnalysisMailboxContextMessage[]> {
+  const normalizedClient = clientEmail.trim().toLowerCase();
+  if (!/^[\w.+-]+@[\w.-]+\.[a-z]{2,}$/i.test(normalizedClient)) throw new Error('Correo de cliente no válido.');
+
+  const gmail = await getGmailClient(email);
+  const scopeQuery = analysisWindow.scope === 'spam'
+    ? 'in:spam'
+    : analysisWindow.scope === 'all'
+      ? 'in:anywhere'
+      : '{in:inbox in:sent}';
+  const listed = await gmail.users.messages.list({
+    userId: 'me',
+    q: `{from:${normalizedClient} to:${normalizedClient}} ${scopeQuery} ${analysisWindow.query}`.trim(),
+    maxResults: Math.min(Math.max(maxResults, 1), 100),
+  });
+  const listedMessages = (listed.data.messages ?? []).filter((message) => message.id && message.threadId);
+  const selectedIds = new Set(listedMessages.map((message) => message.id));
+  const threadIds = [...new Set(listedMessages.map((message) => message.threadId).filter(Boolean))] as string[];
+  const threads = await Promise.all(threadIds.map((threadId) => getCachedThreadMessages(email, gmail, threadId)));
+  const fromTimestamp = Date.parse(`${analysisWindow.from.replaceAll('/', '-')}T00:00:00.000Z`);
+  const toTimestamp = Date.parse(`${analysisWindow.to.replaceAll('/', '-')}T23:59:59.999Z`);
+  const messages = threads
+    .flat()
+    .filter((message) => {
+      const participants = `${message.from} ${message.to}`.toLowerCase();
+      const timestamp = messageTimestamp(message);
+      return message.id && selectedIds.has(message.id) && participants.includes(normalizedClient) && timestamp >= fromTimestamp && timestamp <= toTimestamp;
+    })
+    .sort((left, right) => messageTimestamp(right) - messageTimestamp(left));
+
+  const threadMessagesById = new Map<string, GmailThreadMessage[]>();
+  messages.forEach((message) => {
+    const entries = threadMessagesById.get(message.threadId) ?? [];
+    entries.push({ ...message, body: message.body.slice(0, 8000) });
+    threadMessagesById.set(message.threadId, entries);
+  });
+
+  return messages.map((message) => ({
+    id: message.id ?? `${message.threadId}:${messageTimestamp(message)}`,
+    threadId: message.threadId,
+    subject: message.subject,
+    from: message.from,
+    to: message.to,
+    date: message.date,
+    snippet: message.body.slice(0, 1000),
+    labelIds: [],
+    important: false,
+    bounced: false,
+    mailbox: 'cliente',
+    threadMessages: threadMessagesById.get(message.threadId) ?? [message],
+  }));
+}
+
 async function getCachedThreadMessages(email: string, gmail: ReturnType<typeof google.gmail>, threadId: string) {
   const cacheKey = `${email.toLowerCase()}:${threadId}`;
   const cached = threadCache.get(cacheKey);
@@ -1316,6 +1444,7 @@ async function listMessagesForLabel(
   return {
     messages: messages.filter((message): message is NonNullable<typeof message> => message !== null),
     nextPageToken: listed.data.nextPageToken ?? null,
+    truncated: false,
   };
 }
 

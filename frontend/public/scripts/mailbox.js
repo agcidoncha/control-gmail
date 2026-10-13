@@ -5,8 +5,19 @@
   const countNode = document.querySelector('#mailboxCount');
   const syncStatusNode = document.querySelector('#mailboxSyncStatus');
   const refreshButton = document.querySelector('#mailboxRefreshButton');
-  const loadMoreNode = document.querySelector('#loadMoreMessages');
   const paginationStatusNode = document.querySelector('#mailboxPaginationStatus');
+  const rangeForm = document.querySelector('#messageRangeForm');
+  const pageSizeField = document.querySelector('#messagePageSizeField');
+  const pageSizeNode = document.querySelector('#messagePageSize');
+  const dateModeNode = document.querySelector('#messageDateMode');
+  const exactDateField = document.querySelector('#messageExactDateField');
+  const exactDateNode = document.querySelector('#messageExactDate');
+  const dateRangeFields = document.querySelector('#messageDateRangeFields');
+  const dateFromNode = document.querySelector('#messageDateFrom');
+  const dateToNode = document.querySelector('#messageDateTo');
+  const syncWindowNode = document.querySelector('#messageSyncWindow');
+  const applyRangeButton = document.querySelector('#applyMessageRange');
+  const clearRangeButton = document.querySelector('#clearMessageRange');
   const archivedNoticeNode = document.querySelector('#archivedMailboxNotice');
   const undoNode = document.querySelector('#mailboxUndo');
   const undoMessageNode = document.querySelector('#mailboxUndoMessage');
@@ -33,14 +44,64 @@
   let commitments = [];
   let filter = 'all';
   let nextPageToken = null;
-  let loadingMore = false;
-  let retryBlockedUntil = 0;
-  let retryTimer = null;
+  let resultsTruncated = false;
+  let loadingMessages = false;
   let undoState = null;
   let undoTimer = null;
   let syncing = false;
   let syncTimer = null;
   const syncIntervalMs = 10 * 60 * 1000;
+
+  function getDateRange() {
+    const mode = dateModeNode.value;
+    if (mode === 'all') return { from: '', to: '' };
+    if (mode === 'day') {
+      if (!exactDateNode.value) throw new Error('Selecciona el día que quieres consultar.');
+      return { from: exactDateNode.value, to: exactDateNode.value };
+    }
+    if (!dateFromNode.value && !dateToNode.value) throw new Error('Indica al menos una fecha para buscar el periodo.');
+    if (dateFromNode.value && dateToNode.value && dateFromNode.value > dateToNode.value) {
+      throw new Error('La fecha «Desde» no puede ser posterior a «Hasta».');
+    }
+    return { from: dateFromNode.value, to: dateToNode.value };
+  }
+
+  function updateDateFields() {
+    const mode = dateModeNode.value;
+    pageSizeField.hidden = mode !== 'all';
+    exactDateField.hidden = mode !== 'day';
+    dateRangeFields.hidden = mode !== 'range';
+    applyRangeButton.hidden = mode === 'all';
+    clearRangeButton.hidden = mode === 'all';
+  }
+
+  function resetMessageView() {
+    messages = [];
+    nextPageToken = null;
+    resultsTruncated = false;
+    paginationStatusNode.textContent = '';
+    render();
+  }
+
+  function showPendingRangeChange() {
+    paginationStatusNode.textContent = 'Hay cambios sin aplicar. Pulsa «Aplicar» para actualizar la bandeja.';
+  }
+
+  async function reloadMessages() {
+    loadingMessages = true;
+    resetMessageView();
+    paginationStatusNode.textContent = 'Buscando mensajes en Gmail…';
+    render();
+    applyRangeButton.disabled = true;
+    applyRangeButton.textContent = 'Aplicando…';
+    try {
+      await load();
+    } finally {
+      loadingMessages = false;
+      applyRangeButton.disabled = false;
+      applyRangeButton.textContent = 'Aplicar';
+    }
+  }
 
   const requestedMailbox = new URLSearchParams(window.location.search).get('mailbox');
   if (requestedMailbox && [...mailboxNode.options].some((option) => option.value === requestedMailbox)) {
@@ -177,11 +238,20 @@
       return matchesQuery && matchesFilter;
     });
 
-    countNode.textContent = nextPageToken ? filtered.length + ' de ' + messages.length + ' cargados' : filtered.length + ' de ' + messages.length;
-    loadMoreNode.hidden = !nextPageToken;
+    const hasDateFilter = dateModeNode.value !== 'all';
+    countNode.textContent = hasDateFilter
+      ? filtered.length + ' mensajes encontrados'
+      : filtered.length + ' mensajes mostrados (límite: ' + pageSizeNode.value + ')';
+    paginationStatusNode.textContent = nextPageToken
+      ? Number(pageSizeNode.value) >= 50
+        ? 'Hay más mensajes disponibles. Busca por fecha para localizarlos.'
+        : 'Hay más mensajes disponibles. Aumenta «Mostrar» para ver más.'
+      : resultsTruncated
+        ? 'Hay demasiados resultados. Acota el periodo para verlos todos.'
+        : '';
     messagesNode.replaceChildren();
     if (!filtered.length) {
-      messagesNode.append(text('p', query ? 'No hay mensajes que coincidan.' : 'No hay mensajes en la bandeja.', 'muted'));
+      messagesNode.append(text('p', loadingMessages ? 'Buscando mensajes en Gmail…' : query ? 'No hay mensajes que coincidan.' : 'No hay mensajes en la bandeja.', 'muted'));
       return;
     }
     filtered.forEach((message) => {
@@ -242,13 +312,20 @@
 
   async function load(forceFetch = false) {
     try {
-      const shared = !forceFetch && mailboxNode.value === 'inbox' && window.__commercialNavDataPromise
+      const dateRange = getDateRange();
+      const hasDateFilter = Boolean(dateRange.from || dateRange.to);
+      const maxResults = hasDateFilter ? 50 : Number(pageSizeNode.value || 10);
+      const shared = !forceFetch && !hasDateFilter && maxResults === 10 && mailboxNode.value === 'inbox' && window.__commercialNavDataPromise
         ? await window.__commercialNavDataPromise
         : null;
-      const refreshParam = mailboxNode.value === 'sent' || mailboxNode.value === 'trash' ? '&refresh=1' : '';
+      const messageParams = new URLSearchParams({ max: String(maxResults), mailbox: mailboxNode.value });
+      if (mailboxNode.value === 'sent' || mailboxNode.value === 'trash') messageParams.set('refresh', '1');
+      if (dateRange.from) messageParams.set('from', dateRange.from);
+      if (dateRange.to) messageParams.set('to', dateRange.to);
+      if (hasDateFilter) messageParams.set('all', '1');
       const messageResult = shared?.messages?.messages
         ? shared.messages
-        : await fetchJson('/gmail/messages?max=10&mailbox=' + encodeURIComponent(mailboxNode.value) + refreshParam);
+        : await fetchJson('/gmail/messages?' + messageParams.toString());
       const followUpResult = shared?.followUps;
       const commitmentResult = shared?.commitments;
       if (!messageResult) {
@@ -256,6 +333,7 @@
       }
       messages = messageResult.messages || [];
       nextPageToken = messageResult.nextPageToken || null;
+      resultsTruncated = Boolean(messageResult.truncated);
       if (followUpResult) followUps = followUpResult.followUps || [];
       if (commitmentResult) commitments = commitmentResult.commitments || [];
       const navMessageCount = document.querySelector('#navMessageCount');
@@ -271,7 +349,7 @@
       messagesNode.removeAttribute('aria-label');
       countNode.removeAttribute('aria-label');
       messagesNode.replaceChildren(text('p', error.message || 'No se pudieron cargar los mensajes.', 'muted'));
-      loadMoreNode.hidden = true;
+      paginationStatusNode.textContent = '';
     }
   }
 
@@ -279,6 +357,21 @@
     if (!value) return '';
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date);
+  }
+
+  function formatSyncWindowDate(value) {
+    if (!value) return '';
+    const date = new Date(`${String(value).replaceAll('/', '-')}T00:00:00.000Z`);
+    return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }).format(date);
+  }
+
+  function setSyncWindow(from, to) {
+    if (!syncWindowNode) return;
+    const start = formatSyncWindowDate(from);
+    const end = formatSyncWindowDate(to);
+    syncWindowNode.textContent = start && end
+      ? `Último mes: ${start} – ${end}`
+      : 'Último mes: no disponible';
   }
 
   function setSyncStatus(state, message, syncedAt = null) {
@@ -299,6 +392,7 @@
       nextPageToken = null;
       render();
       await load(true);
+      setSyncWindow(result.from, result.to);
       setSyncStatus('success', 'Actualizado el ' + formatSyncDate(result.syncedAt), result.syncedAt);
     } catch (error) {
       setSyncStatus('error', showErrors ? (error.message || 'No se pudo actualizar Gmail.') : 'No se pudo actualizar Gmail. Pulsa «Actualizar Gmail».');
@@ -306,51 +400,6 @@
       syncing = false;
       refreshButton.disabled = false;
       refreshButton.textContent = 'Actualizar Gmail';
-    }
-  }
-
-  async function loadMore() {
-    if (!nextPageToken || loadingMore || retryBlockedUntil > Date.now()) return;
-    loadingMore = true;
-    loadMoreNode.disabled = true;
-    loadMoreNode.textContent = 'Cargando…';
-    paginationStatusNode.textContent = '';
-    try {
-      const result = await fetchJson('/gmail/messages?max=10&mailbox=' + encodeURIComponent(mailboxNode.value) + '&pageToken=' + encodeURIComponent(nextPageToken));
-      const existingIds = new Set(messages.map((message) => message.id));
-      messages = messages.concat((result.messages || []).filter((message) => !existingIds.has(message.id)));
-      nextPageToken = result.nextPageToken || null;
-      render();
-      paginationStatusNode.textContent = nextPageToken ? '' : 'Has llegado al final de la bandeja.';
-    } catch (error) {
-      paginationStatusNode.textContent = error.message || 'No se pudieron cargar más mensajes.';
-      if (/cuota|limitado temporalmente|rate.?limit/i.test(error.message || '')) {
-        retryBlockedUntil = Date.now() + 15_000;
-        const updateRetryLabel = () => {
-          const remaining = Math.ceil(Math.max(0, retryBlockedUntil - Date.now()) / 1000);
-          if (!remaining) {
-            retryBlockedUntil = 0;
-            loadMoreNode.disabled = false;
-            loadMoreNode.textContent = 'Cargar más mensajes';
-            paginationStatusNode.textContent = 'Ya puedes reintentarlo.';
-            if (retryTimer) window.clearInterval(retryTimer);
-            retryTimer = null;
-            return;
-          }
-          loadMoreNode.disabled = true;
-          loadMoreNode.textContent = 'Reintentar en ' + remaining + ' s';
-          paginationStatusNode.textContent = 'Gmail ha limitado temporalmente las consultas.';
-        };
-        updateRetryLabel();
-        if (retryTimer) window.clearInterval(retryTimer);
-        retryTimer = window.setInterval(updateRetryLabel, 1000);
-      }
-    } finally {
-      loadingMore = false;
-      if (!retryBlockedUntil) {
-        loadMoreNode.disabled = false;
-        loadMoreNode.textContent = 'Cargar más mensajes';
-      }
     }
   }
 
@@ -495,7 +544,41 @@
     filterButtons.forEach((item) => item.classList.toggle('active', item === button));
     render();
   }));
-  loadMoreNode.addEventListener('click', loadMore);
+  dateModeNode.addEventListener('change', async () => {
+    updateDateFields();
+    if (dateModeNode.value === 'all') {
+      exactDateNode.value = '';
+      dateFromNode.value = '';
+      dateToNode.value = '';
+      await reloadMessages();
+      return;
+    }
+    showPendingRangeChange();
+  });
+  [exactDateNode, dateFromNode, dateToNode].forEach((node) => node.addEventListener('change', () => {
+    if (dateModeNode.value !== 'all') showPendingRangeChange();
+  }));
+  rangeForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      getDateRange();
+      await reloadMessages();
+    } catch (error) {
+      paginationStatusNode.textContent = error.message || 'Revisa las fechas seleccionadas.';
+    }
+  });
+  pageSizeNode.addEventListener('change', async () => {
+    if (dateModeNode.value === 'all') await reloadMessages();
+    else showPendingRangeChange();
+  });
+  clearRangeButton.addEventListener('click', async () => {
+    dateModeNode.value = 'all';
+    exactDateNode.value = '';
+    dateFromNode.value = '';
+    dateToNode.value = '';
+    updateDateFields();
+    await reloadMessages();
+  });
   composeButton.addEventListener('click', () => openCompose());
   cancelComposeButton.addEventListener('click', closeCompose);
   refreshButton.addEventListener('click', () => syncMailbox(true));
@@ -505,7 +588,8 @@
   });
   editComposeButton.addEventListener('click', () => { composePreview.hidden = true; composeStatus.textContent = ''; composeBody.focus(); });
   confirmComposeButton.addEventListener('click', sendComposeMessage);
-  mailboxNode.addEventListener('change', () => { messages = []; nextPageToken = null; paginationStatusNode.textContent = ''; render(); load(); });
+  mailboxNode.addEventListener('change', reloadMessages);
+  updateDateFields();
   syncMailbox(true);
   syncTimer = window.setInterval(() => syncMailbox(false), syncIntervalMs);
 })();

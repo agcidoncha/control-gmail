@@ -83,7 +83,7 @@
     historyButton.type = 'button';
     historyButton.addEventListener('click', () => toggleHistory(card, client.email, historyButton));
     const aiLink = document.createElement('a');
-    aiLink.href = '/consultar-ia?prompt=' + encodeURIComponent(`Interpreta las necesidades, preferencias y estado comercial de ${client.email} usando solo sus conversaciones.`);
+    aiLink.href = '/consultar-ia?client=' + encodeURIComponent(client.email) + '&prompt=' + encodeURIComponent(`Interpreta las necesidades, preferencias y estado comercial de ${client.email} usando solo sus conversaciones.`);
     aiLink.textContent = 'Analizar necesidades';
     actions.append(historyButton, aiLink);
     card.append(actions);

@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import OpenAI from 'openai';
-import { getAnalysisWindow, listRecentMailboxContext, type AnalysisWindow } from './google-oauth.js';
+import { getAnalysisWindow, listClientAnalysisContext, listRecentMailboxContext, type AnalysisWindow } from './google-oauth.js';
 import { resolveAiConnection } from './ai-connections.js';
 import { askClaude, parseCommercialAnalysis, type CommercialAnalysis } from './claude.js';
 
@@ -40,7 +40,7 @@ const analysisSchema = {
   required: ['respuesta', 'hechos', 'inferencias', 'acciones_propuestas', 'requiere_revision', 'fuentes'],
 } as const;
 
-export async function askCommercialAssistant(email: string, question: string, organizationId?: string, analysisWindow: AnalysisWindow = getAnalysisWindow()) {
+export async function askCommercialAssistant(email: string, question: string, organizationId?: string, analysisWindow: AnalysisWindow = getAnalysisWindow(), clientEmail?: string) {
   const connection = await resolveAiConnection(email, organizationId);
   const cacheKey = [
     email.toLowerCase(),
@@ -48,6 +48,7 @@ export async function askCommercialAssistant(email: string, question: string, or
     connection.model,
     analysisWindow.scope,
     analysisWindow.query,
+    clientEmail?.trim().toLowerCase() ?? 'all-clients',
     question.trim().toLowerCase(),
   ].join(':');
   const cached = analysisResultCache.get(cacheKey);
@@ -56,9 +57,12 @@ export async function askCommercialAssistant(email: string, question: string, or
   const [rules, agentSpec, rawMessages] = await Promise.all([
     readFile(rulesPath, 'utf8'),
     readFile(agentSpecPath, 'utf8'),
-    listRecentMailboxContext(email, 5, analysisWindow, true),
+    clientEmail
+      ? listClientAnalysisContext(email, clientEmail, analysisWindow)
+      : listRecentMailboxContext(email, 5, analysisWindow, true),
   ]);
   const messages = compactMailboxContext(rawMessages);
+  const exactMessageCount = messages.reduce((total, thread) => total + thread.threadMessages.length, 0);
   const instructions = `
 Eres Asistente Comercial. Trabajas exclusivamente con la cuenta Gmail autorizada de la sesión actual.
 No envíes, borres, archives, etiquetes ni modifiques mensajes. Solo analiza y propone.
@@ -81,8 +85,12 @@ ${agentSpec}
 Pregunta del comercial:
 ${question}
 
+${clientEmail ? `Cliente seleccionado: ${clientEmail}\nAnaliza exclusivamente los mensajes de este cliente. No mezcles conversaciones de otros remitentes ni atribuyas sus necesidades a otra persona.` : 'No se ha seleccionado un cliente concreto; trabaja con el conjunto de mensajes disponible y no inventes clientes.'}
+
 Mensajes disponibles de la cuenta autorizada:
 ${JSON.stringify(messages)}
+
+Control de cantidades: la aplicación ha enviado exactamente ${exactMessageCount} mensaje(s) en este contexto. Si mencionas una cantidad, usa exclusivamente este número. No cuentes hilos, asuntos, fuentes, fragmentos ni mensajes repetidos como mensajes adicionales. Si el contexto es insuficiente, dilo claramente y no extrapoles.
 
 Ventana temporal aplicada: ${analysisWindow.from} a ${analysisWindow.to} (${analysisWindow.days} días).
 Alcance del buzón aplicado: ${analysisWindow.scope === 'all' ? 'todos los mensajes, incluidos los archivados' : analysisWindow.scope === 'spam' ? 'Spam' : 'bandeja de entrada y enviados'}.

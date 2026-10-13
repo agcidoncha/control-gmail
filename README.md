@@ -51,6 +51,8 @@ La preparación del contenedor y el despliegue futuro en Cloud Run están descri
 
 La descripción de responsabilidades, privacidad y evolución a producción está en [`docs/arquitectura-backend.md`](docs/arquitectura-backend.md).
 
+La guía visual y navegable para explicar el proyecto de principio a fin está en [`docs/arquitectura-navegable.html`](docs/arquitectura-navegable.html). Se puede abrir directamente en el navegador y contiene un índice, buscador, diagramas, flujo de usuarios, despliegue, copias y preguntas frecuentes.
+
 La evolución a varias empresas y las conexiones OpenAI/Claude están documentadas en [`docs/arquitectura-multiempresa.md`](docs/arquitectura-multiempresa.md).
 
 El plan de despliegue provisional en Dinahosting y la prueba remota en un segundo hosting están documentados en [`docs/despliegue-dinahosting.md`](docs/despliegue-dinahosting.md).
