@@ -9,6 +9,7 @@ COPY src ./src
 COPY db ./db
 COPY docs ./docs
 COPY logos ./logos
+COPY test ./test
 RUN npm test && npm run build
 
 FROM node:22-bookworm-slim
