@@ -76,6 +76,20 @@ docker compose -f docker-compose.hostinger.yml logs --tail=100 frontend
 docker compose -f docker-compose.hostinger.yml up -d --build
 ```
 
+## Protección antes de desplegar
+
+Cada `push` a `main` ejecuta la verificación de GitHub Actions. Además, la imagen de la API vuelve a ejecutar `npm test` durante la construcción; si falla un test, la imagen no se construye y EasyPanel no puede ponerla en servicio.
+
+Después de un despliegue, Docker comprueba automáticamente `/health` de la API y del frontend. La API también verifica que MySQL responde; un contenedor que no pase el health check no se considera listo.
+
+Antes de una migración o cambio importante, crear una copia de la base de datos:
+
+```bash
+bash scripts/backup-mysql.sh
+```
+
+El script guarda copias comprimidas en `backups/` y conserva por defecto los últimos 14 días. Esa carpeta debe copiarse también fuera del VPS si se necesita protección frente a una pérdida completa del servidor.
+
 Para una nueva versión:
 
 1. Subir el código sin `.env`, `.data`, `node_modules` ni `dist`.
@@ -87,6 +101,15 @@ docker compose -f docker-compose.hostinger.yml exec -T api node dist/migrate-mys
 ```
 
 4. Comprobar la URL pública y el callback de Google.
+
+Si un despliegue sale mal, no se debe borrar el volumen MySQL. La recuperación recomendada es volver al commit anterior y desplegarlo:
+
+```bash
+git revert <commit-problematico>
+git push origin main
+```
+
+Después se comprueba `docker compose -f docker-compose.hostinger.yml ps` y la URL pública. Para cambios de base de datos, restaurar primero una copia verificada en una base de pruebas; no restaurar directamente sobre producción sin detener el servicio y confirmar el punto de recuperación.
 
 ## DNS y certificado
 
@@ -104,6 +127,6 @@ La emisión de Let’s Encrypt depende de que el DNS público ya resuelva al VPS
 
 - Confirmar el inicio de sesión Google usando el callback de `lab.thelocalhost.es`.
 - Revisar que el OAuth consent screen y los usuarios de prueba estén configurados.
-- Verificar backups del volumen MySQL.
-- Añadir monitorización y una política de actualización de imágenes.
+- Configurar una copia externa periódica de `backups/`.
+- Añadir monitorización externa de `/health` y una política de actualización de imágenes.
 - Decidir cuándo sustituir definitivamente la URL de prueba por la URL principal.

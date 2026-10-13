@@ -12,6 +12,7 @@ import { getOrganization, updateOrganizationAiSettings } from './organization-st
 import type { AiProvider } from './ai-connections.js';
 import { getGmailSyncState, listStoredGmailMessages } from './gmail-store.js';
 import { listGmailActions, recordGmailAction, type GmailActionName } from './gmail-action-store.js';
+import { getMysqlPool, isMysqlEnabled } from './mysql.js';
 
 export const app = Fastify({ logger: true });
 const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:4321';
@@ -538,10 +539,16 @@ app.get('/', async (_request, reply) => {
   `);
 });
 
-app.get('/health', async () => ({
-  ok: true,
-  service: 'control-gmail',
-}));
+app.get('/health', async (_request, reply) => {
+  if (isMysqlEnabled()) {
+    try {
+      await getMysqlPool().query('SELECT 1');
+    } catch {
+      return reply.code(503).send({ ok: false, service: 'control-gmail' });
+    }
+  }
+  return { ok: true, service: 'control-gmail' };
+});
 
 app.get('/me', async (request, reply) => {
   const email = readSession(request.headers.cookie);

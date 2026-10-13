@@ -32,6 +32,12 @@ services:
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       FRONTEND_URL: ${FRONTEND_URL:?Define FRONTEND_URL en .env}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
     depends_on:
       mysql:
         condition: service_healthy
@@ -45,8 +51,15 @@ services:
       HOST: 0.0.0.0
       PORT: 4321
       BACKEND_URL: http://api:3000
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4321/health').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     labels:
       traefik.enable: "true"
       traefik.docker.network: easypanel

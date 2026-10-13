@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 process.env.NODE_ENV = 'test';
+process.env.DATA_STORE = 'local';
 process.env.SESSION_SECRET = 'test-server-secret-with-at-least-32-chars';
 process.env.ADMIN_EMAILS = 'angel.cidoncha@gmail.com';
 const testDataDirectory = await mkdtemp(join(tmpdir(), 'control-gmail-routes-'));
@@ -28,6 +29,13 @@ const { sessionCookieHeader } = await import('../src/session.ts?server-routes-se
 test.after(async () => {
   await app.close();
   await rm(testDataDirectory, { recursive: true, force: true });
+});
+
+test('el health check confirma que la API está disponible', async () => {
+  const response = await app.inject({ method: 'GET', url: '/health' });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json(), { ok: true, service: 'control-gmail' });
 });
 
 test('las rutas privadas rechazan peticiones sin sesión', async () => {
