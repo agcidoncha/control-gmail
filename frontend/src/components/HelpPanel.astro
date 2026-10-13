@@ -23,6 +23,7 @@
         <button type="button" data-help-target="help-clients">Clientes</button>
         <button type="button" data-help-target="help-ai">IA</button>
         <button type="button" data-help-target="help-reports">Informes</button>
+        <button type="button" data-help-target="help-activity">Actividad y privacidad</button>
         <button type="button" data-help-target="help-settings">Configuración</button>
       </nav>
       <label class="help-search">
@@ -69,6 +70,7 @@
           <li>Revisa el destinatario y el texto antes de enviarlo.</li>
         </ol>
         <p class="help-subtle"><strong>“Último mes”</strong> muestra los últimos 30 días disponibles. Si buscas otra fecha, usa “Un día concreto” o “Un periodo”. <strong>“Actualizar Gmail”</strong> pide los mensajes nuevos en ese momento.</p>
+        <p class="help-subtle">Las acciones cambian el correo real de la cuenta de Google: archivar lo quita de Recibidos, Papelera lo mueve a la papelera y Restaurar lo devuelve. Si dudas, abre primero el hilo completo.</p>
       </section>
 
       <section id="help-workflow" class="help-section">
@@ -85,6 +87,7 @@
           <li>Revisa la fecha o el plazo.</li>
           <li>Úsalo como recordatorio, no como sustituto de tu agenda.</li>
         </ul>
+        <p class="help-subtle">Un seguimiento es una sugerencia basada en los mensajes, no una tarea confirmada. Comprueba siempre el hilo antes de llamar, escribir o marcarlo como atendido.</p>
       </section>
 
       <section id="help-clients" class="help-section">
@@ -104,23 +107,44 @@
         <p><strong>Qué es:</strong> una ayuda para leer muchos correos y encontrar información útil más rápido.</p>
         <ol>
           <li>Escribe una pregunta concreta o usa un botón de ejemplo.</li>
-          <li>Elige el periodo que quieres revisar.</li>
-          <li>Elige si analizará bandeja y enviados, todos los mensajes o spam.</li>
-          <li>Comprueba el aviso de coste si aparece.</li>
-          <li>Confirma la consulta y espera el resultado.</li>
+          <li>Busca y selecciona un cliente si quieres analizar solo sus mensajes; si no lo eliges, se revisará el conjunto disponible.</li>
+          <li>Elige el periodo y el alcance: bandeja y enviados, todos los mensajes o spam.</li>
+          <li>Comprueba el aviso de coste y pulsa el botón de análisis.</li>
+          <li>Lee por separado los hechos, las inferencias y las acciones propuestas.</li>
+          <li>Usa «Imprimir / guardar PDF» si necesitas conservar la consulta.</li>
         </ol>
-        <p class="help-subtle"><strong>Importante:</strong> la IA puede equivocarse. Lee los hechos, separa las inferencias y revisa el resultado antes de contactar con un cliente.</p>
+        <p class="help-subtle"><strong>Importante:</strong> la IA puede equivocarse y no convierte un boletín en un cliente. Si solo hay un mensaje o el cuerpo está vacío, lo correcto es que indique que requiere revisión humana.</p>
       </section>
 
       <section id="help-reports" class="help-section">
         <h3>Informes</h3>
         <p><strong>Qué es:</strong> un resumen general para saber cómo está el trabajo comercial.</p>
         <ul>
-          <li>Cuántos mensajes se han revisado.</li>
-          <li>Qué seguimientos y compromisos están pendientes.</li>
-          <li>Qué clientes o conversaciones concentran más actividad.</li>
+          <li><strong>Correos revisados:</strong> mensajes incluidos en el periodo, separados entre recibidos y enviados.</li>
+          <li><strong>Clientes detectados:</strong> direcciones encontradas en esos mensajes; no significa que todas sean clientes reales.</li>
+          <li><strong>Seguimientos pendientes:</strong> mensajes enviados que parecen no tener una respuesta posterior.</li>
+          <li><strong>Compromisos pendientes:</strong> tareas o promesas detectadas que aún no se han marcado como completadas.</li>
+          <li><strong>Actividad registrada:</strong> acciones hechas desde esta aplicación, nunca el contenido de los correos.</li>
         </ul>
-        <p class="help-subtle">El informe resume la información disponible; si la bandeja no está actualizada, el resumen tampoco lo estará.</p>
+        <ol>
+          <li>Elige «Últimos 30 días», otro periodo o un rango personalizado.</li>
+          <li>Pulsa «Aplicar» para recalcular las métricas.</li>
+          <li>Revisa primero los seguimientos, compromisos y acciones con error.</li>
+          <li>Pulsa «Imprimir / guardar PDF» y selecciona «Guardar como PDF» en la ventana del navegador.</li>
+        </ol>
+        <p class="help-subtle">El informe resume la información disponible; si la bandeja no está actualizada, el resumen tampoco lo estará. Actualiza Gmail desde la bandeja antes de sacar conclusiones.</p>
+      </section>
+
+      <section id="help-activity" class="help-section">
+        <h3>Actividad, papelera y privacidad</h3>
+        <p><strong>Actividad:</strong> es un registro de control para saber qué acciones se han hecho desde la aplicación.</p>
+        <ul>
+          <li>Registra envíos, archivados, restauraciones, papelera y cambios de leído/no leído.</li>
+          <li>No guarda ni muestra el contenido privado de los correos.</li>
+          <li>Solo registra acciones realizadas desde esta aplicación; no es un histórico completo de Gmail.</li>
+        </ul>
+        <p><strong>Papelera:</strong> muestra los correos que esta aplicación ha enviado a la papelera de la cuenta conectada.</p>
+        <p class="help-subtle"><strong>Privacidad:</strong> cada usuario solo puede consultar su propia cuenta autorizada; ni siquiera el administrador puede leer los correos de los demás.</p>
       </section>
 
       <section id="help-settings" class="help-section">

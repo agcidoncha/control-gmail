@@ -9,9 +9,10 @@
   const toNode = document.querySelector('#reportTo');
   const applyNode = document.querySelector('#reportApply');
   const refreshNode = document.querySelector('#reportsRefresh');
+  const printNode = document.querySelector('#reportsPrint');
   const windowNode = document.querySelector('#reportWindow');
   const messageNode = document.querySelector('#reportMessage');
-  if (!statsNode || !activityNode || !clientsNode || !attentionNode || !periodNode || !customRangeNode || !fromNode || !toNode || !applyNode || !refreshNode || !windowNode || !messageNode) return;
+  if (!statsNode || !activityNode || !clientsNode || !attentionNode || !periodNode || !customRangeNode || !fromNode || !toNode || !applyNode || !refreshNode || !printNode || !windowNode || !messageNode) return;
 
   const actionLabels = {
     send: 'Envíos',
@@ -162,6 +163,7 @@
   periodNode.addEventListener('change', updateCustomRange);
   applyNode.addEventListener('click', load);
   refreshNode.addEventListener('click', load);
+  printNode.addEventListener('click', () => window.print());
   updateCustomRange();
   load();
 })();

@@ -6,7 +6,10 @@
         <h2>Informes</h2>
         <p>Consulta el estado de la actividad de la cuenta sin abrir el contenido de los correos.</p>
       </div>
-      <button id="reportsRefresh" class="secondary-button" type="button">Actualizar</button>
+      <div class="reports-header-actions">
+        <button id="reportsPrint" class="secondary-button" type="button">Imprimir / guardar PDF</button>
+        <button id="reportsRefresh" class="secondary-button" type="button">Actualizar</button>
+      </div>
     </div>
 
     <div class="reports-tools" aria-label="Filtros del informe">
@@ -83,6 +86,8 @@
   .reports-overview { display: grid; gap: 18px; }
   .reports-overview h2 { margin: 0 0 5px; }
   .reports-overview .card-header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .reports-header-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+  .reports-header-actions button { min-height: 34px; height: 34px; padding: 7px 11px; font-family: var(--font-body); font-size: 12px; font-weight: 400; line-height: 1; }
   .reports-tools { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
   .reports-tools label { display: grid; gap: 6px; min-width: 210px; color: var(--muted); font-size: 12px; font-weight: 500; }
   .reports-tools select, .reports-tools input { width: 100%; min-height: 40px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 10px; color: var(--ink); background: var(--surface-input); font: inherit; }
@@ -105,10 +110,10 @@
   .report-panel h3 { margin: 0 0 5px; font-size: 17px; }
   .report-panel .card-header p { margin: 0; color: var(--muted); font-size: 13px; }
   .report-breakdown { display: grid; gap: 0; margin-top: 16px; }
-  .report-breakdown-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--border); }
+  .report-breakdown-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 11px 4px 11px 0; overflow: hidden; border-bottom: 1px solid var(--border); }
   .report-breakdown-row:last-child { border-bottom: 0; }
-  .report-breakdown-row span { min-width: 0; overflow: hidden; color: var(--body-copy); text-overflow: ellipsis; white-space: nowrap; }
-  .report-breakdown-row strong { flex: 0 0 auto; color: var(--ink); font-size: 14px; }
+  .report-breakdown-row span { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--body-copy); text-overflow: ellipsis; white-space: nowrap; }
+  .report-breakdown-row strong { flex: 0 0 auto; min-width: 24px; color: var(--ink); font-size: 14px; text-align: right; }
   .report-empty { margin: 16px 0 0; color: var(--muted); font-size: 13px; }
   .report-attention { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
   .report-attention-card { display: grid; gap: 5px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-ai); }
@@ -119,4 +124,20 @@
   @media (max-width: 700px) { .reports-grid, .report-attention { grid-template-columns: 1fr; } }
   @media (max-width: 640px) { .reports-tools, .report-custom-range { display: grid; grid-template-columns: 1fr; } .reports-tools label, .report-custom-range label { min-width: 0; } .reports-tools button { width: 100%; } .report-stats { grid-template-columns: 1fr 1fr; gap: 10px; } .report-stat { padding: 14px; } }
   html[data-theme='dark'] .report-attention-card { background: var(--surface-ai); }
+  @media print {
+    @page { size: auto; margin: 16mm; }
+    body { background: #fff !important; color: #111 !important; }
+    .sidebar, .sidebar-resizer, .topbar, .reports-tools, #reportsPrint, #reportsRefresh, #reportMessage { display: none !important; }
+    .app-shell { display: block !important; min-height: 0 !important; }
+    .main { padding: 0 !important; }
+    .content { width: 100% !important; }
+    .reports-screen { display: block !important; margin: 0 !important; }
+    .reports-overview, .report-panel, .report-stat { border-color: #ccc !important; box-shadow: none !important; background: #fff !important; color: #111 !important; }
+    .reports-overview { margin-bottom: 14px; }
+    .reports-overview .card-header p, .reports-window, .report-panel .card-header p, .report-breakdown-row span, .report-stat span, .report-stat small, .report-empty { color: #555 !important; }
+    .reports-overview h2, .report-panel h3, .report-breakdown-row strong, .report-stat strong, .report-attention-card strong { color: #111 !important; }
+    .reports-grid { width: 100%; break-inside: avoid; }
+    .report-panel, .report-stat, .report-attention-card { min-width: 0; overflow: hidden; break-inside: avoid; }
+    .report-attention-card { background: #f3f3f3 !important; border-color: #ccc !important; }
+  }
 </style>
