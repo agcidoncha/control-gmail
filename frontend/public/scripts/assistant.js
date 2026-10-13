@@ -12,12 +12,17 @@
   const analysisToNode = document.querySelector('#analysisTo');
   const analysisCostNotice = document.querySelector('#analysisCostNotice');
   const clientNode = document.querySelector('#assistantClient');
+  const clientSearchNode = document.querySelector('#assistantClientSearch');
+  const clientResultsNode = document.querySelector('#assistantClientResults');
   const clientStatusNode = document.querySelector('#assistantClientStatus');
-  if (!form || !questionNode || !submitButton || !connectionStatus || !messageNode || !answerNode || !analysisRangeNode || !analysisScopeNode || !customDatesNode || !analysisFromNode || !analysisToNode || !analysisCostNotice || !clientNode || !clientStatusNode) return;
+  const loadingModal = document.querySelector('#assistantLoadingModal');
+  const loadingDescription = document.querySelector('#assistantLoadingDescription');
+  if (!form || !questionNode || !submitButton || !connectionStatus || !messageNode || !answerNode || !analysisRangeNode || !analysisScopeNode || !customDatesNode || !analysisFromNode || !analysisToNode || !analysisCostNotice || !clientNode || !clientSearchNode || !clientResultsNode || !clientStatusNode || !loadingModal || !loadingDescription) return;
   const presetButtons = [...document.querySelectorAll('[data-assistant-prompt]')];
 
   const providerLabel = (provider) => provider === 'claude' ? 'Anthropic Claude' : 'OpenAI';
   const allClientsValue = '__all__';
+  let detectedClients = [];
   const selectedClient = () => clientNode.value && clientNode.value !== allClientsValue ? clientNode.value : undefined;
   let canAsk = false;
   let confirmedSubmission = false;
@@ -26,6 +31,19 @@
   function showMessage(value, type = '') {
     messageNode.textContent = value;
     messageNode.className = 'form-message' + (type ? ' ' + type : '');
+  }
+
+  function showLoadingMessage(value) {
+    messageNode.textContent = '';
+    messageNode.className = 'form-message';
+    loadingDescription.textContent = value;
+    loadingModal.hidden = false;
+    document.documentElement.classList.add('assistant-loading-open');
+  }
+
+  function hideLoadingMessage() {
+    loadingModal.hidden = true;
+    document.documentElement.classList.remove('assistant-loading-open');
   }
 
   function setConnectionStatus(data) {
@@ -124,8 +142,42 @@
     parent.append(list);
   }
 
-  function renderAnswer(analysis) {
+  function formatAnalysisScope(scope) {
+    return scope === 'all' ? 'todos los mensajes (incluye archivados)' : scope === 'spam' ? 'Spam' : 'bandeja y enviados';
+  }
+
+  function renderAnswer(analysis, context = {}) {
     answerNode.replaceChildren();
+    const toolbar = document.createElement('div');
+    toolbar.className = 'assistant-answer-toolbar';
+    const printButton = document.createElement('button');
+    printButton.type = 'button';
+    printButton.className = 'assistant-print-button';
+    printButton.textContent = 'Imprimir / guardar PDF';
+    printButton.title = 'Abre la ventana de impresión para imprimir o guardar la consulta como PDF';
+    printButton.addEventListener('click', () => window.print());
+    toolbar.append(printButton);
+    answerNode.append(toolbar);
+
+    const printMeta = document.createElement('p');
+    printMeta.className = 'assistant-print-meta';
+    const range = context.analysisWindow;
+    const period = range?.from && range?.to
+      ? `${formatDate(range.from)} a ${formatDate(range.to)}`
+      : context.selectedRange?.days
+        ? `últimos ${context.selectedRange.days} días`
+        : 'periodo seleccionado';
+    const client = context.selectedRange?.clientEmail || 'todos los clientes';
+    printMeta.textContent = `Consulta comercial · Cliente: ${client} · Periodo: ${period} · Alcance: ${formatAnalysisScope(range?.scope || context.selectedRange?.analysisScope)}`;
+    answerNode.append(printMeta);
+
+    const printQuestion = document.createElement('p');
+    printQuestion.className = 'assistant-print-question';
+    const questionLabel = document.createElement('strong');
+    questionLabel.textContent = 'Consulta: ';
+    printQuestion.append(questionLabel, document.createTextNode(context.question || 'Análisis comercial solicitado'));
+    answerNode.append(printQuestion);
+
     if (analysis.requiere_revision) {
       const note = document.createElement('div');
       note.className = 'review-note';
@@ -198,7 +250,8 @@
     confirmedSubmission = false;
     submitButton.disabled = true;
     answerNode.hidden = true;
-    showMessage('Actualizando Gmail y preparando el análisis…');
+    showLoadingMessage('Actualizando Gmail y preparando el análisis…');
+    let analysisCompleted = false;
     try {
       const response = await fetch('/assistant/ask', {
         method: 'POST',
@@ -207,7 +260,7 @@
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'No se pudo consultar al asistente.');
-      renderAnswer(data.analysis);
+      renderAnswer(data.analysis, { selectedRange, analysisWindow: data.analysisWindow, question });
       const range = data.analysisWindow;
       const scopeLabel = range?.scope === 'all'
         ? 'todos los mensajes'
@@ -216,10 +269,13 @@
           : 'bandeja y enviados';
       const clientLabel = selectedRange.clientEmail ? ` · Cliente: ${selectedRange.clientEmail}` : '';
       showMessage(range ? `Análisis completado: ${formatDate(range.from)} a ${formatDate(range.to)} · ${scopeLabel}${clientLabel}.` : 'Análisis completado.', 'success');
+      analysisCompleted = true;
     } catch (error) {
       showMessage(error.message || 'No se pudo consultar al asistente.', 'error');
     } finally {
+      hideLoadingMessage();
       submitButton.disabled = !canAsk;
+      if (analysisCompleted) messageNode.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   });
 
@@ -258,6 +314,82 @@
       clientStatusNode.textContent = 'Selecciona un cliente o el análisis general.';
     }
   });
+  function renderClientOptions(searchTerm = '') {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    const selectedValue = clientNode.value;
+    const matchingClients = detectedClients.filter((client) => client.email.toLowerCase().includes(normalizedSearch));
+    clientNode.replaceChildren();
+
+    const emptyOption = document.createElement('option');
+    emptyOption.value = '';
+    emptyOption.textContent = 'Selecciona un cliente';
+    emptyOption.disabled = true;
+    clientNode.append(emptyOption);
+
+    const allOption = document.createElement('option');
+    allOption.value = allClientsValue;
+    allOption.textContent = 'Todos los clientes (análisis general)';
+    clientNode.append(allOption);
+
+    matchingClients.forEach((client) => {
+      const option = document.createElement('option');
+      option.value = client.email;
+      option.textContent = `${client.email} (${client.messages} ${client.messages === 1 ? 'mensaje' : 'mensajes'})`;
+      clientNode.append(option);
+    });
+
+    clientResultsNode.replaceChildren();
+    clientResultsNode.hidden = !normalizedSearch;
+    const addClientResult = (value, label, detail, selected = false) => {
+      const result = document.createElement('button');
+      result.type = 'button';
+      result.className = 'assistant-client-result' + (selected ? ' is-selected' : '');
+      result.setAttribute('role', 'option');
+      result.setAttribute('aria-selected', selected ? 'true' : 'false');
+      const name = document.createElement('span');
+      name.textContent = label;
+      const count = document.createElement('small');
+      count.textContent = detail;
+      result.append(name, count);
+      result.addEventListener('click', () => {
+        clientNode.value = value;
+        clientSearchNode.value = value === allClientsValue ? '' : label;
+        clientNode.dispatchEvent(new Event('change', { bubbles: true }));
+        renderClientOptions(clientSearchNode.value);
+      });
+      clientResultsNode.append(result);
+    };
+
+    if (!normalizedSearch) {
+      // La opción de análisis general permanece únicamente en el selector completo.
+    } else if (!matchingClients.length) {
+      const empty = document.createElement('p');
+      empty.className = 'assistant-client-result-empty';
+      empty.textContent = 'No hay clientes que coincidan con esa búsqueda.';
+      clientResultsNode.append(empty);
+    } else {
+      const visibleClients = matchingClients.slice(0, 20);
+      visibleClients.forEach((client) => addClientResult(client.email, client.email, `${client.messages} ${client.messages === 1 ? 'mensaje' : 'mensajes'}`, selectedValue === client.email));
+      if (matchingClients.length > visibleClients.length) {
+        const more = document.createElement('p');
+        more.className = 'assistant-client-result-empty';
+        more.textContent = `Mostrando ${visibleClients.length} de ${matchingClients.length}. Sigue escribiendo para afinar la búsqueda.`;
+        clientResultsNode.append(more);
+      }
+    }
+
+    if (selectedValue === allClientsValue || matchingClients.some((client) => client.email === selectedValue)) {
+      clientNode.value = selectedValue;
+    } else {
+      clientNode.value = '';
+    }
+    clientSearchNode.setAttribute('aria-label', `${matchingClients.length} clientes coinciden con la búsqueda`);
+  }
+
+  clientSearchNode.addEventListener('input', () => {
+    if (clientNode.value !== allClientsValue) clientNode.value = '';
+    renderClientOptions(clientSearchNode.value);
+  });
   updateAnalysisWindow();
 
   loadConnection();
@@ -267,15 +399,13 @@
       const response = await fetch('/gmail/insights?max=1000');
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'No se pudieron cargar los clientes.');
-      const clients = (data.insights?.clients || []).sort((left, right) => left.email.localeCompare(right.email));
-      clients.forEach((client) => {
-        const option = document.createElement('option');
-        option.value = client.email;
-        option.textContent = `${client.email} (${client.messages} ${client.messages === 1 ? 'mensaje' : 'mensajes'})`;
-        clientNode.append(option);
-      });
+      detectedClients = (data.insights?.clients || []).sort((left, right) => left.email.localeCompare(right.email));
+      renderClientOptions();
+      const clients = detectedClients;
       if (requestedClient && clients.some((client) => client.email.toLowerCase() === requestedClient)) {
         clientNode.value = requestedClient;
+        clientSearchNode.value = requestedClient;
+        renderClientOptions(requestedClient);
       }
       clientStatusNode.textContent = clients.length
         ? clientNode.value

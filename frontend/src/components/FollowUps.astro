@@ -1,31 +1,33 @@
-<section class="card follow-ups-screen">
-  <div class="card-header">
-    <div>
-      <h2>Seguimientos pendientes</h2>
-      <p>Mensajes enviados sin una respuesta posterior, agrupados por hilo.</p>
+<section class="follow-ups-screen">
+  <div class="card follow-ups-overview">
+    <div class="card-header">
+      <div>
+        <h2>Seguimientos pendientes</h2>
+        <p>Mensajes enviados sin una respuesta posterior, agrupados por hilo.</p>
+      </div>
+      <span id="followUpCount" class="muted" aria-label="Cargando cantidad de seguimientos"><span class="skeleton skeleton-inline" aria-hidden="true"></span></span>
     </div>
-    <span id="followUpCount" class="muted" aria-label="Cargando cantidad de seguimientos"><span class="skeleton skeleton-inline" aria-hidden="true"></span></span>
-  </div>
 
-  <div class="follow-up-tools">
-    <input id="followUpSearch" type="search" placeholder="Buscar cliente o asunto…" aria-label="Buscar seguimientos" />
-    <select id="followUpAge" aria-label="Filtrar por antigüedad">
-      <option value="all">Cualquier antigüedad</option>
-      <option value="5">Desde 5 días</option>
-      <option value="10">Desde 10 días</option>
-      <option value="15">Desde 15 días</option>
-    </select>
-    <select id="followUpCategory" aria-label="Filtrar por tipo de seguimiento">
-      <option value="all">Todos los motivos</option>
-      <option value="Posible presupuesto">Presupuestos</option>
-      <option value="Posible propuesta">Propuestas</option>
-      <option value="Briefing pendiente">Briefing</option>
-      <option value="Solicitud de información">Información</option>
-      <option value="Seguimiento general">General</option>
-    </select>
-  </div>
+    <div class="follow-up-tools">
+      <input id="followUpSearch" type="search" placeholder="Buscar cliente o asunto…" aria-label="Buscar seguimientos" />
+      <select id="followUpAge" aria-label="Filtrar por antigüedad">
+        <option value="all">Cualquier antigüedad</option>
+        <option value="5">Desde 5 días</option>
+        <option value="10">Desde 10 días</option>
+        <option value="15">Desde 15 días</option>
+      </select>
+      <select id="followUpCategory" aria-label="Filtrar por tipo de seguimiento">
+        <option value="all">Todos los motivos</option>
+        <option value="Posible presupuesto">Presupuestos</option>
+        <option value="Posible propuesta">Propuestas</option>
+        <option value="Briefing pendiente">Briefing</option>
+        <option value="Solicitud de información">Información</option>
+        <option value="Seguimiento general">General</option>
+      </select>
+    </div>
 
-  <div id="followUpAlerts" class="follow-up-alerts" aria-live="polite" hidden></div>
+    <div id="followUpAlerts" class="follow-up-alerts" aria-live="polite" hidden></div>
+  </div>
 
   <div id="followUps" class="skeleton-list follow-ups-list" aria-live="polite" aria-busy="true" aria-label="Cargando seguimientos" aria-hidden="true">
     <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line short"></span></div>
@@ -36,30 +38,43 @@
 <script is:inline src="/scripts/follow-ups.js"></script>
 
 <style is:global>
-  .follow-ups-screen { margin-top: 18px; }
+  .follow-ups-screen { display: grid; gap: 14px; margin-top: 18px; }
   .follow-up-tools { display: flex; gap: 12px; margin: 18px 0 4px; }
   .follow-up-tools input, .follow-up-tools select { min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; background: #fff; color: var(--ink); }
   .follow-up-tools input { flex: 1; }
   .follow-up-alerts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 14px 0 6px; }
-  .follow-up-alert { display: grid; gap: 3px; justify-items: start; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; color: var(--ink); background: var(--surface-soft); text-align: left; }
+  .follow-up-alert { display: grid; gap: 3px; justify-items: start; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; color: var(--ink); background: var(--surface-ai); text-align: left; }
   .follow-up-alert:hover, .follow-up-alert:focus-visible { background: var(--surface-alt); transform: none; }
-  .follow-up-alert strong { font-size: 13px; }
-  .follow-up-alert span { color: var(--muted); font-size: 12px; }
-  .follow-ups-list { display: grid; gap: 0; margin-top: 10px; }
-  .follow-up { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--border); }
-  .follow-up:last-child { border-bottom: 0; }
+  .follow-up-alert strong { font-size: 13px; font-weight: 500; }
+  .follow-up-alert span { color: var(--muted); font-size: 12px; font-weight: 400; }
+  .follow-ups-list { display: grid; gap: 12px; margin-top: 10px; }
+  .follow-up { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); box-shadow: var(--shadow); }
   .follow-up strong, .follow-up small, .follow-up p { display: block; overflow-wrap: anywhere; }
   .follow-up small { margin-top: 4px; color: var(--muted); }
   .follow-up p { margin: 7px 0 0; color: #4E4745; font-size: 13px; }
   .follow-up-side { display: flex; align-items: flex-end; flex-direction: column; gap: 10px; }
-  .follow-up-urgency { align-self: flex-end; padding: 5px 9px; border-radius: 999px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+  .follow-up-action-bar { display: flex; grid-column: 1 / -1; align-items: center; flex-wrap: wrap; gap: 10px; width: 100%; margin-top: 0; }
+  .follow-up-action-divider { flex: 0 0 auto; color: var(--border); font-size: 20px; font-weight: 300; line-height: 1; }
+  .follow-up-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .follow-up-action-bar button { height: 34px; min-height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: 10px; font-family: var(--font-body); font-size: 12px; font-weight: 400; line-height: 1; }
+  .follow-up-thread-button { background: var(--panel-dark); color: #fff; }
+  .follow-up-actions button { color: var(--ink); background: var(--warm); }
+  .follow-up-actions button:hover, .follow-up-actions button:focus-visible { color: var(--ink); background: var(--orange-light); }
+  .follow-up-actions .follow-up-action-read { color: var(--action-unread-fg); background: var(--action-unread-bg); border-color: var(--action-unread-border); }
+  .follow-up-actions .follow-up-action-archive { color: var(--action-archive-fg); background: var(--action-archive-bg); border-color: var(--action-archive-border); }
+  .follow-up-actions .follow-up-action-trash { color: var(--action-trash-fg); background: var(--action-trash-bg); border-color: var(--action-trash-border); }
+  .follow-up-actions .follow-up-action-read:hover, .follow-up-actions .follow-up-action-read:focus-visible { color: var(--action-unread-fg); background: var(--action-unread-hover); }
+  .follow-up-actions .follow-up-action-archive:hover, .follow-up-actions .follow-up-action-archive:focus-visible { color: var(--action-archive-fg); background: var(--action-archive-hover); }
+  .follow-up-actions .follow-up-action-trash:hover, .follow-up-actions .follow-up-action-trash:focus-visible { color: var(--action-trash-fg); background: var(--action-trash-hover); }
+  .follow-up-action-status { grid-column: 1 / -1; margin: 0; font-size: 12px; }
+  .follow-up-urgency { align-self: flex-end; padding: 5px 9px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; }
   .follow-up-urgency.normal { color: var(--muted); background: var(--neutral-bg); }
   .follow-up-urgency.attention { color: var(--orange-dark); background: #FFF1E2; }
   .follow-up-urgency.priority { color: #8A4B0A; background: #F7D49F; }
   .follow-up-urgency.urgent { color: #FFFFFF; background: #A33C28; }
-  .follow-up-category { display: inline-flex; align-self: flex-end; padding: 5px 9px; border-radius: 999px; color: var(--muted); background: var(--neutral-bg); font-size: 12px; font-weight: 700; white-space: nowrap; }
-  .follow-up-age { align-self: flex-end; padding: 5px 9px; border-radius: 999px; color: var(--orange-dark); background: #FFF1E2; font-size: 12px; font-weight: 800; white-space: nowrap; }
-  .follow-up-thread-button { padding: 7px 10px; background: var(--panel-dark); font-size: 12px; }
+  .follow-up-category { display: inline-flex; align-self: flex-end; padding: 5px 9px; border-radius: 999px; color: var(--muted); background: var(--neutral-bg); font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .follow-up-age { align-self: flex-end; padding: 5px 9px; border-radius: 999px; color: var(--orange-dark); background: #FFF1E2; font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .follow-up-thread-button { padding: 0 10px; background: var(--panel-dark); font-size: 12px; font-weight: 400; }
   .follow-up-thread { grid-column: 1 / -1; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--warm); }
   .follow-up-thread[hidden] { display: none; }
   .thread-message { padding: 10px 0; border-bottom: 1px solid var(--border); }
@@ -69,6 +84,7 @@
   .thread-message p { margin: 7px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
   html[data-theme='dark'] .follow-up-urgency.normal { color: var(--muted); background: var(--neutral-bg); } html[data-theme='dark'] .follow-up-urgency.attention { color: var(--orange-light); background: var(--surface-alt); } html[data-theme='dark'] .follow-up-urgency.priority { color: #FFD18C; background: #5A3B23; } html[data-theme='dark'] .follow-up-urgency.urgent { color: #FFFFFF; background: #A33C28; }
   html[data-theme='dark'] .follow-up-category { color: var(--muted); background: var(--neutral-bg); }
+  html[data-theme='dark'] .follow-up-thread-button { color: #fff; background: var(--panel-dark); }
   @media (max-width: 760px) { .follow-up-alerts { grid-template-columns: 1fr; } }
-  @media (max-width: 640px) { .follow-up-tools { flex-direction: column; } .follow-up-tools input, .follow-up-tools select { width: 100%; } .follow-up { grid-template-columns: 1fr; gap: 10px; } .follow-up-side { align-items: flex-start; flex-direction: row; flex-wrap: wrap; } .follow-up-age, .follow-up-urgency { align-self: center; } }
+  @media (max-width: 640px) { .follow-up-tools { flex-direction: column; } .follow-up-tools input, .follow-up-tools select { width: 100%; } .follow-up { grid-template-columns: 1fr; gap: 10px; } .follow-up-side { align-items: flex-start; flex-direction: row; flex-wrap: wrap; } .follow-up-age, .follow-up-urgency { align-self: center; } .follow-up-action-divider { display: none; } .follow-up-actions { width: 100%; } }
 </style>

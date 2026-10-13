@@ -59,6 +59,7 @@ export type GmailThreadMessage = {
 
 type PendingFollowUp = {
   threadId: string;
+  messageId: string | null;
   client: string;
   subject: string;
   date: string | null;
@@ -863,6 +864,7 @@ export async function listPendingFollowUps(email: string, maxResults = 10, analy
       const ageDays = Math.max(0, Math.floor((Date.now() - timestamp) / 86_400_000));
       return [{
         threadId: lastMessage.threadId,
+        messageId: lastMessage.id,
         client: lastMessage.to || '(Destinatario desconocido)',
         subject: lastMessage.subject,
         date: lastMessage.date,

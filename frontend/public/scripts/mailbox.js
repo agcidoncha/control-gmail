@@ -103,7 +103,10 @@
     }
   }
 
-  const requestedMailbox = new URLSearchParams(window.location.search).get('mailbox');
+  const queryParams = new URLSearchParams(window.location.search);
+  const requestedReply = queryParams.get('reply');
+  let replyOpened = false;
+  const requestedMailbox = queryParams.get('mailbox') || (requestedReply ? 'sent' : null);
   if (requestedMailbox && [...mailboxNode.options].some((option) => option.value === requestedMailbox)) {
     mailboxNode.value = requestedMailbox;
   }
@@ -343,6 +346,14 @@
       const navCommitmentCount = document.querySelector('#navCommitmentCount');
       if (navCommitmentCount && commitmentResult) { navCommitmentCount.textContent = String(commitments.length); navCommitmentCount.hidden = false; }
       render();
+      if (requestedReply && !replyOpened) {
+        const replyMessage = messages.find((message) => message.id === requestedReply);
+        if (replyMessage) {
+          replyOpened = true;
+          openCompose(replyMessage);
+          window.history.replaceState({}, '', '/mailbox');
+        }
+      }
     } catch (error) {
       messagesNode.removeAttribute('aria-hidden');
       messagesNode.removeAttribute('aria-busy');

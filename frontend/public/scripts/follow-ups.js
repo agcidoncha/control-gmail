@@ -89,12 +89,43 @@
       side.append(text('span', urgency[1], 'follow-up-urgency ' + urgency[0]));
       side.append(text('span', item.category || 'Seguimiento general', 'follow-up-category'));
       side.append(text('span', item.ageDays + (item.ageDays === 1 ? ' día' : ' días'), 'follow-up-age'));
-      const button = text('button', 'Ver hilo completo');
-      button.type = 'button';
-      button.className = 'follow-up-thread-button';
-      button.dataset.threadId = item.threadId || '';
-      side.append(button);
       article.append(side);
+
+      const actionBar = document.createElement('div');
+      actionBar.className = 'follow-up-action-bar';
+      const threadButton = text('button', 'Ver hilo completo');
+      threadButton.type = 'button';
+      threadButton.className = 'follow-up-thread-button';
+      threadButton.dataset.threadId = item.threadId || '';
+      const actions = document.createElement('div');
+      actions.className = 'follow-up-actions';
+      const messageId = item.messageId || '';
+      const readButton = text('button', 'Marcar leído');
+      readButton.type = 'button';
+      readButton.className = 'follow-up-action-read';
+      readButton.dataset.followUpAction = 'markRead';
+      readButton.dataset.messageId = messageId;
+      const archiveButton = text('button', 'Archivar');
+      archiveButton.type = 'button';
+      archiveButton.className = 'follow-up-action-archive';
+      archiveButton.dataset.followUpAction = 'archive';
+      archiveButton.dataset.messageId = messageId;
+      const trashButton = text('button', 'Papelera', 'follow-up-action-trash');
+      trashButton.type = 'button';
+      trashButton.dataset.followUpAction = 'trash';
+      trashButton.dataset.messageId = messageId;
+      const replyButton = text('button', 'Responder');
+      replyButton.type = 'button';
+      replyButton.className = 'follow-up-action-reply';
+      replyButton.dataset.followUpReply = messageId;
+      actions.append(readButton, archiveButton, trashButton, replyButton);
+      actionBar.append(threadButton, text('span', '|', 'follow-up-action-divider'), actions);
+      article.append(actionBar);
+
+      const actionStatus = document.createElement('p');
+      actionStatus.className = 'follow-up-action-status muted';
+      actionStatus.setAttribute('aria-live', 'polite');
+      article.append(actionStatus);
 
       const thread = document.createElement('div');
       thread.className = 'follow-up-thread';
@@ -130,6 +161,38 @@
   }
 
   listNode.addEventListener('click', async (event) => {
+    const replyButton = event.target.closest('[data-follow-up-reply]');
+    if (replyButton) {
+      window.location.href = '/mailbox?reply=' + encodeURIComponent(replyButton.dataset.followUpReply || '');
+      return;
+    }
+    const actionButton = event.target.closest('[data-follow-up-action]');
+    if (actionButton) {
+      const action = actionButton.dataset.followUpAction;
+      const messageId = actionButton.dataset.messageId;
+      const article = actionButton.closest('.follow-up');
+      const status = article?.querySelector('.follow-up-action-status');
+      if (!action || !messageId || !article || !status) return;
+      if (action === 'trash' && !window.confirm('¿Enviar este correo a la papelera?')) return;
+      const buttons = article.querySelectorAll('[data-follow-up-action], [data-follow-up-reply]');
+      buttons.forEach((button) => { button.disabled = true; });
+      status.textContent = 'Aplicando…';
+      try {
+        const response = await fetch('/gmail/messages/' + encodeURIComponent(messageId), {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'No se pudo aplicar la acción.');
+        status.textContent = action === 'trash' ? 'Correo enviado a la papelera.' : action === 'archive' ? 'Correo archivado.' : 'Correo marcado como leído.';
+        buttons.forEach((button) => { button.disabled = false; });
+      } catch (error) {
+        status.textContent = error.message || 'No se pudo aplicar la acción.';
+        buttons.forEach((button) => { button.disabled = false; });
+      }
+      return;
+    }
     const button = event.target.closest('[data-thread-id]');
     if (!button) return;
     const article = button.closest('.follow-up');

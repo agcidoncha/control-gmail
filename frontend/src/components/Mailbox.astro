@@ -1,4 +1,5 @@
-<section class="card mailbox-screen">
+<section class="mailbox-screen">
+  <div class="card mailbox-overview">
   <div class="card-header">
     <div><h2>Correos que requieren atención</h2><p>Filtra por bandeja, asunto, remitente o contenido.</p></div>
     <div class="mailbox-header-actions"><span id="mailboxCount" class="muted" aria-label="Cargando cantidad de mensajes"><span class="skeleton skeleton-inline" aria-hidden="true"></span></span><span id="mailboxSyncStatus" class="mailbox-sync-status muted" data-sync-state="syncing" role="status" aria-live="polite">Sincronizando Gmail…</span><button id="mailboxRefreshButton" class="secondary-button" type="button" title="Actualizar ahora los mensajes de Gmail">Actualizar Gmail</button><button id="composeMessageButton" type="button">Nuevo correo</button></div>
@@ -61,6 +62,7 @@
   </div>
   <p id="archivedMailboxNotice" class="mailbox-archived-notice muted" hidden></p>
   <p class="mailbox-permissions muted">Puedes marcar, archivar, enviar a papelera, redactar y responder. Si conectaste Gmail antes de activar estas acciones, vuelve a autorizar la cuenta desde «Cambiar de cuenta».</p>
+  </div>
   <form id="composeMessageForm" class="compose-message" hidden>
     <div class="compose-heading"><strong id="composeTitle">Nuevo correo</strong><button id="cancelComposeButton" class="secondary-button" type="button">Cancelar</button></div>
     <label>Para <input id="composeTo" type="email" required /></label>
@@ -79,7 +81,7 @@
       <div class="compose-actions"><button id="editComposeButton" class="secondary-button" type="button">Editar</button><button id="confirmComposeButton" type="button">Confirmar y enviar</button></div>
     </div>
   </form>
-  <div id="messages" class="skeleton-list" aria-live="polite" aria-busy="true" aria-label="Cargando mensajes" aria-hidden="true">
+  <div id="messages" class="skeleton-list mailbox-messages" aria-live="polite" aria-busy="true" aria-label="Cargando mensajes" aria-hidden="true">
     <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line short"></span></div>
     <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line short"></span></div>
     <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line short"></span></div>
@@ -96,7 +98,9 @@
 <script is:inline src="/scripts/mailbox.js"></script>
 
 <style is:global>
-  .mailbox-screen { margin-top: 18px; }
+  .mailbox-screen { display: grid; gap: 14px; margin-top: 18px; }
+  .mailbox-messages { display: grid; gap: 12px; margin-top: 0; }
+  .mailbox-messages .message { margin: 0; }
   .mailbox-header-actions { display: flex; align-items: center; gap: 10px; }
   .mailbox-header-actions > span { display: inline-flex; align-items: center; height: 40px; color: var(--muted); font-size: 12px; line-height: 1; white-space: nowrap; }
   .mailbox-sync-status { gap: 6px; }
@@ -112,7 +116,7 @@
   .message-tools { display: flex; align-items: center; gap: 12px; margin: 18px 0 4px; }
   .message-tools input, .message-tools select { min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; background: #fff; color: var(--ink); }
   .message-tools input { flex: 1; }
-  .message-range { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 10px 14px; margin: 14px 0 4px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-soft); }
+  .message-range { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 10px 14px; margin: 14px 0 4px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-ai); }
   .message-range [hidden] { display: none; }
   .message-range-control { display: grid; flex: 0 0 auto; align-items: center; grid-template-columns: auto auto auto; gap: 7px; color: var(--muted); font-size: 12px; }
   .message-range-control > span:first-child { color: var(--ink); font-weight: 700; }
@@ -139,8 +143,8 @@
   .message small { display: block; margin-bottom: 7px; color: var(--muted); overflow-wrap: anywhere; }
   .message p { margin: 0; color: #4E4745; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
   .mailbox-permissions { margin: 14px 0 0; font-size: 12px; }
-  .mailbox-archived-notice { margin: 10px 0 0; padding: 10px 12px; border-radius: 9px; background: var(--surface-soft); font-size: 12px; }
-  .compose-message { display: grid; gap: 10px; margin-top: 18px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-soft); }
+  .mailbox-archived-notice { margin: 10px 0 0; padding: 10px 12px; border-radius: 9px; background: var(--surface-ai); font-size: 12px; }
+  .compose-message { display: grid; gap: 10px; margin-top: 18px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-ai); }
   .compose-message[hidden] { display: none; }
   .compose-heading, .compose-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .compose-message label { display: grid; gap: 5px; font-size: 12px; font-weight: 750; }
@@ -168,7 +172,7 @@
   .message-actions button.message-action-trash, .message-actions button.danger { color: var(--action-trash-fg); background: var(--action-trash-bg); border-color: var(--action-trash-border); }
   .message-actions button.message-action-trash:hover, .message-actions button.message-action-trash:focus-visible { color: var(--action-trash-fg); background: var(--action-trash-hover); }
   .message-action-status { margin: 8px 0 0; font-size: 12px; }
-  .mailbox-undo { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 14px; padding: 11px 13px; border: 1px solid var(--border); border-radius: 10px; color: var(--ink); background: var(--surface-soft); font-size: 12px; }
+  .mailbox-undo { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 14px; padding: 11px 13px; border: 1px solid var(--border); border-radius: 10px; color: var(--ink); background: var(--surface-ai); font-size: 12px; }
   .mailbox-undo[hidden] { display: none; }
   .mailbox-undo button { flex: 0 0 auto; padding: 6px 10px; border: 1px solid var(--border); color: var(--ink); background: var(--warm); font-size: 12px; }
   .mailbox-undo button:hover, .mailbox-undo button:focus-visible { background: var(--orange-light); }
