@@ -90,6 +90,30 @@ bash scripts/backup-mysql.sh
 
 El script guarda copias comprimidas en `backups/` y conserva por defecto los últimos 14 días. Esa carpeta debe copiarse también fuera del VPS si se necesita protección frente a una pérdida completa del servidor.
 
+### Copia automática diaria
+
+Para instalar una tarea diaria en el VPS, ejecutar una sola vez como `root` desde `/opt/asistente-comercial`:
+
+```bash
+sudo APP_DIR=/opt/asistente-comercial bash scripts/install-backup-cron.sh
+```
+
+Por defecto se ejecuta todos los días a las 03:15 UTC. La tarea usa `flock` para evitar dos copias simultáneas, escribe el registro en `/var/log/asistente-comercial-mysql-backup.log` y conserva los últimos 14 días. Para cambiar el horario, por ejemplo a las 04:30 UTC:
+
+```bash
+sudo BACKUP_CRON_SCHEDULE='30 4 * * *' APP_DIR=/opt/asistente-comercial bash scripts/install-backup-cron.sh
+```
+
+Para comprobar que está instalada:
+
+```bash
+sudo cat /etc/cron.d/asistente-comercial-mysql-backup
+sudo tail -n 50 /var/log/asistente-comercial-mysql-backup.log
+ls -lh backups/
+```
+
+La copia local del VPS protege frente a errores de aplicación, pero no frente a la pérdida completa del servidor. Antes de producción hay que copiar periódicamente `backups/` a otro almacenamiento y probar una restauración.
+
 Para una nueva versión:
 
 1. Subir el código sin `.env`, `.data`, `node_modules` ni `dist`.
@@ -127,6 +151,6 @@ La emisión de Let’s Encrypt depende de que el DNS público ya resuelva al VPS
 
 - Confirmar el inicio de sesión Google usando el callback de `lab.thelocalhost.es`.
 - Revisar que el OAuth consent screen y los usuarios de prueba estén configurados.
-- Configurar una copia externa periódica de `backups/`.
+- Ejecutar una primera copia automática y configurar una copia externa periódica de `backups/`.
 - Añadir monitorización externa de `/health` y una política de actualización de imágenes.
 - Decidir cuándo sustituir definitivamente la URL de prueba por la URL principal.
