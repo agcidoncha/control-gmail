@@ -125,7 +125,9 @@
 
       <section id="help-settings" class="help-section">
         <h3>Configuración y usuarios</h3>
-        <p><strong>Configuración IA:</strong> permite elegir la conexión de OpenAI o Claude y revisar qué proveedor se utilizará.</p>
+        <p><strong>Configuración IA:</strong> permite elegir el proveedor global que usará la empresa: OpenAI o Anthropic Claude.</p>
+        <p><strong>Disponibilidad:</strong> “OpenAI disponible” o “Claude disponible” significa que el servidor tiene configurada la clave de ese proveedor. Junto al mensaje se muestra el modelo activo, normalmente <strong>gpt-6-luna</strong> para OpenAI o <strong>claude-sonnet-4-6</strong> para Claude.</p>
+        <p><strong>Importante:</strong> el selector solo cambia el proveedor global guardado para la empresa; las claves y los modelos se configuran de forma segura en el servidor y nunca se muestran en la pantalla.</p>
         <p><strong>Usuarios:</strong> solo el administrador puede añadir correos, elegir si son “Comercial” o “Administrador”, desconectarlos o eliminarlos.</p>
         <p class="help-subtle">Un comercial puede trabajar con sus correos autorizados, pero no puede cambiar la configuración de la empresa.</p>
       </section>

@@ -82,7 +82,7 @@ Cada usuario podrá elegir entre:
 - **IA de empresa**: una conexión OpenAI o Claude configurada para toda la organización.
 - **Mi conexión personal**: una credencial privada que solo se utiliza para ese usuario.
 
-La conexión de empresa se resuelve en el servidor mediante `OPENAI_API_KEY`/`OPENAI_MODEL` o `CLAUDE_API_KEY`/`CLAUDE_MODEL`. El proveedor activo se guarda en la organización (`sharedAiProvider`) y, si todavía no se ha elegido, se toma `DEFAULT_AI_PROVIDER` como valor inicial.
+La conexión de empresa se resuelve en el servidor mediante `OPENAI_API_KEY`/`OPENAI_MODEL` o `CLAUDE_API_KEY`/`CLAUDE_MODEL`. Si no se indica un modelo, se usan `gpt-6-luna` para OpenAI y `claude-sonnet-4-6` para Claude. El proveedor activo se guarda en la organización (`sharedAiProvider`) y, si todavía no se ha elegido, se toma `DEFAULT_AI_PROVIDER` como valor inicial.
 
 La selección del proveedor global y la concesión de acceso son funciones exclusivas del administrador. El administrador puede elegir OpenAI o Claude sin volver a introducir la clave almacenada en `.env` y puede marcar qué usuarios concretos pueden usar esa conexión. El administrador siempre tiene acceso; un usuario comercial no lo tiene por defecto. Si un comercial no tiene permiso global, debe guardar una conexión personal cifrada para poder usar el asistente. La conexión personal tiene prioridad sobre la global.
 

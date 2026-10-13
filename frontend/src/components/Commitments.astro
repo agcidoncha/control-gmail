@@ -1,42 +1,44 @@
-<section class="card commitments-screen">
-  <div class="card-header">
-    <div>
-      <h2>Compromisos detectados</h2>
-      <p>Posibles tareas identificadas en conversaciones; siempre requieren revisión.</p>
+<section class="commitments-screen">
+  <div class="card commitments-overview">
+    <div class="card-header">
+      <div>
+        <h2>Compromisos detectados</h2>
+        <p>Posibles tareas identificadas en conversaciones; siempre requieren revisión.</p>
+      </div>
+      <span id="commitmentCount" class="muted" aria-label="Cargando cantidad de compromisos"><span class="skeleton skeleton-inline" aria-hidden="true"></span></span>
     </div>
-    <span id="commitmentCount" class="muted" aria-label="Cargando cantidad de compromisos"><span class="skeleton skeleton-inline" aria-hidden="true"></span></span>
+
+    <div class="commitment-tools">
+      <input id="commitmentSearch" type="search" placeholder="Buscar asunto, responsable o compromiso…" aria-label="Buscar compromisos" />
+      <select id="commitmentOwner" aria-label="Filtrar responsable">
+        <option value="all">Todos los responsables</option>
+        <option value="commercial">Adquiridos por el comercial</option>
+        <option value="client">Adquiridos por el cliente</option>
+      </select>
+    </div>
   </div>
 
-  <div class="commitment-tools">
-    <input id="commitmentSearch" type="search" placeholder="Buscar asunto, responsable o compromiso…" aria-label="Buscar compromisos" />
-    <select id="commitmentOwner" aria-label="Filtrar responsable">
-      <option value="all">Todos los responsables</option>
-      <option value="commercial">Adquiridos por el comercial</option>
-      <option value="client">Adquiridos por el cliente</option>
-    </select>
-  </div>
-
-  <div id="commitments" class="skeleton-list commitments-list" aria-live="polite" aria-busy="true" aria-label="Cargando compromisos" aria-hidden="true">
-    <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line short"></span></div>
-    <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line short"></span></div>
+  <div id="commitments" class="commitments-list" aria-live="polite" aria-busy="true" aria-label="Cargando compromisos" aria-hidden="true">
+    <div class="card skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line short"></span></div>
+    <div class="card skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line short"></span></div>
   </div>
 </section>
 
 <script is:inline src="/scripts/commitments.js"></script>
 
 <style is:global>
-  .commitments-screen { margin-top: 18px; }
+  .commitments-screen { display: grid; gap: 14px; margin-top: 18px; }
   .commitment-tools { display: flex; gap: 12px; margin: 18px 0 4px; }
   .commitment-tools input, .commitment-tools select { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; background: #fff; color: var(--ink); }
-  .commitments-list { display: grid; gap: 0; margin-top: 10px; }
-  .commitment { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--border); }
-  .commitment:last-child { border-bottom: 0; }
+  .commitments-list { display: grid; gap: 12px; margin-top: 0; }
+  .commitment { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); box-shadow: var(--shadow); }
+  .commitments-list > .muted { margin: 0; padding: 16px; }
   .commitment strong, .commitment small, .commitment p { display: block; overflow-wrap: anywhere; }
   .commitment small { margin-top: 4px; color: var(--muted); }
   .commitment p { margin: 7px 0 0; color: #4E4745; font-size: 13px; }
   .commitment-side { display: flex; align-items: flex-end; flex-direction: column; gap: 10px; }
   .commitment-status { padding: 5px 9px; border-radius: 999px; color: var(--orange-dark); background: #FFF1E2; font-size: 12px; font-weight: 500; white-space: nowrap; }
-  .commitment-thread-button { padding: 7px 10px; background: var(--panel-dark); font-size: 12px; }
+  .commitment-thread-button { padding: 7px 10px; background: var(--panel-dark); font-family: var(--font-body); font-size: 12px; font-weight: 400; line-height: 1; }
   .commitment-thread { grid-column: 1 / -1; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--warm); }
   .commitment-thread[hidden] { display: none; }
   .commitment-thread .thread-message { padding: 10px 0; border-bottom: 1px solid var(--border); }
