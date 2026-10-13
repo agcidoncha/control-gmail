@@ -1,0 +1,122 @@
+<section class="reports-screen">
+  <div class="card reports-overview">
+    <div class="card-header">
+      <div>
+        <span class="eyebrow">Resumen comercial</span>
+        <h2>Informes</h2>
+        <p>Consulta el estado de la actividad de la cuenta sin abrir el contenido de los correos.</p>
+      </div>
+      <button id="reportsRefresh" class="secondary-button" type="button">Actualizar</button>
+    </div>
+
+    <div class="reports-tools" aria-label="Filtros del informe">
+      <label>
+        <span>Periodo</span>
+        <select id="reportPeriod" aria-label="Periodo del informe">
+          <option value="30" selected>Últimos 30 días</option>
+          <option value="90">Últimos 3 meses</option>
+          <option value="180">Últimos 6 meses</option>
+          <option value="365">Último año</option>
+          <option value="custom">Rango personalizado</option>
+        </select>
+      </label>
+      <div id="reportCustomRange" class="report-custom-range" hidden>
+        <label>
+          <span>Desde</span>
+          <input id="reportFrom" type="date" aria-label="Fecha inicial del informe" />
+        </label>
+        <label>
+          <span>Hasta</span>
+          <input id="reportTo" type="date" aria-label="Fecha final del informe" />
+        </label>
+      </div>
+      <button id="reportApply" class="primary-button" type="button">Aplicar</button>
+    </div>
+    <p id="reportWindow" class="reports-window muted">Cargando periodo…</p>
+    <p id="reportMessage" class="form-message" role="status" aria-live="polite"></p>
+  </div>
+
+  <div id="reportStats" class="report-stats" aria-live="polite" aria-busy="true" aria-label="Cargando métricas">
+    <div class="card report-stat-skeleton"></div>
+    <div class="card report-stat-skeleton"></div>
+    <div class="card report-stat-skeleton"></div>
+    <div class="card report-stat-skeleton"></div>
+  </div>
+
+  <div class="reports-grid">
+    <section class="card report-panel">
+      <div class="card-header">
+        <div>
+          <h3>Actividad registrada</h3>
+          <p>Acciones realizadas desde la aplicación, sin contenido privado.</p>
+        </div>
+      </div>
+      <div id="reportActivity" class="report-breakdown" aria-live="polite"></div>
+    </section>
+
+    <section class="card report-panel">
+      <div class="card-header">
+        <div>
+          <h3>Clientes con más actividad</h3>
+          <p>Direcciones detectadas en recibidos y enviados durante el periodo.</p>
+        </div>
+      </div>
+      <div id="reportClients" class="report-breakdown" aria-live="polite"></div>
+    </section>
+  </div>
+
+  <section class="card report-panel report-detail-panel">
+    <div class="card-header">
+      <div>
+        <h3>Qué requiere atención</h3>
+        <p>Indicadores para decidir dónde dedicar tiempo primero.</p>
+      </div>
+    </div>
+    <div id="reportAttention" class="report-attention" aria-live="polite"></div>
+  </section>
+</section>
+
+<script is:inline src="/scripts/reports.js"></script>
+
+<style is:global>
+  .reports-screen { display: grid; gap: 14px; margin-top: 18px; }
+  .reports-overview { display: grid; gap: 18px; }
+  .reports-overview h2 { margin: 0 0 5px; }
+  .reports-overview .card-header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .reports-tools { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
+  .reports-tools label { display: grid; gap: 6px; min-width: 210px; color: var(--muted); font-size: 12px; font-weight: 500; }
+  .reports-tools select, .reports-tools input { width: 100%; min-height: 40px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 10px; color: var(--ink); background: var(--surface-input); font: inherit; }
+  .report-custom-range { display: flex; flex-wrap: wrap; gap: 12px; }
+  .report-custom-range[hidden] { display: none; }
+  .report-custom-range label { min-width: 150px; }
+  .reports-tools button { height: 40px; font-family: var(--font-body); font-size: 13px; font-weight: 500; line-height: 1; }
+  .reports-tools .primary-button { color: #fff; background: var(--orange); }
+  .reports-tools .secondary-button { color: var(--orange-dark); background: var(--warm); border: 1px solid var(--border); }
+  .reports-tools button:hover, .reports-tools button:focus-visible { color: #fff; background: var(--orange-dark); }
+  .reports-window { margin: -7px 0 0; font-size: 12px; }
+  .report-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .report-stat { display: grid; gap: 4px; min-height: 122px; padding: 17px; }
+  .report-stat span { color: var(--muted); font-size: 12px; }
+  .report-stat strong { color: var(--orange-dark); font-size: 30px; line-height: 1; letter-spacing: -.04em; }
+  .report-stat small { color: var(--muted); font-size: 12px; }
+  .report-stat-skeleton { min-height: 122px; background: linear-gradient(90deg, var(--skeleton-base) 25%, var(--skeleton-highlight) 37%, var(--skeleton-base) 63%); background-size: 400% 100%; animation: skeleton-shimmer 1.25s ease-in-out infinite; }
+  .reports-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .report-panel { min-width: 0; }
+  .report-panel h3 { margin: 0 0 5px; font-size: 17px; }
+  .report-panel .card-header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .report-breakdown { display: grid; gap: 0; margin-top: 16px; }
+  .report-breakdown-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--border); }
+  .report-breakdown-row:last-child { border-bottom: 0; }
+  .report-breakdown-row span { min-width: 0; overflow: hidden; color: var(--body-copy); text-overflow: ellipsis; white-space: nowrap; }
+  .report-breakdown-row strong { flex: 0 0 auto; color: var(--ink); font-size: 14px; }
+  .report-empty { margin: 16px 0 0; color: var(--muted); font-size: 13px; }
+  .report-attention { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+  .report-attention-card { display: grid; gap: 5px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-ai); }
+  .report-attention-card span { color: var(--muted); font-size: 12px; }
+  .report-attention-card strong { color: var(--ink); font-size: 24px; line-height: 1; }
+  .report-error { margin: 0; color: var(--danger); }
+  @media (max-width: 900px) { .report-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 700px) { .reports-grid, .report-attention { grid-template-columns: 1fr; } }
+  @media (max-width: 640px) { .reports-tools, .report-custom-range { display: grid; grid-template-columns: 1fr; } .reports-tools label, .report-custom-range label { min-width: 0; } .reports-tools button { width: 100%; } .report-stats { grid-template-columns: 1fr 1fr; gap: 10px; } .report-stat { padding: 14px; } }
+  html[data-theme='dark'] .report-attention-card { background: var(--surface-ai); }
+</style>
