@@ -44,8 +44,9 @@ El asistente recibe solo el contexto de la cuenta activa. No ejecuta acciones po
 - Las cuentas conectadas antes de activar estos permisos deben volver a autorizarse desde «Cambiar de cuenta»; hasta entonces las acciones devuelven una indicación de reautorización.
 - `PATCH /gmail/messages/:messageId` acepta `markRead`, `markUnread`, `archive`, `unarchive` y `trash`. `unarchive` se usa para deshacer un archivado reciente. La cuenta se obtiene de la sesión y nunca de un parámetro del navegador.
 - `POST /gmail/send` valida destinatario, asunto y cuerpo en backend. Puede crear un correo nuevo o responder dentro del hilo usando `threadId` y los encabezados de respuesta del mensaje padre.
-- En la interfaz, enviar a papelera pide confirmación. El asistente no puede disparar estas rutas.
-- La siguiente ampliación prevista es añadir borradores, etiquetas, destacados y restauración desde papelera, junto con auditoría de acciones sin guardar el contenido del mensaje en los registros.
+- En la interfaz, enviar a papelera y enviar un correo piden una decisión explícita. El asistente no puede disparar estas rutas.
+- La interfaz permite revisar el destinatario, asunto y cuerpo antes de confirmar el envío. La auditoría registra la acción y su resultado sin guardar el contenido del mensaje.
+- La siguiente ampliación prevista es añadir borradores, etiquetas, destacados y restauración desde papelera.
 
 ## Análisis comercial y uso bajo demanda
 
@@ -74,7 +75,7 @@ La interfaz no debe consultar Gmail cada vez que se abre una pantalla. El backen
 
 En local se utiliza `.data/gmail-store.json`; cuando `DATA_STORE=firestore`, se utilizan las colecciones equivalentes de Firestore. Los cuerpos de los mensajes se cifran con `TOKEN_ENCRYPTION_KEY` antes de persistirse. Los mensajes y hilos nunca se devuelven a una sesión distinta de la cuenta autenticada.
 
-La primera sincronización cubre por defecto la ventana de análisis configurada (`AI_ANALYSIS_DAYS`, 30 días), recorre páginas de Gmail y limita la carga a `GMAIL_SYNC_MAX_MESSAGES` por bandeja. Las peticiones posteriores leen la copia persistida mientras no haya vencido `GMAIL_SYNC_INTERVAL_SECONDS` (900 segundos por defecto). Si se solicita un rango de análisis más amplio, el backend sincroniza ese rango antes de analizarlo.
+La primera sincronización cubre por defecto la ventana de análisis configurada (`AI_ANALYSIS_DAYS`, 30 días), recorre páginas de Gmail y limita la carga a `GMAIL_SYNC_MAX_MESSAGES` por bandeja. La interfaz sincroniza al entrar en la bandeja, ofrece el botón «Actualizar Gmail» y vuelve a sincronizar automáticamente cada 10 minutos. El intervalo de seguridad del backend se configura con `GMAIL_SYNC_INTERVAL_SECONDS` (600 segundos por defecto). Cada análisis de IA fuerza además una sincronización previa para no razonar sobre una copia antigua.
 
 La siguiente evolución de producción será sustituir la resincronización periódica por `historyId` y `users.watch`, para traer únicamente cambios nuevos. Hasta entonces, la ventana y el intervalo son límites explícitos de coste y cuota, no valores ocultos en la interfaz.
 

@@ -4,7 +4,10 @@
       <h2>Consultar a la IA</h2>
       <p>Pregunta sobre la actividad comercial de tu cuenta autorizada.</p>
     </div>
-    <span id="assistantConnectionStatus" class="status-pill status-neutral" role="status" aria-live="polite">Comprobando conexión…</span>
+    <div class="assistant-header-actions">
+      <span id="assistantConnectionStatus" class="status-pill status-neutral" role="status" aria-live="polite">Comprobando conexión…</span>
+      <a class="button-link secondary-button assistant-config-link" href="/settings/ai">Configurar conexión IA</a>
+    </div>
   </div>
 
   <div class="assistant-intro">
@@ -43,7 +46,6 @@
       <button id="assistantSubmit" type="submit" disabled>Analizar correos</button>
       <button class="secondary-button assistant-preset" type="button" data-assistant-prompt="Resúmeme las conversaciones largas y destaca decisiones, compromisos y próximos pasos.">Resumir conversaciones largas</button>
       <button class="secondary-button assistant-preset" type="button" data-assistant-prompt="Interpreta las necesidades de cada cliente a partir de las conversaciones y separa hechos de inferencias.">Interpretar necesidades del cliente</button>
-      <a class="button-link secondary-button" href="/settings/ai">Configurar conexión IA</a>
     </div>
     <p id="assistantMessage" class="form-message" role="status" aria-live="polite"></p>
   </form>
@@ -55,6 +57,9 @@
 
 <style is:global>
   .assistant-screen { margin-top: 18px; }
+  .assistant-header-actions { display: flex; align-items: center; gap: 10px; }
+  .assistant-config-link { color: var(--orange-dark); background: var(--warm); border: 1px solid var(--border); font-size: 12px; white-space: nowrap; }
+  .assistant-config-link:hover { color: var(--ink); background: var(--orange-light); }
   .assistant-intro { margin-top: 20px; padding: 18px; border-radius: 12px; background: var(--panel-dark); color: #fff; }
   .assistant-intro strong { display: block; font-size: 16px; }
   .assistant-intro p { margin: 5px 0 0; color: #C7BFBB; font-size: 13px; }
@@ -96,5 +101,5 @@
   .status-pill { padding: 5px 9px; border-radius: 999px; color: #28683B; background: #E5F3E8; font-size: 12px; font-weight: 800; white-space: nowrap; }
   .status-pill.status-neutral { color: var(--muted); background: #EAE6E2; }
   .status-pill.status-warning { color: var(--orange-dark); background: #FFF1E2; }
-  @media (max-width: 640px) { .assistant-actions { align-items: stretch; flex-direction: column; } .assistant-actions a, .assistant-actions button { width: 100%; } .card-header { flex-direction: column; } }
+  @media (max-width: 640px) { .assistant-actions { align-items: stretch; flex-direction: column; } .assistant-actions a, .assistant-actions button { width: 100%; } .assistant-header-actions { align-items: stretch; flex-direction: column; width: 100%; } .assistant-header-actions a { text-align: center; } .card-header { flex-direction: column; } }
 </style>

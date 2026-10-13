@@ -182,7 +182,7 @@
     confirmedSubmission = false;
     submitButton.disabled = true;
     answerNode.hidden = true;
-    showMessage('Analizando los mensajes autorizados…');
+    showMessage('Actualizando Gmail y preparando el análisis…');
     try {
       const response = await fetch('/assistant/ask', {
         method: 'POST',

@@ -3,6 +3,8 @@
   const mailboxNode = document.querySelector('#messageMailbox');
   const searchNode = document.querySelector('#messageSearch');
   const countNode = document.querySelector('#mailboxCount');
+  const syncStatusNode = document.querySelector('#mailboxSyncStatus');
+  const refreshButton = document.querySelector('#mailboxRefreshButton');
   const loadMoreNode = document.querySelector('#loadMoreMessages');
   const paginationStatusNode = document.querySelector('#mailboxPaginationStatus');
   const archivedNoticeNode = document.querySelector('#archivedMailboxNotice');
@@ -19,6 +21,12 @@
   const composeReplyToMessageId = document.querySelector('#composeReplyToMessageId');
   const cancelComposeButton = document.querySelector('#cancelComposeButton');
   const composeStatus = document.querySelector('#composeStatus');
+  const composePreview = document.querySelector('#composePreview');
+  const previewTo = document.querySelector('#previewTo');
+  const previewSubject = document.querySelector('#previewSubject');
+  const previewBody = document.querySelector('#previewBody');
+  const editComposeButton = document.querySelector('#editComposeButton');
+  const confirmComposeButton = document.querySelector('#confirmComposeButton');
   const filterButtons = [...document.querySelectorAll('[data-message-filter]')];
   let messages = [];
   let followUps = [];
@@ -30,6 +38,8 @@
   let retryTimer = null;
   let undoState = null;
   let undoTimer = null;
+  let syncing = false;
+  let syncTimer = null;
 
   function clearUndo() {
     undoState = null;
@@ -58,6 +68,8 @@
     composeThreadId.value = message?.threadId || '';
     composeReplyToMessageId.value = message?.id || '';
     composeStatus.textContent = '';
+    composePreview.hidden = true;
+    confirmComposeButton.disabled = false;
     composeTo.focus();
   }
 
@@ -65,6 +77,50 @@
     composeForm.hidden = true;
     composeForm.reset();
     composeStatus.textContent = '';
+    composePreview.hidden = true;
+  }
+
+  function showComposePreview() {
+    if (!composeForm.reportValidity()) return false;
+    previewTo.textContent = composeTo.value.trim();
+    previewSubject.textContent = composeSubject.value.trim();
+    previewBody.textContent = composeBody.value;
+    composeStatus.textContent = '';
+    composePreview.hidden = false;
+    composePreview.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return true;
+  }
+
+  async function sendComposeMessage() {
+    if (!composeForm.reportValidity()) return;
+    confirmComposeButton.disabled = true;
+    editComposeButton.disabled = true;
+    composeStatus.textContent = 'Enviando…';
+    try {
+      await fetchJson('/gmail/send', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          to: composeTo.value,
+          subject: composeSubject.value,
+          body: composeBody.value,
+          threadId: composeThreadId.value || undefined,
+          replyToMessageId: composeReplyToMessageId.value || undefined,
+        }),
+      });
+      composeStatus.textContent = 'Correo enviado correctamente.';
+      composePreview.hidden = true;
+      mailboxNode.value = 'sent';
+      messages = [];
+      nextPageToken = null;
+      render();
+      await load();
+      window.setTimeout(closeCompose, 1200);
+    } catch (error) {
+      composeStatus.textContent = error.message || 'No se pudo enviar el correo.';
+      confirmComposeButton.disabled = false;
+      editComposeButton.disabled = false;
+    }
   }
 
   const text = (tag, value, className = '') => {
@@ -166,14 +222,15 @@
     });
   }
 
-  async function load() {
+  async function load(forceFetch = false) {
     try {
-      const shared = mailboxNode.value === 'inbox' && window.__commercialNavDataPromise
+      const shared = !forceFetch && mailboxNode.value === 'inbox' && window.__commercialNavDataPromise
         ? await window.__commercialNavDataPromise
         : null;
+      const refreshParam = mailboxNode.value === 'sent' ? '&refresh=1' : '';
       const messageResult = shared?.messages?.messages
         ? shared.messages
-        : await fetchJson('/gmail/messages?max=10&mailbox=' + encodeURIComponent(mailboxNode.value));
+        : await fetchJson('/gmail/messages?max=10&mailbox=' + encodeURIComponent(mailboxNode.value) + refreshParam);
       const followUpResult = shared?.followUps;
       const commitmentResult = shared?.commitments;
       if (!messageResult) {
@@ -197,6 +254,32 @@
       countNode.removeAttribute('aria-label');
       messagesNode.replaceChildren(text('p', error.message || 'No se pudieron cargar los mensajes.', 'muted'));
       loadMoreNode.hidden = true;
+    }
+  }
+
+  function formatSyncDate(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat('es-ES', { hour: '2-digit', minute: '2-digit' }).format(date);
+  }
+
+  async function syncMailbox(showErrors = true) {
+    if (syncing) return;
+    syncing = true;
+    refreshButton.disabled = true;
+    syncStatusNode.textContent = 'Actualizando Gmail…';
+    try {
+      const result = await fetchJson('/gmail/sync', { method: 'POST' });
+      messages = [];
+      nextPageToken = null;
+      render();
+      await load(true);
+      syncStatusNode.textContent = 'Actualizado a las ' + formatSyncDate(result.syncedAt);
+    } catch (error) {
+      syncStatusNode.textContent = showErrors ? (error.message || 'No se pudo actualizar Gmail.') : 'No se pudo actualizar Gmail.';
+    } finally {
+      syncing = false;
+      refreshButton.disabled = false;
     }
   }
 
@@ -377,32 +460,14 @@
   loadMoreNode.addEventListener('click', loadMore);
   composeButton.addEventListener('click', () => openCompose());
   cancelComposeButton.addEventListener('click', closeCompose);
-  composeForm.addEventListener('submit', async (event) => {
+  refreshButton.addEventListener('click', () => syncMailbox(true));
+  composeForm.addEventListener('submit', (event) => {
     event.preventDefault();
-    const submitButton = composeForm.querySelector('button[type="submit"]');
-    submitButton.disabled = true;
-    composeStatus.textContent = 'Enviando…';
-    try {
-      await fetchJson('/gmail/send', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          to: composeTo.value,
-          subject: composeSubject.value,
-          body: composeBody.value,
-          threadId: composeThreadId.value || undefined,
-          replyToMessageId: composeReplyToMessageId.value || undefined,
-        }),
-      });
-      composeStatus.textContent = 'Correo enviado.';
-      composeForm.reset();
-      window.setTimeout(closeCompose, 900);
-    } catch (error) {
-      composeStatus.textContent = error.message || 'No se pudo enviar el correo.';
-    } finally {
-      submitButton.disabled = false;
-    }
+    showComposePreview();
   });
+  editComposeButton.addEventListener('click', () => { composePreview.hidden = true; composeStatus.textContent = ''; composeBody.focus(); });
+  confirmComposeButton.addEventListener('click', sendComposeMessage);
   mailboxNode.addEventListener('change', () => { messages = []; nextPageToken = null; paginationStatusNode.textContent = ''; render(); load(); });
-  load();
+  syncMailbox(true);
+  syncTimer = window.setInterval(() => syncMailbox(false), 10 * 60 * 1000);
 })();

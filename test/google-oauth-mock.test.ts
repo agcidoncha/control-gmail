@@ -274,3 +274,14 @@ test('envía un correo y conserva el hilo cuando es una respuesta', async () => 
   assert.equal(capturedSends.at(-1)?.threadId, messages.inbox.threadId);
   assert.match(Buffer.from(capturedSends.at(-1)!.raw, 'base64url').toString('utf8'), /In-Reply-To:/);
 });
+
+test('permite enviar un mensaje con varias líneas', async () => {
+  const result = await sendGmailMessage(account, {
+    to: client,
+    subject: 'Información solicitada',
+    body: 'Buenos días,\n\nTe envío la información solicitada.',
+  });
+
+  assert.equal(result.messageId, 'message-sent-new');
+  assert.match(Buffer.from(capturedSends.at(-1)!.raw, 'base64url').toString('utf8'), /Buenos días,\n\nTe envío/);
+});

@@ -17,8 +17,8 @@ import AppShell from '../../layouts/AppShell.astro';
         <input id="authorizedUserEmail" type="email" placeholder="comercial@empresa.com" required />
       </div>
       <div>
-        <label for="authorizedUserRole">Rol</label>
-        <select id="authorizedUserRole">
+        <label for="authorizedUserRole">Tipo de usuario</label>
+        <select id="authorizedUserRole" aria-label="Tipo de usuario">
           <option value="commercial">Comercial</option>
           <option value="admin">Administrador</option>
         </select>
@@ -26,6 +26,14 @@ import AppShell from '../../layouts/AppShell.astro';
       <button type="submit">Autorizar usuario</button>
     </form>
     <p id="userAuthorizationMessage" class="form-message" role="status" aria-live="polite"></p>
+    <div class="users-filter">
+      <label for="authorizedUsersFilter">Mostrar usuarios</label>
+      <select id="authorizedUsersFilter" aria-label="Filtrar usuarios por tipo">
+        <option value="all">Todos</option>
+        <option value="commercial">Comerciales</option>
+        <option value="admin">Administradores</option>
+      </select>
+    </div>
     <div id="authorizedUsers" class="authorized-users">Cargando usuarios…</div>
   </section>
 </AppShell>
@@ -40,6 +48,9 @@ import AppShell from '../../layouts/AppShell.astro';
   .user-form label { display: block; margin-bottom: 7px; font-size: 13px; font-weight: 750; }
   .user-form input, .user-form select { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; }
   .authorized-users { display: grid; gap: 8px; margin-top: 16px; }
+  .users-filter { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
+  .users-filter label { color: var(--muted); font-size: 13px; font-weight: 750; }
+  .users-filter select { min-width: 190px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; }
   .authorized-user { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--warm); }
   .authorized-user small { display: block; margin-top: 3px; color: var(--muted); }
   .user-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
@@ -49,5 +60,5 @@ import AppShell from '../../layouts/AppShell.astro';
   .form-message { min-height: 20px; color: var(--muted); font-size: 13px; }
   .form-message.error { color: #A33C28; }
   .form-message.success { color: #28683B; }
-  @media (max-width: 700px) { .user-form { grid-template-columns: 1fr; align-items: stretch; } .user-form button { width: 100%; } .authorized-user { align-items: flex-start; flex-direction: column; } .user-actions { justify-content: flex-start; } }
+  @media (max-width: 700px) { .user-form { grid-template-columns: 1fr; align-items: stretch; } .user-form button { width: 100%; } .users-filter { align-items: stretch; flex-direction: column; } .users-filter select { width: 100%; } .authorized-user { align-items: flex-start; flex-direction: column; } .user-actions { justify-content: flex-start; } }
 </style>

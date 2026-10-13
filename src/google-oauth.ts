@@ -181,6 +181,12 @@ function messageCacheKey(email: string, mailbox: string, query = '') {
   return `${email.toLowerCase()}:${mailbox}:${query}`;
 }
 
+function clearAccountCaches(email: string) {
+  const prefix = `${email.toLowerCase()}:`;
+  [messageCache, threadCache, insightsCache, followUpCache, commitmentCache, mailboxContextCache, nextPageTokenCache]
+    .forEach((cache) => [...cache.keys()].filter((key) => key.startsWith(prefix)).forEach((key) => cache.delete(key)));
+}
+
 function analysisCacheKey(email: string, analysisWindow: AnalysisWindow) {
   return `${email.toLowerCase()}:${analysisWindow.scope}:${analysisWindow.query}`;
 }
@@ -281,6 +287,13 @@ export async function syncGmailAccount(email: string, analysisWindow = getAnalys
       historyId: profile.historyId ?? undefined,
     },
   });
+}
+
+export async function refreshGmailAccount(email: string) {
+  await ensureGmailSnapshot(email, true);
+  clearAccountCaches(email);
+  const state = await getGmailSyncState(email);
+  return { syncedAt: state?.lastSyncedAt ?? new Date().toISOString() };
 }
 
 function syncStateCoversWindow(state: { from: string; to: string }, requestedWindow: AnalysisWindow) {
@@ -477,9 +490,7 @@ export async function modifyGmailMessage(email: string, messageId: string, actio
 
   // Evita servir una copia antigua en la misma sesión. La sincronización de
   // Gmail actualizará el snapshot persistido antes de la siguiente carga.
-  const prefix = `${email.toLowerCase()}:`;
-  [...messageCache.keys()].filter((key) => key.startsWith(prefix)).forEach((key) => messageCache.delete(key));
-  [...threadCache.keys()].filter((key) => key.startsWith(prefix)).forEach((key) => threadCache.delete(key));
+  clearAccountCaches(email);
   return { action, messageId };
 }
 
@@ -490,7 +501,7 @@ export async function sendGmailMessage(email: string, input: GmailSendInput) {
   if (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(to)) throw new Error('Introduce un destinatario válido.');
   if (!subject || subject.length > 500) throw new Error('El asunto es obligatorio y no puede superar 500 caracteres.');
   if (!body || body.length > 100_000) throw new Error('El mensaje es obligatorio y no puede superar 100.000 caracteres.');
-  if ([to, subject, body, input.threadId, input.replyToMessageId].some((value) => value?.includes('\r') || value?.includes('\n'))) {
+  if ([to, subject, input.threadId, input.replyToMessageId].some((value) => value?.includes('\r') || value?.includes('\n'))) {
     throw new Error('El mensaje contiene saltos de línea no válidos en un encabezado.');
   }
 
@@ -517,6 +528,7 @@ export async function sendGmailMessage(email: string, input: GmailSendInput) {
       ...(input.threadId ? { threadId: input.threadId } : {}),
     },
   });
+  clearAccountCaches(email);
   return { messageId: data.id ?? null, threadId: data.threadId ?? input.threadId ?? null };
 }
 
@@ -591,6 +603,7 @@ export async function listRecentMessagesPage(
   mailbox: GmailMailbox = 'inbox',
   pageToken?: string,
   organizationId = process.env.DEFAULT_ORGANIZATION_ID ?? 'org_publicidad_segmentada_tv',
+  forceRefresh = false,
 ) {
   if (mailbox === 'appArchived') {
     const offset = decodePageOffset(pageToken);
@@ -615,7 +628,7 @@ export async function listRecentMessagesPage(
     return listMessagesForLabel(gmail, label, maxResults, pageToken, mailbox === 'archived' ? archivedMailboxQuery : '');
   }
 
-  await ensureGmailSnapshot(email);
+  await ensureGmailSnapshot(email, forceRefresh);
   const page = await listStoredGmailMessages(email, mailbox, maxResults, decodePageOffset(pageToken));
   return {
     messages: page.messages.map(fromStoredMessage),

@@ -4,9 +4,11 @@
   const roleNode = document.querySelector('#authorizedUserRole');
   const messageNode = document.querySelector('#userAuthorizationMessage');
   const usersNode = document.querySelector('#authorizedUsers');
+  const filterNode = document.querySelector('#authorizedUsersFilter');
   const screen = document.querySelector('#adminUsersScreen');
-  if (!form || !emailNode || !roleNode || !messageNode || !usersNode || !screen) return;
+  if (!form || !emailNode || !roleNode || !messageNode || !usersNode || !filterNode || !screen) return;
   let currentAccountEmail = '';
+  let authorizedUsers = [];
 
   const showMessage = (value, type = '') => {
     messageNode.textContent = value;
@@ -15,7 +17,9 @@
 
   const renderUsers = (users) => {
     usersNode.replaceChildren();
-    users.forEach((user) => {
+    const selectedRole = filterNode.value;
+    const visibleUsers = selectedRole === 'all' ? users : users.filter((user) => user.role === selectedRole);
+    visibleUsers.forEach((user) => {
       const row = document.createElement('div');
       row.className = 'authorized-user';
       const info = document.createElement('div');
@@ -53,7 +57,11 @@
       }
       usersNode.append(row);
     });
-    if (!users.length) usersNode.textContent = 'No hay usuarios autorizados.';
+    if (!visibleUsers.length) usersNode.textContent = selectedRole === 'admin'
+      ? 'No hay administradores autorizados.'
+      : selectedRole === 'commercial'
+        ? 'No hay comerciales autorizados.'
+        : 'No hay usuarios autorizados.';
   };
 
   const updateUser = async (email, action, role = 'commercial') => {
@@ -85,7 +93,8 @@
     const response = await fetch('/admin/users');
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'No se pudieron cargar los usuarios.');
-    renderUsers(data.users);
+    authorizedUsers = data.users;
+    renderUsers(authorizedUsers);
   };
 
   const checkAdminAccess = async () => {
@@ -122,6 +131,8 @@
       if (button) button.disabled = false;
     }
   });
+
+  filterNode.addEventListener('change', () => renderUsers(authorizedUsers));
 
   checkAdminAccess()
     .then((allowed) => allowed && loadUsers())

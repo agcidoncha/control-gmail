@@ -1,7 +1,16 @@
 (() => {
   const listNode = document.querySelector('#clients');
   const countNode = document.querySelector('#clientCount');
-  if (!listNode || !countNode) return;
+  const searchNode = document.querySelector('#clientSearch');
+  const pageSizeNode = document.querySelector('#clientPageSize');
+  const paginationNode = document.querySelector('#clientPagination');
+  const previousNode = document.querySelector('#clientPrevious');
+  const nextNode = document.querySelector('#clientNext');
+  const pageStatusNode = document.querySelector('#clientPageStatus');
+  if (!listNode || !countNode || !searchNode || !pageSizeNode || !paginationNode || !previousNode || !nextNode || !pageStatusNode) return;
+
+  let clients = [];
+  let currentPage = 1;
 
   const text = (tag, value, className = '') => {
     const node = document.createElement(tag);
@@ -55,40 +64,77 @@
     }
   }
 
+  function getPageSize() {
+    return pageSizeNode.value === 'all' ? clients.length || 1 : Number(pageSizeNode.value);
+  }
+
+  function makeClientCard(client) {
+    const card = document.createElement('article');
+    card.className = 'client-card';
+    const summary = document.createElement('div');
+    summary.className = 'client-summary';
+    summary.append(text('strong', client.email));
+    summary.append(text('small', client.messages + (client.messages === 1 ? ' mensaje relacionado' : ' mensajes relacionados')));
+    summary.append(text('p', 'Última actividad: ' + formatDate(client.latestDate)));
+    card.append(summary);
+    const actions = document.createElement('div');
+    actions.className = 'client-actions';
+    const historyButton = text('button', 'Ver historial');
+    historyButton.type = 'button';
+    historyButton.addEventListener('click', () => toggleHistory(card, client.email, historyButton));
+    const aiLink = document.createElement('a');
+    aiLink.href = '/consultar-ia?prompt=' + encodeURIComponent(`Interpreta las necesidades, preferencias y estado comercial de ${client.email} usando solo sus conversaciones.`);
+    aiLink.textContent = 'Analizar necesidades';
+    actions.append(historyButton, aiLink);
+    card.append(actions);
+    return card;
+  }
+
+  function render() {
+    const query = searchNode.value.trim().toLowerCase();
+    const filteredClients = clients.filter((client) => client.email.toLowerCase().includes(query));
+    const pageSize = getPageSize();
+    const totalPages = Math.max(1, Math.ceil(filteredClients.length / pageSize));
+    currentPage = Math.min(currentPage, totalPages);
+    const start = (currentPage - 1) * pageSize;
+    const pageClients = filteredClients.slice(start, start + pageSize);
+
+    countNode.textContent = query
+      ? `${filteredClients.length} de ${clients.length} clientes`
+      : `${clients.length} ${clients.length === 1 ? 'cliente' : 'clientes'}`;
+    listNode.replaceChildren();
+    if (!filteredClients.length) {
+      listNode.append(text('p', query ? 'No hay clientes que coincidan con la búsqueda.' : 'No hay clientes detectados en los mensajes revisados.', 'muted'));
+    } else {
+      pageClients.forEach((client) => listNode.append(makeClientCard(client)));
+    }
+
+    const showPagination = filteredClients.length > pageSize;
+    paginationNode.hidden = !showPagination;
+    if (showPagination) {
+      pageStatusNode.textContent = `Página ${currentPage} de ${totalPages}`;
+      previousNode.disabled = currentPage === 1;
+      nextNode.disabled = currentPage === totalPages;
+    }
+  }
+
   async function load() {
     try {
-      const response = await fetch('/gmail/insights?max=25');
+      const response = await fetch('/gmail/insights?max=1000');
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'No se pudieron cargar los clientes.');
-      const clients = data.insights?.clients || [];
+      clients = data.insights?.clients || [];
       listNode.removeAttribute('aria-hidden');
       listNode.removeAttribute('aria-busy');
       listNode.removeAttribute('aria-label');
       countNode.removeAttribute('aria-label');
-      countNode.textContent = clients.length + (clients.length === 1 ? ' cliente' : ' clientes');
-      listNode.replaceChildren();
       if (!clients.length) {
+        countNode.textContent = '0 clientes';
+        paginationNode.hidden = true;
         listNode.append(text('p', 'No hay clientes detectados en los mensajes revisados.', 'muted'));
         return;
       }
-      clients.forEach((client) => {
-        const card = document.createElement('article');
-        card.className = 'client-card';
-        card.append(text('strong', client.email));
-        card.append(text('small', client.messages + (client.messages === 1 ? ' mensaje relacionado' : ' mensajes relacionados')));
-        card.append(text('p', 'Última actividad: ' + formatDate(client.latestDate)));
-        const actions = document.createElement('div');
-        actions.className = 'client-actions';
-        const historyButton = text('button', 'Ver historial');
-        historyButton.type = 'button';
-        historyButton.addEventListener('click', () => toggleHistory(card, client.email, historyButton));
-        const aiLink = document.createElement('a');
-        aiLink.href = '/consultar-ia?prompt=' + encodeURIComponent(`Interpreta las necesidades, preferencias y estado comercial de ${client.email} usando solo sus conversaciones.`);
-        aiLink.textContent = 'Analizar necesidades';
-        actions.append(historyButton, aiLink);
-        card.append(actions);
-        listNode.append(card);
-      });
+      render();
     } catch (error) {
       listNode.removeAttribute('aria-hidden');
       listNode.removeAttribute('aria-busy');
@@ -98,6 +144,23 @@
       listNode.replaceChildren(text('p', error.message || 'No se pudieron cargar los clientes.', 'muted'));
     }
   }
+
+  searchNode.addEventListener('input', () => {
+    currentPage = 1;
+    render();
+  });
+  pageSizeNode.addEventListener('change', () => {
+    currentPage = 1;
+    render();
+  });
+  previousNode.addEventListener('click', () => {
+    currentPage -= 1;
+    render();
+  });
+  nextNode.addEventListener('click', () => {
+    currentPage += 1;
+    render();
+  });
 
   load();
 })();

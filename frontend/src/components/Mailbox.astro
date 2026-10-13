@@ -1,7 +1,7 @@
 <section class="card mailbox-screen">
   <div class="card-header">
     <div><h2>Correos que requieren atención</h2><p>Filtra por bandeja, asunto, remitente o contenido.</p></div>
-    <div class="mailbox-header-actions"><span id="mailboxCount" class="muted" aria-label="Cargando cantidad de mensajes"><span class="skeleton skeleton-inline" aria-hidden="true"></span></span><button id="composeMessageButton" type="button">Nuevo correo</button></div>
+    <div class="mailbox-header-actions"><span id="mailboxCount" class="muted" aria-label="Cargando cantidad de mensajes"><span class="skeleton skeleton-inline" aria-hidden="true"></span></span><span id="mailboxSyncStatus" class="mailbox-sync-status muted" role="status" aria-live="polite">Sincronizando…</span><button id="mailboxRefreshButton" class="secondary-button" type="button">Actualizar Gmail</button><button id="composeMessageButton" type="button">Nuevo correo</button></div>
   </div>
   <div class="message-tools">
     <select id="messageMailbox" aria-label="Tipo de mensajes">
@@ -30,7 +30,16 @@
     <label>Mensaje <textarea id="composeBody" maxlength="100000" required></textarea></label>
     <input id="composeThreadId" type="hidden" />
     <input id="composeReplyToMessageId" type="hidden" />
-    <div class="compose-actions"><button type="submit">Enviar correo</button><span id="composeStatus" class="muted" role="status" aria-live="polite"></span></div>
+    <div class="compose-actions"><button id="previewComposeButton" type="submit">Ver vista previa</button><span id="composeStatus" class="muted" role="status" aria-live="polite"></span></div>
+    <div id="composePreview" class="compose-preview" hidden>
+      <div class="compose-preview-heading"><strong>Vista previa del envío</strong><span class="muted">Revisa el contenido antes de enviarlo.</span></div>
+      <dl class="compose-preview-fields">
+        <div><dt>Para</dt><dd id="previewTo"></dd></div>
+        <div><dt>Asunto</dt><dd id="previewSubject"></dd></div>
+      </dl>
+      <pre id="previewBody" class="compose-preview-body"></pre>
+      <div class="compose-actions"><button id="editComposeButton" class="secondary-button" type="button">Editar</button><button id="confirmComposeButton" type="button">Confirmar y enviar</button></div>
+    </div>
   </form>
   <div id="messages" class="skeleton-list" aria-live="polite" aria-busy="true" aria-label="Cargando mensajes" aria-hidden="true">
     <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line short"></span></div>
@@ -52,6 +61,8 @@
 <style is:global>
   .mailbox-screen { margin-top: 18px; }
   .mailbox-header-actions { display: flex; align-items: center; gap: 12px; }
+  .mailbox-sync-status { font-size: 12px; white-space: nowrap; }
+  .mailbox-header-actions .secondary-button { color: var(--orange-dark); background: var(--warm); border: 1px solid var(--border); font-size: 12px; }
   .message-tools { display: flex; align-items: center; gap: 12px; margin: 18px 0 4px; }
   .message-tools input, .message-tools select { min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; background: #fff; color: var(--ink); }
   .message-tools input { flex: 1; }
@@ -75,6 +86,15 @@
   .compose-message input, .compose-message textarea { width: 100%; margin: 0; padding: 10px 11px; border: 1px solid var(--border); border-radius: 9px; color: var(--ink); background: var(--surface-input); font: inherit; }
   .compose-message textarea { min-height: 130px; resize: vertical; }
   .compose-message .secondary-button { color: var(--orange-dark); background: var(--warm); border: 1px solid var(--border); font-size: 12px; }
+  .compose-preview { display: grid; gap: 12px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .compose-preview[hidden] { display: none; }
+  .compose-preview-heading { display: grid; gap: 3px; }
+  .compose-preview-heading .muted { font-size: 12px; }
+  .compose-preview-fields { display: grid; gap: 7px; margin: 0; }
+  .compose-preview-fields div { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 8px; }
+  .compose-preview-fields dt { color: var(--muted); font-size: 12px; font-weight: 750; }
+  .compose-preview-fields dd { margin: 0; overflow-wrap: anywhere; }
+  .compose-preview-body { max-height: 220px; margin: 0; padding: 12px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid var(--border); border-radius: 9px; color: var(--ink); background: var(--surface-input); font: inherit; }
   .message-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
   .message-actions button { padding: 7px 10px; border: 1px solid var(--border); color: var(--ink); background: var(--warm); font-size: 12px; }
   .message-actions button:hover, .message-actions button:focus-visible { color: var(--ink); background: var(--orange-light); }

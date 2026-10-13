@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import Fastify from 'fastify';
-import { completeAuthorization, createAuthorizationUrl, getAnalysisWindow, getThreadMessages, listAccountInsights, listClientHistory, listDetectedCommitments, listPendingFollowUps, listRecentMessagesPage, modifyGmailMessage, sendGmailMessage, type GmailMailbox, type GmailMessageAction, type GmailSendInput } from './google-oauth.js';
+import { completeAuthorization, createAuthorizationUrl, getAnalysisWindow, getThreadMessages, listAccountInsights, listClientHistory, listDetectedCommitments, listPendingFollowUps, listRecentMessagesPage, modifyGmailMessage, refreshGmailAccount, sendGmailMessage, syncGmailAccount, type GmailMailbox, type GmailMessageAction, type GmailSendInput } from './google-oauth.js';
 import { clearSessionCookieHeader, readSession, readSessionContext, sessionCookieHeaderForOrganization } from './session.js';
 import { authorizeUser, deleteUser, disconnectUser, getUser, listUsers, upsertUser } from './user-store.js';
 import { deleteGoogleTokens } from './token-store.js';
@@ -759,6 +759,7 @@ app.post<{ Body: { question?: string; analysisDays?: number; analysisFrom?: stri
       to: request.body?.analysisTo,
       scope: request.body?.analysisScope,
     });
+    await refreshGmailAccount(email);
     return {
       account: email,
       organizationId: context?.organizationId,
@@ -775,7 +776,20 @@ app.post<{ Body: { question?: string; analysisDays?: number; analysisFrom?: stri
   }
 });
 
-app.get<{ Querystring: { max?: string; mailbox?: string; pageToken?: string } }>(
+app.post('/gmail/sync', async (request, reply) => {
+  const account = readSession(request.headers.cookie);
+  if (!account) return reply.code(401).send({ error: 'Sesión no iniciada.' });
+
+  try {
+    return { account, ...(await refreshGmailAccount(account)) };
+  } catch (error) {
+    return reply.code(500).send({
+      error: gmailErrorMessage(error, 'No se pudo actualizar Gmail.'),
+    });
+  }
+});
+
+app.get<{ Querystring: { max?: string; mailbox?: string; pageToken?: string; refresh?: string } }>(
   '/gmail/messages',
   async (request, reply) => {
     const account = readSession(request.headers.cookie);
@@ -792,7 +806,7 @@ app.get<{ Querystring: { max?: string; mailbox?: string; pageToken?: string } }>
               ? 'appArchived'
             : 'inbox';
       const context = readSessionContext(request.headers.cookie);
-      const page = await listRecentMessagesPage(account, Number(request.query.max ?? 10), mailbox, request.query.pageToken, context?.organizationId);
+      const page = await listRecentMessagesPage(account, Number(request.query.max ?? 10), mailbox, request.query.pageToken, context?.organizationId, request.query.refresh === '1');
       return { account, mailbox, messages: page.messages, nextPageToken: page.nextPageToken };
     } catch (error) {
       return reply.code(500).send({
@@ -1004,8 +1018,50 @@ app.post<{ Body: GmailSendInput }>('/gmail/send', async (request, reply) => {
   if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
 
   try {
-    return { account: email, ...(await sendGmailMessage(email, request.body ?? { to: '', subject: '', body: '' })) };
+    const context = readSessionContext(request.headers.cookie);
+    const result = await sendGmailMessage(email, request.body ?? { to: '', subject: '', body: '' });
+    // Gmail confirma el envío antes de que el índice local conozca el mensaje.
+    // Sin esta sincronización, «Enviados» puede seguir mostrando la instantánea
+    // anterior durante el intervalo normal de sincronización.
+    try {
+      await syncGmailAccount(email);
+    } catch (syncError) {
+      // El mensaje ya se ha enviado; no convertimos un fallo de refresco en un
+      // falso error de envío. La siguiente carga volverá a sincronizar Gmail.
+      request.log.error({ err: syncError }, 'El correo se envió, pero no se pudo actualizar la bandeja inmediatamente');
+    }
+    if (context) {
+      try {
+        await recordGmailAction({
+          organizationId: context.organizationId,
+          userEmail: context.email,
+          accountEmail: email,
+          messageId: result.messageId ?? 'new-message',
+          action: 'send',
+          outcome: 'success',
+        });
+      } catch (auditError) {
+        request.log.error({ err: auditError }, 'No se pudo registrar el envío de Gmail');
+      }
+    }
+    return { account: email, ...result };
   } catch (error) {
+    const context = readSessionContext(request.headers.cookie);
+    if (context) {
+      try {
+        await recordGmailAction({
+          organizationId: context.organizationId,
+          userEmail: context.email,
+          accountEmail: email,
+          messageId: 'send-failed',
+          action: 'send',
+          outcome: 'error',
+          errorCode: error instanceof Error ? error.name : 'UNKNOWN',
+        });
+      } catch (auditError) {
+        request.log.error({ err: auditError }, 'No se pudo registrar el error de envío de Gmail');
+      }
+    }
     return reply.code(500).send({
       error: gmailErrorMessage(error, 'No se pudo enviar el correo.'),
     });
