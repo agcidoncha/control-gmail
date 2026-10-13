@@ -10,6 +10,7 @@
       <option value="archived">Archivados en Gmail</option>
       <option value="appArchived">Archivados por Asistente Comercial</option>
       <option value="spam">Spam</option>
+      <option value="trash">Papelera</option>
     </select>
     <input id="messageSearch" type="search" placeholder="Buscar cliente, empresa o asunto…" />
   </div>
@@ -60,9 +61,10 @@
 
 <style is:global>
   .mailbox-screen { margin-top: 18px; }
-  .mailbox-header-actions { display: flex; align-items: center; gap: 12px; }
-  .mailbox-sync-status { font-size: 12px; white-space: nowrap; }
-  .mailbox-header-actions .secondary-button { color: var(--orange-dark); background: var(--warm); border: 1px solid var(--border); font-size: 12px; }
+  .mailbox-header-actions { display: flex; align-items: center; gap: 10px; }
+  .mailbox-header-actions > span { display: inline-flex; align-items: center; height: 40px; color: var(--muted); font-size: 12px; line-height: 1; white-space: nowrap; }
+  .mailbox-header-actions button { height: 40px; min-height: 40px; padding: 0 12px; font-size: 12px; line-height: 1; }
+  .mailbox-header-actions .secondary-button { color: var(--orange-dark); background: var(--warm); border: 1px solid var(--border); }
   .message-tools { display: flex; align-items: center; gap: 12px; margin: 18px 0 4px; }
   .message-tools input, .message-tools select { min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; background: #fff; color: var(--ink); }
   .message-tools input { flex: 1; }
@@ -95,17 +97,24 @@
   .compose-preview-fields dt { color: var(--muted); font-size: 12px; font-weight: 750; }
   .compose-preview-fields dd { margin: 0; overflow-wrap: anywhere; }
   .compose-preview-body { max-height: 220px; margin: 0; padding: 12px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid var(--border); border-radius: 9px; color: var(--ink); background: var(--surface-input); font: inherit; }
-  .message-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-  .message-actions button { padding: 7px 10px; border: 1px solid var(--border); color: var(--ink); background: var(--warm); font-size: 12px; }
+  .message-action-bar { display: flex; align-items: center; flex-wrap: nowrap; gap: 10px; width: 100%; min-width: 0; margin-top: 12px; }
+  .message-action-divider { flex: 0 0 auto; color: var(--border); font-size: 20px; font-weight: 300; line-height: 1; }
+  .message-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px; margin-left: 0; }
+  .message-actions button { height: 34px; min-height: 34px; padding: 0 10px; border: 1px solid var(--border); color: var(--ink); background: var(--warm); font-size: 12px; line-height: 1; }
   .message-actions button:hover, .message-actions button:focus-visible { color: var(--ink); background: var(--orange-light); }
-  .message-actions button.danger { color: var(--danger); }
+  .message-actions button.message-action-unread { color: var(--action-unread-fg); background: var(--action-unread-bg); border-color: var(--action-unread-border); }
+  .message-actions button.message-action-unread:hover, .message-actions button.message-action-unread:focus-visible { color: var(--action-unread-fg); background: var(--action-unread-hover); }
+  .message-actions button.message-action-archive { color: var(--action-archive-fg); background: var(--action-archive-bg); border-color: var(--action-archive-border); }
+  .message-actions button.message-action-archive:hover, .message-actions button.message-action-archive:focus-visible { color: var(--action-archive-fg); background: var(--action-archive-hover); }
+  .message-actions button.message-action-trash, .message-actions button.danger { color: var(--action-trash-fg); background: var(--action-trash-bg); border-color: var(--action-trash-border); }
+  .message-actions button.message-action-trash:hover, .message-actions button.message-action-trash:focus-visible { color: var(--action-trash-fg); background: var(--action-trash-hover); }
   .message-action-status { margin: 8px 0 0; font-size: 12px; }
   .mailbox-undo { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 14px; padding: 11px 13px; border: 1px solid var(--border); border-radius: 10px; color: var(--ink); background: var(--surface-soft); font-size: 12px; }
   .mailbox-undo[hidden] { display: none; }
   .mailbox-undo button { flex: 0 0 auto; padding: 6px 10px; border: 1px solid var(--border); color: var(--ink); background: var(--warm); font-size: 12px; }
   .mailbox-undo button:hover, .mailbox-undo button:focus-visible { background: var(--orange-light); }
   .message.is-open { background: #FCFAF8; }
-  .thread-button { margin-top: 12px; padding: 7px 11px; border-radius: 10px; background: var(--panel-dark); font-size: 13px; }
+  .thread-button { flex: 0 0 auto; height: 34px; min-height: 34px; margin-top: 0; padding: 0 11px; border-radius: 10px; background: var(--panel-dark); font-size: 12px; line-height: 1; }
   .thread-inline { margin-top: 18px; padding: 16px 18px 4px; border: 1px solid var(--border); border-radius: 12px; background: var(--warm); overflow-wrap: anywhere; }
   .thread-inline .message { padding: 12px 0; }
   .thread-inline .message:first-child { padding-top: 0; }
@@ -116,5 +125,5 @@
   .mailbox-pagination button:hover, .mailbox-pagination button:focus-visible { color: var(--ink); background: var(--orange-light); }
   html[data-theme='dark'] .message-importance { color: var(--orange-light); background: var(--surface-alt); }
   html[data-theme='dark'] .message-bounce { color: var(--danger); background: var(--neutral-bg); }
-  @media (max-width: 640px) { .message-tools { align-items: stretch; flex-direction: column; } .message-tools select, .message-tools input { width: 100%; } }
+  @media (max-width: 640px) { .message-tools { align-items: stretch; flex-direction: column; } .message-tools select, .message-tools input { width: 100%; } .message-action-bar { align-items: flex-start; flex-wrap: wrap; } .message-actions { margin-left: 0; justify-content: flex-start; } }
 </style>

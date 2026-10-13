@@ -1,0 +1,173 @@
+<div class="help-panel-wrap">
+  <button id="helpToggle" class="help-trigger" type="button" aria-expanded="false" aria-controls="helpPanel" aria-label="Cómo usarlo" title="Cómo usarlo">
+    <span class="help-trigger-icon" aria-hidden="true"></span>
+    <span class="help-trigger-question" aria-hidden="true"></span>
+  </button>
+  <div id="helpOverlay" class="help-overlay" hidden></div>
+  <aside id="helpPanel" class="help-panel" aria-hidden="true" aria-labelledby="helpTitle">
+    <div class="help-panel-header">
+      <div>
+        <p class="eyebrow">Manual de uso</p>
+        <h2 id="helpTitle">Cómo usar el panel</h2>
+      </div>
+      <button id="helpClose" class="help-close" type="button" aria-label="Cerrar guía">
+        <span class="help-close-icon" aria-hidden="true"></span>
+      </button>
+    </div>
+    <div class="help-tools">
+      <nav class="help-nav" aria-label="Apartados de la guía">
+        <button type="button" data-help-target="help-start">Empezar</button>
+        <button type="button" data-help-target="help-overview">Parte superior</button>
+        <button type="button" data-help-target="help-mailbox">Bandeja</button>
+        <button type="button" data-help-target="help-workflow">Seguimientos</button>
+        <button type="button" data-help-target="help-clients">Clientes</button>
+        <button type="button" data-help-target="help-ai">IA</button>
+        <button type="button" data-help-target="help-reports">Informes</button>
+        <button type="button" data-help-target="help-settings">Configuración</button>
+      </nav>
+      <label class="help-search">
+        <span class="sr-only">Buscar en la guía</span>
+        <input id="helpSearch" type="search" placeholder="Buscar en la guía…" autocomplete="off" />
+      </label>
+    </div>
+    <div class="help-panel-body">
+      <p class="help-intro">Esta aplicación organiza el trabajo comercial de Gmail para que puedas revisar primero lo importante y actuar después. No necesitas saber programación: cada apartado te indica qué puedes hacer. Por privacidad, <strong>cada usuario solo puede ver los correos de su propia cuenta autorizada; ni siquiera el administrador puede leer los correos de los demás.</strong></p>
+
+      <section id="help-start" class="help-section">
+        <h3>Para empezar</h3>
+        <p><strong>Qué es:</strong> el primer paso para trabajar con tus correos.</p>
+        <ol>
+          <li>Pulsa el icono de salida junto a tu cuenta o <strong>“Cambiar de cuenta”</strong> en el menú.</li>
+          <li>Elige la cuenta de Google que vas a utilizar.</li>
+          <li>Acepta los permisos de Gmail si Google los solicita.</li>
+          <li>Vuelve a la aplicación y comprueba que aparece tu correo arriba.</li>
+        </ol>
+        <p class="help-subtle">Si no puedes entrar, el administrador debe autorizar primero ese correo desde “Usuarios”.</p>
+      </section>
+
+      <section id="help-overview" class="help-section">
+        <h3>Qué significa la parte superior</h3>
+        <ul>
+          <li><strong>“Conectado como”:</strong> indica qué cuenta de Gmail estás utilizando ahora.</li>
+          <li><strong>Luna o sol:</strong> cambia entre modo oscuro y modo claro. No cambia ningún dato.</li>
+          <li><strong>Icono de salida:</strong> desconecta la cuenta actual para entrar con otra autorizada.</li>
+          <li><strong>Menú de la izquierda:</strong> sirve para cambiar entre bandeja, clientes, IA e informes.</li>
+        </ul>
+        <p class="help-subtle">La cuenta visible arriba es importante: las búsquedas y los análisis se hacen sobre esa cuenta.</p>
+      </section>
+
+      <section id="help-mailbox" class="help-section">
+        <h3>Bandeja comercial</h3>
+        <p><strong>Qué es:</strong> una vista más ordenada de los correos que pueden tener interés comercial.</p>
+        <ol>
+          <li>Mira el remitente y el asunto para saber de qué trata el correo.</li>
+          <li>Pulsa sobre el mensaje para leer la conversación completa.</li>
+          <li>Usa <strong>“Responder”</strong> para contestar dentro del mismo hilo.</li>
+          <li>Usa <strong>“Redactar”</strong> para escribir un correo nuevo.</li>
+          <li>Revisa el destinatario y el texto antes de enviarlo.</li>
+        </ol>
+        <p class="help-subtle"><strong>“Actualizar Gmail”</strong> pide los mensajes nuevos en ese momento. Si acabas de enviar un correo desde Gmail y no aparece, actualiza la bandeja.</p>
+      </section>
+
+      <section id="help-workflow" class="help-section">
+        <h3>Seguimientos y compromisos</h3>
+        <p><strong>Seguimientos:</strong> son asuntos que parecen necesitar una respuesta posterior.</p>
+        <ul>
+          <li>Abre uno para recordar de qué conversación sale.</li>
+          <li>Comprueba si ya se ha respondido antes de contactar de nuevo.</li>
+          <li>Marca el asunto como atendido cuando ya no quede nada pendiente.</li>
+        </ul>
+        <p><strong>Compromisos:</strong> son tareas, fechas o promesas que aparecen en los correos.</p>
+        <ul>
+          <li>Comprueba quién debe hacer cada cosa.</li>
+          <li>Revisa la fecha o el plazo.</li>
+          <li>Úsalo como recordatorio, no como sustituto de tu agenda.</li>
+        </ul>
+      </section>
+
+      <section id="help-clients" class="help-section">
+        <h3>Clientes</h3>
+        <p><strong>Qué es:</strong> una lista de las personas o empresas que aparecen en los correos revisados.</p>
+        <ol>
+          <li>Escribe un correo en <strong>“Buscar cliente”</strong>.</li>
+          <li>Elige cuántos clientes quieres ver por página.</li>
+          <li>Pulsa <strong>“Ver historial”</strong> para consultar sus conversaciones.</li>
+          <li>Pulsa <strong>“Analizar necesidades”</strong> si quieres pedir una revisión a la IA.</li>
+        </ol>
+        <p class="help-subtle">Que una dirección aparezca no significa necesariamente que sea un cliente: revisa siempre el historial.</p>
+      </section>
+
+      <section id="help-ai" class="help-section">
+        <h3>Consultar a la IA</h3>
+        <p><strong>Qué es:</strong> una ayuda para leer muchos correos y encontrar información útil más rápido.</p>
+        <ol>
+          <li>Escribe una pregunta concreta o usa un botón de ejemplo.</li>
+          <li>Elige el periodo que quieres revisar.</li>
+          <li>Elige si analizará bandeja y enviados, todos los mensajes o spam.</li>
+          <li>Comprueba el aviso de coste si aparece.</li>
+          <li>Confirma la consulta y espera el resultado.</li>
+        </ol>
+        <p class="help-subtle"><strong>Importante:</strong> la IA puede equivocarse. Lee los hechos, separa las inferencias y revisa el resultado antes de contactar con un cliente.</p>
+      </section>
+
+      <section id="help-reports" class="help-section">
+        <h3>Informes</h3>
+        <p><strong>Qué es:</strong> un resumen general para saber cómo está el trabajo comercial.</p>
+        <ul>
+          <li>Cuántos mensajes se han revisado.</li>
+          <li>Qué seguimientos y compromisos están pendientes.</li>
+          <li>Qué clientes o conversaciones concentran más actividad.</li>
+        </ul>
+        <p class="help-subtle">El informe resume la información disponible; si la bandeja no está actualizada, el resumen tampoco lo estará.</p>
+      </section>
+
+      <section id="help-settings" class="help-section">
+        <h3>Configuración y usuarios</h3>
+        <p><strong>Configuración IA:</strong> permite elegir la conexión de OpenAI o Claude y revisar qué proveedor se utilizará.</p>
+        <p><strong>Usuarios:</strong> solo el administrador puede añadir correos, elegir si son “Comercial” o “Administrador”, desconectarlos o eliminarlos.</p>
+        <p class="help-subtle">Un comercial puede trabajar con sus correos autorizados, pero no puede cambiar la configuración de la empresa.</p>
+      </section>
+
+      <p class="help-note">Consejo: si algo no aparece, actualiza Gmail desde la bandeja antes de sacar conclusiones.</p>
+    </div>
+  </aside>
+</div>
+
+<script is:inline src="/scripts/help.js"></script>
+
+<style is:global>
+  .help-panel-wrap { display: contents; }
+  body.help-open { overflow: hidden; }
+  .help-trigger { display: inline-flex; width: auto; min-width: 40px; height: 40px; gap: 2px; padding: 0 10px; border: 1px solid var(--border); color: var(--ink); background: var(--panel); font-size: 17px; line-height: 1; white-space: nowrap; }
+  .help-trigger:hover, .help-trigger:focus-visible { color: var(--ink); background: var(--surface-alt); }
+  .help-trigger-icon { display: block; width: 17px; height: 17px; background: currentColor; mask: url('/icons/home/book-2.svg') center / contain no-repeat; -webkit-mask: url('/icons/home/book-2.svg') center / contain no-repeat; }
+  .help-trigger-question { display: block; width: 17px; height: 17px; background: currentColor; mask: url('/icons/home/help-octagon.svg') center / contain no-repeat; -webkit-mask: url('/icons/home/help-octagon.svg') center / contain no-repeat; }
+  .help-overlay { position: fixed; inset: 0; z-index: 90; background: rgba(35, 31, 32, .34); }
+  .help-overlay[hidden] { display: none; }
+  .help-panel { position: fixed; top: 0; right: 0; z-index: 100; display: flex; flex-direction: column; width: min(560px, calc(100vw - 20px)); height: 100vh; border-left: 1px solid var(--border); background: var(--panel); box-shadow: -18px 0 44px rgba(35, 31, 32, .18); transform: translateX(105%); visibility: hidden; transition: transform .2s ease, visibility .2s ease; }
+  .help-panel.is-open { transform: translateX(0); visibility: visible; }
+  .help-panel-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 24px 24px 18px; border-bottom: 1px solid var(--border); }
+  .help-panel-header .eyebrow { margin-bottom: 4px; }
+  .help-panel-header h2 { margin: 0; font-size: 24px; }
+  .help-close { width: 40px; height: 40px; padding: 0; background: transparent; color: var(--ink); }
+  .help-close-icon { display: block; width: 28px; height: 28px; background: currentColor; mask: url('/icons/home/square-rounded-x.svg') center / contain no-repeat; -webkit-mask: url('/icons/home/square-rounded-x.svg') center / contain no-repeat; }
+  .help-close:hover, .help-close:focus-visible { background: transparent; color: var(--orange-dark); }
+  .help-tools { position: sticky; top: 0; z-index: 2; padding: 12px 24px 14px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  .help-nav { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 9px; scrollbar-width: thin; }
+  .help-nav button { flex: 0 0 auto; min-height: 30px; padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); background: var(--surface-soft); font-size: 12px; font-weight: 650; white-space: nowrap; }
+  .help-nav button:hover, .help-nav button:focus-visible { color: var(--ink); background: var(--surface-alt); }
+  .help-search { display: block; }
+  .help-search input { width: 100%; min-height: 38px; padding: 8px 11px; border: 1px solid var(--border); border-radius: 9px; color: var(--ink); background: var(--surface-input); font: inherit; }
+  .help-search input:focus-visible { outline: 3px solid rgba(240, 162, 79, .2); outline-offset: 1px; }
+  .help-panel-body { overflow-y: auto; padding: 20px 24px 36px; }
+  .help-intro { margin: 0 0 18px; color: var(--body-copy); }
+  .help-section { padding: 15px 0; border-top: 1px solid var(--border); }
+  .help-section h3 { margin: 0 0 5px; color: var(--ink); font-size: 15px; }
+  .help-section p { margin: 0; color: var(--body-copy); font-size: 13px; }
+  .help-section ol, .help-section ul { display: grid; gap: 6px; margin: 9px 0; padding-left: 20px; color: var(--body-copy); font-size: 13px; }
+  .help-section li::marker { color: var(--orange-dark); font-weight: 700; }
+  .help-subtle { margin-top: 9px !important; color: var(--muted) !important; font-size: 12px !important; }
+  .help-note { margin: 18px 0 0; padding: 12px; border-radius: 10px; color: var(--orange-dark); background: var(--surface-alt); font-size: 12px; }
+  @media (prefers-reduced-motion: reduce) { .help-panel { transition: none; } }
+  @media (max-width: 640px) { .help-trigger { padding: 0 10px; } .help-panel-header { padding: 20px 18px 15px; } .help-tools { padding: 10px 18px 12px; } .help-panel-body { padding: 18px 18px 30px; } }
+</style>

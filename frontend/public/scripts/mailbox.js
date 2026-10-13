@@ -41,6 +41,11 @@
   let syncing = false;
   let syncTimer = null;
 
+  const requestedMailbox = new URLSearchParams(window.location.search).get('mailbox');
+  if (requestedMailbox && [...mailboxNode.options].some((option) => option.value === requestedMailbox)) {
+    mailboxNode.value = requestedMailbox;
+  }
+
   function clearUndo() {
     undoState = null;
     undoButton.disabled = false;
@@ -145,6 +150,9 @@
       } else if (mailboxNode.value === 'appArchived') {
         archivedNoticeNode.textContent = 'Esta vista solo incluye correos archivados desde Asistente Comercial. No guarda el contenido del mensaje, solo la acción realizada.';
         archivedNoticeNode.hidden = false;
+      } else if (mailboxNode.value === 'trash') {
+        archivedNoticeNode.textContent = 'Esta vista muestra los correos que Gmail ha enviado a la papelera. Pulsa «Restaurar» para devolver un correo a Recibidos. Gmail puede eliminarlos definitivamente después de un tiempo.';
+        archivedNoticeNode.hidden = false;
       } else {
         archivedNoticeNode.hidden = true;
       }
@@ -189,27 +197,36 @@
       const button = text('button', 'Ver hilo completo');
       button.className = 'thread-button';
       button.dataset.threadId = message.threadId || '';
-      article.append(button);
+      const actionBar = document.createElement('div');
+      actionBar.className = 'message-action-bar';
       const actions = document.createElement('div');
       actions.className = 'message-actions';
       const readButton = text('button', message.labelIds?.includes('UNREAD') ? 'Marcar leído' : 'Marcar no leído');
+      readButton.className = 'message-action-unread';
       readButton.type = 'button';
       readButton.dataset.messageAction = message.labelIds?.includes('UNREAD') ? 'markRead' : 'markUnread';
       readButton.dataset.messageId = message.id;
       const isArchivedMailbox = mailboxNode.value === 'archived' || mailboxNode.value === 'appArchived';
-      const archiveButton = text('button', isArchivedMailbox ? 'Desarchivar' : 'Archivar');
+      const isTrashMailbox = mailboxNode.value === 'trash';
+      const archiveButton = text('button', isTrashMailbox ? 'Restaurar' : isArchivedMailbox ? 'Desarchivar' : 'Archivar');
+      archiveButton.className = 'message-action-archive';
       archiveButton.type = 'button';
-      archiveButton.dataset.messageAction = isArchivedMailbox ? 'unarchive' : 'archive';
+      archiveButton.dataset.messageAction = isTrashMailbox ? 'restore' : isArchivedMailbox ? 'unarchive' : 'archive';
       archiveButton.dataset.messageId = message.id;
-      const trashButton = text('button', 'Papelera', 'danger');
-      trashButton.type = 'button';
-      trashButton.dataset.messageAction = 'trash';
-      trashButton.dataset.messageId = message.id;
       const replyButton = text('button', 'Responder');
       replyButton.type = 'button';
       replyButton.dataset.replyMessageId = message.id;
-      actions.append(readButton, archiveButton, trashButton, replyButton);
-      article.append(actions);
+      actions.append(readButton, archiveButton);
+      if (!isTrashMailbox) {
+        const trashButton = text('button', 'Papelera', 'danger message-action-trash');
+        trashButton.type = 'button';
+        trashButton.dataset.messageAction = 'trash';
+        trashButton.dataset.messageId = message.id;
+        actions.append(trashButton);
+      }
+      actions.append(replyButton);
+      actionBar.append(button, text('span', '|', 'message-action-divider'), actions);
+      article.append(actionBar);
       const actionStatus = document.createElement('p');
       actionStatus.className = 'message-action-status muted';
       actionStatus.setAttribute('aria-live', 'polite');
@@ -227,7 +244,7 @@
       const shared = !forceFetch && mailboxNode.value === 'inbox' && window.__commercialNavDataPromise
         ? await window.__commercialNavDataPromise
         : null;
-      const refreshParam = mailboxNode.value === 'sent' ? '&refresh=1' : '';
+      const refreshParam = mailboxNode.value === 'sent' || mailboxNode.value === 'trash' ? '&refresh=1' : '';
       const messageResult = shared?.messages?.messages
         ? shared.messages
         : await fetchJson('/gmail/messages?max=10&mailbox=' + encodeURIComponent(mailboxNode.value) + refreshParam);
@@ -353,8 +370,14 @@
           body: JSON.stringify({ action }),
         });
         const target = messages.find((message) => message.id === actionButton.dataset.messageId);
-        if (result.action === 'trash' || (result.action === 'archive' && mailboxNode.value === 'inbox') || (result.action === 'unarchive' && (mailboxNode.value === 'archived' || mailboxNode.value === 'appArchived'))) {
+        if (result.action === 'trash' || (result.action === 'restore' && mailboxNode.value === 'trash') || (result.action === 'archive' && mailboxNode.value === 'inbox') || (result.action === 'unarchive' && (mailboxNode.value === 'archived' || mailboxNode.value === 'appArchived'))) {
           messages = messages.filter((message) => message.id !== actionButton.dataset.messageId);
+          if (result.action === 'trash' && target) {
+            showUndo({ ...target, labelIds: [...(target.labelIds || [])] }, 'restore', 'Correo enviado a la papelera.');
+          }
+          if (result.action === 'restore' && target) {
+            showUndo({ ...target, labelIds: [...(target.labelIds || [])] }, 'trash', 'Correo restaurado en Recibidos.');
+          }
           if (result.action === 'archive' && target) {
             showUndo({ ...target, labelIds: [...(target.labelIds || [])] }, 'unarchive', 'Correo archivado.');
           }
@@ -428,7 +451,13 @@
         body: JSON.stringify({ action: currentUndo.inverseAction }),
       });
       const restored = { ...currentUndo.message, labelIds: [...(currentUndo.message.labelIds || [])] };
-      if (currentUndo.inverseAction === 'unarchive') {
+      if (currentUndo.inverseAction === 'restore') {
+        restored.labelIds = [...new Set([...restored.labelIds.filter((label) => label !== 'TRASH'), 'INBOX'])];
+        if (mailboxNode.value === 'inbox' && !messages.some((message) => message.id === restored.id)) messages = [restored, ...messages];
+      } else if (currentUndo.inverseAction === 'trash') {
+        restored.labelIds = [...new Set([...restored.labelIds.filter((label) => label !== 'INBOX'), 'TRASH'])];
+        if (mailboxNode.value === 'trash' && !messages.some((message) => message.id === restored.id)) messages = [restored, ...messages];
+      } else if (currentUndo.inverseAction === 'unarchive') {
         restored.labelIds = [...new Set([...restored.labelIds, 'INBOX'])];
         if (mailboxNode.value === 'inbox' && !messages.some((message) => message.id === restored.id)) messages = [restored, ...messages];
       } else if (currentUndo.inverseAction === 'archive') {

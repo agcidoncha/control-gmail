@@ -804,6 +804,8 @@ app.get<{ Querystring: { max?: string; mailbox?: string; pageToken?: string; ref
             ? 'archived'
             : request.query.mailbox === 'appArchived'
               ? 'appArchived'
+              : request.query.mailbox === 'trash'
+                ? 'trash'
             : 'inbox';
       const context = readSessionContext(request.headers.cookie);
       const page = await listRecentMessagesPage(account, Number(request.query.max ?? 10), mailbox, request.query.pageToken, context?.organizationId, request.query.refresh === '1');
@@ -967,7 +969,7 @@ app.patch<{ Params: { messageId: string }; Body: { action?: GmailMessageAction }
     if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
 
     const action = request.body?.action;
-    if (!action || !['markRead', 'markUnread', 'archive', 'unarchive', 'trash'].includes(action)) {
+    if (!action || !['markRead', 'markUnread', 'archive', 'unarchive', 'trash', 'restore'].includes(action)) {
       return reply.code(400).send({ error: 'Acción de correo no válida.' });
     }
 

@@ -33,9 +33,9 @@ export type GmailListMessage = {
   bounced: boolean;
 };
 
-export type GmailMailbox = 'inbox' | 'sent' | 'archived' | 'appArchived' | 'spam';
+export type GmailMailbox = 'inbox' | 'sent' | 'archived' | 'appArchived' | 'spam' | 'trash';
 
-export type GmailMessageAction = 'markRead' | 'markUnread' | 'archive' | 'unarchive' | 'trash';
+export type GmailMessageAction = 'markRead' | 'markUnread' | 'archive' | 'unarchive' | 'trash' | 'restore';
 
 export type GmailSendInput = {
   to: string;
@@ -394,17 +394,20 @@ async function getGmailMessageMetadata(gmail: ReturnType<typeof google.gmail>, i
   const headers = Object.fromEntries(
     (data.payload?.headers ?? []).map((header) => [header.name ?? '', header.value ?? '']),
   );
+  const subject = decodeGmailHeader(headers.Subject || '(Sin asunto)');
+  const from = decodeGmailHeader(headers.From || '(Remitente desconocido)');
+  const to = decodeGmailHeader(headers.To || '');
   return {
     id,
     threadId: data.threadId ?? null,
-    subject: headers.Subject || '(Sin asunto)',
-    from: headers.From || '(Remitente desconocido)',
-    to: headers.To || '',
+    subject,
+    from,
+    to,
     date: headers.Date || null,
     snippet: cleanEmailBody(data.snippet ?? ''),
     labelIds: data.labelIds ?? [],
     important: (data.labelIds ?? []).includes('IMPORTANT'),
-    bounced: (data.labelIds ?? []).includes('INBOX') && looksLikeBounce(headers.Subject || '', data.snippet ?? ''),
+    bounced: (data.labelIds ?? []).includes('INBOX') && looksLikeBounce(subject, data.snippet ?? ''),
   };
 }
 
@@ -432,9 +435,9 @@ function fromStoredMessage(message: StoredGmailMessage): GmailListMessage {
   return {
     id: message.id,
     threadId: message.threadId,
-    subject: message.subject,
-    from: message.from,
-    to: message.to,
+    subject: decodeGmailHeader(message.subject),
+    from: decodeGmailHeader(message.from),
+    to: decodeGmailHeader(message.to),
     date: message.date,
     snippet: message.snippet,
     labelIds: message.labelIds,
@@ -476,6 +479,9 @@ export async function modifyGmailMessage(email: string, messageId: string, actio
   const gmail = await getGmailClient(email);
   if (action === 'trash') {
     await gmail.users.messages.trash({ userId: 'me', id: messageId });
+  } else if (action === 'restore') {
+    await gmail.users.messages.untrash({ userId: 'me', id: messageId });
+    await gmail.users.messages.modify({ userId: 'me', id: messageId, requestBody: { addLabelIds: ['INBOX'], removeLabelIds: ['TRASH'] } });
   } else if (action === 'markRead') {
     await gmail.users.messages.modify({ userId: 'me', id: messageId, requestBody: { removeLabelIds: ['UNREAD'] } });
   } else if (action === 'markUnread') {
@@ -563,7 +569,7 @@ export async function listRecentMessages(email: string, maxResults = 10, mailbox
     const messages = await listAppArchivedMessages(email, organizationId, maxResults);
     return messages.messages.filter((message) => !query || `${message.subject} ${message.from} ${message.to} ${message.snippet}`.toLowerCase().includes(query.toLowerCase()));
   }
-  if (mailbox === 'archived' || mailbox === 'spam') {
+  if (mailbox === 'archived' || mailbox === 'spam' || mailbox === 'trash') {
     const cacheKey = messageCacheKey(email, mailbox, query);
     const cached = messageCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now() && cached.value.length >= maxResults) {
@@ -575,7 +581,7 @@ export async function listRecentMessages(email: string, maxResults = 10, mailbox
 
     const request = (async () => {
       const gmail = await getGmailClient(email);
-      const label = mailbox === 'spam' ? 'SPAM' : undefined;
+      const label = mailbox === 'spam' ? 'SPAM' : mailbox === 'trash' ? 'TRASH' : undefined;
       const mailboxQuery = [mailbox === 'archived' ? archivedMailboxQuery : '', query].filter(Boolean).join(' ');
       const page = await listMessagesForLabel(gmail, label, maxResults, undefined, mailboxQuery);
       nextPageTokenCache.set(cacheKey, page.nextPageToken);
@@ -613,8 +619,12 @@ export async function listRecentMessagesPage(
       nextPageToken: page.nextOffset === null ? null : encodePageOffset(page.nextOffset),
     };
   }
-  if (mailbox === 'archived' || mailbox === 'spam') {
+  if (mailbox === 'archived' || mailbox === 'spam' || mailbox === 'trash') {
     const cacheKey = messageCacheKey(email, mailbox);
+    if (forceRefresh) {
+      messageCache.delete(cacheKey);
+      nextPageTokenCache.delete(cacheKey);
+    }
     if (!pageToken) {
       const messages = await listRecentMessages(email, maxResults, mailbox);
       return {
@@ -624,7 +634,7 @@ export async function listRecentMessagesPage(
     }
 
     const gmail = await getGmailClient(email);
-    const label = mailbox === 'spam' ? 'SPAM' : undefined;
+    const label = mailbox === 'spam' ? 'SPAM' : mailbox === 'trash' ? 'TRASH' : undefined;
     return listMessagesForLabel(gmail, label, maxResults, pageToken, mailbox === 'archived' ? archivedMailboxQuery : '');
   }
 
@@ -695,7 +705,7 @@ async function listAnalysisMessagesForScope(email: string, analysisWindow: Analy
 
 async function listAnalysisMessagesWithClient(
   gmail: ReturnType<typeof google.gmail>,
-  label: 'INBOX' | 'SENT' | 'SPAM' | undefined,
+  label: 'INBOX' | 'SENT' | 'SPAM' | 'TRASH' | undefined,
   analysisWindow: AnalysisWindow,
   maxMessages: number,
 ) {
@@ -1021,14 +1031,17 @@ async function getThreadMessagesFromGmail(gmail: ReturnType<typeof google.gmail>
     const headers = Object.fromEntries(
       (message.payload?.headers ?? []).map((header) => [header.name ?? '', header.value ?? '']),
     );
+    const subject = decodeGmailHeader(headers.Subject || '(Sin asunto)');
+    const from = decodeGmailHeader(headers.From || '(Remitente desconocido)');
+    const to = decodeGmailHeader(headers.To || '');
 
     const body = cleanEmailBody(extractText(message.payload));
     return {
       id: message.id ?? null,
       threadId: message.threadId ?? threadId,
-      subject: headers.Subject || '(Sin asunto)',
-      from: headers.From || '(Remitente desconocido)',
-      to: headers.To || '',
+      subject,
+      from,
+      to,
       date: headers.Date || null,
       internalDate: message.internalDate ? Number(message.internalDate) : null,
       body,
@@ -1188,9 +1201,77 @@ function decodeHtmlEntities(value: string): string {
   return decoded;
 }
 
+const cp1252SpecialCharacters: Record<string, number> = {
+  '€': 0x80, '‚': 0x82, 'ƒ': 0x83, '„': 0x84, '…': 0x85, '†': 0x86, '‡': 0x87,
+  'ˆ': 0x88, '‰': 0x89, 'Š': 0x8a, '‹': 0x8b, 'Œ': 0x8c, 'Ž': 0x8e, '‘': 0x91,
+  '’': 0x92, '“': 0x93, '”': 0x94, '•': 0x95, '–': 0x96, '—': 0x97, '˜': 0x98,
+  '™': 0x99, 'š': 0x9a, '›': 0x9b, 'œ': 0x9c, 'ž': 0x9e, 'Ÿ': 0x9f,
+};
+
+function decodeHeaderBytes(bytes: Uint8Array, charset: string): string {
+  const normalizedCharset = charset.toLowerCase().replace(/[_-]/g, '');
+  if (normalizedCharset === 'utf8' || normalizedCharset === 'usascii' || normalizedCharset === 'ascii') {
+    return new TextDecoder('utf-8').decode(bytes);
+  }
+  if (normalizedCharset === 'iso88591' || normalizedCharset === 'latin1' || normalizedCharset === 'windows1252' || normalizedCharset === 'cp1252') {
+    return new TextDecoder('windows-1252').decode(bytes);
+  }
+  return new TextDecoder('utf-8').decode(bytes);
+}
+
+function decodeEncodedHeaderWord(charset: string, encoding: string, value: string): string {
+  if (encoding.toLowerCase() === 'b') {
+    try {
+      return decodeHeaderBytes(Buffer.from(value, 'base64'), charset);
+    } catch {
+      return value;
+    }
+  }
+
+  const bytes: number[] = [];
+  const quoted = value.replace(/_/g, ' ');
+  for (let index = 0; index < quoted.length; index += 1) {
+    if (quoted[index] === '=' && /^[0-9a-f]{2}$/i.test(quoted.slice(index + 1, index + 3))) {
+      bytes.push(Number.parseInt(quoted.slice(index + 1, index + 3), 16));
+      index += 2;
+    } else {
+      const codePoint = quoted.codePointAt(index) ?? 0;
+      bytes.push(codePoint <= 0xff ? codePoint : 0x3f);
+      if (codePoint > 0xffff) index += 1;
+    }
+  }
+  return decodeHeaderBytes(Uint8Array.from(bytes), charset);
+}
+
+function repairMojibake(value: string): string {
+  let repaired = value;
+  for (let pass = 0; pass < 2; pass += 1) {
+    if (!/[ÃÂâ€šœžŸƒ]/.test(repaired)) break;
+    const bytes = Uint8Array.from(Array.from(repaired, (character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return cp1252SpecialCharacters[character] ?? (codePoint <= 0xff ? codePoint : 0x3f);
+    }));
+    try {
+      const candidate = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      if (candidate === repaired) break;
+      repaired = candidate;
+    } catch {
+      break;
+    }
+  }
+  return repaired;
+}
+
+function decodeGmailHeader(value: string): string {
+  const decoded = value.replace(/=\?([^?\s]+)\?([bBqQ])\?([^?]*)\?=/g, (_match, charset: string, encoding: string, encodedValue: string) => (
+    decodeEncodedHeaderWord(charset, encoding, encodedValue)
+  ));
+  return repairMojibake(decoded);
+}
+
 async function listMessagesForLabel(
   gmail: ReturnType<typeof google.gmail>,
-  label: 'INBOX' | 'SENT' | 'SPAM' | undefined,
+  label: 'INBOX' | 'SENT' | 'SPAM' | 'TRASH' | undefined,
   maxResults: number,
   pageToken?: string,
   query = '',
@@ -1214,18 +1295,21 @@ async function listMessagesForLabel(
       const headers = Object.fromEntries(
         (data.payload?.headers ?? []).map((header) => [header.name ?? '', header.value ?? '']),
       );
+      const subject = decodeGmailHeader(headers.Subject || '(Sin asunto)');
+      const from = decodeGmailHeader(headers.From || '(Remitente desconocido)');
+      const to = decodeGmailHeader(headers.To || '');
 
       return {
         id,
         threadId: data.threadId ?? null,
-        subject: headers.Subject || '(Sin asunto)',
-        from: headers.From || '(Remitente desconocido)',
-        to: headers.To || '',
+        subject,
+        from,
+        to,
         date: headers.Date || null,
         snippet: cleanEmailBody(data.snippet ?? ''),
         labelIds: data.labelIds ?? [],
         important: (data.labelIds ?? []).includes('IMPORTANT'),
-        bounced: label === 'INBOX' && looksLikeBounce(headers.Subject || '', data.snippet ?? ''),
+        bounced: label === 'INBOX' && looksLikeBounce(subject, data.snippet ?? ''),
       };
     });
 

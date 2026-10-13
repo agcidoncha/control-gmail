@@ -134,6 +134,10 @@ const fakeGmail = {
         capturedActions.push({ type: 'trash', id });
         return { data: { id } };
       },
+      untrash: async ({ id }: { id: string }) => {
+        capturedActions.push({ type: 'untrash', id });
+        return { data: { id } };
+      },
       send: async ({ requestBody }: { requestBody: { raw: string; threadId?: string } }) => {
         capturedSends.push({ raw: requestBody.raw, threadId: requestBody.threadId });
         return { data: { id: 'message-sent-new', threadId: requestBody.threadId ?? 'thread-new' } };
@@ -251,13 +255,16 @@ test('aplica acciones de correo únicamente al mensaje solicitado', async () => 
   await modifyGmailMessage(account, messages.inbox.id, 'archive');
   await modifyGmailMessage(account, messages.inbox.id, 'unarchive');
   await modifyGmailMessage(account, messages.inbox.id, 'trash');
+  await modifyGmailMessage(account, messages.inbox.id, 'restore');
 
-  assert.deepEqual(capturedActions.slice(-5), [
+  assert.deepEqual(capturedActions.slice(-7), [
     { type: 'modify', id: messages.inbox.id, body: { removeLabelIds: ['UNREAD'] } },
     { type: 'modify', id: messages.sent.id, body: { addLabelIds: ['UNREAD'] } },
     { type: 'modify', id: messages.inbox.id, body: { removeLabelIds: ['INBOX'] } },
     { type: 'modify', id: messages.inbox.id, body: { addLabelIds: ['INBOX'] } },
     { type: 'trash', id: messages.inbox.id },
+    { type: 'untrash', id: messages.inbox.id },
+    { type: 'modify', id: messages.inbox.id, body: { addLabelIds: ['INBOX'], removeLabelIds: ['TRASH'] } },
   ]);
 });
 

@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS gmail_actions (
   user_email VARCHAR(320) NOT NULL,
   account_email VARCHAR(320) NOT NULL,
   message_id VARCHAR(255) NOT NULL,
-  action ENUM('markRead', 'markUnread', 'archive', 'unarchive', 'trash', 'send') NOT NULL,
+  action ENUM('markRead', 'markUnread', 'archive', 'unarchive', 'trash', 'restore', 'send') NOT NULL,
   outcome ENUM('success', 'error') NOT NULL,
   error_code VARCHAR(128) NULL,
   created_at DATETIME(3) NOT NULL,

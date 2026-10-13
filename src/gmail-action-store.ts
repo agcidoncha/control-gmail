@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { getFirestore, isFirestoreEnabled } from './firestore.js';
 import { getMysqlPool, isMysqlEnabled, mysqlDateTime } from './mysql.js';
 
-export type GmailActionName = 'markRead' | 'markUnread' | 'archive' | 'unarchive' | 'trash' | 'send';
+export type GmailActionName = 'markRead' | 'markUnread' | 'archive' | 'unarchive' | 'trash' | 'restore' | 'send';
 export type GmailActionOutcome = 'success' | 'error';
 
 export type GmailActionRecord = {
