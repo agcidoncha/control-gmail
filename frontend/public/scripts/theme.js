@@ -2,6 +2,7 @@
   const root = document.documentElement;
   const toggle = document.querySelector('#themeToggle');
   const label = document.querySelector('#themeToggleLabel');
+  const icon = document.querySelector('#themeToggleIcon');
   if (!toggle) return;
 
   const storageKey = 'commercial-theme';
@@ -11,6 +12,9 @@
     toggle.setAttribute('aria-pressed', String(isDark));
     toggle.setAttribute('aria-label', isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
     if (label) label.textContent = isDark ? 'Modo claro' : 'Modo oscuro';
+    if (icon) {
+      icon.style.setProperty('--theme-icon-url', `url('/icons/home/${isDark ? 'sun' : 'moon-stars'}.svg')`);
+    }
     if (persist) window.localStorage.setItem(storageKey, isDark ? 'dark' : 'light');
   };
 

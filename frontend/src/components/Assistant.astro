@@ -77,6 +77,9 @@
   .analysis-custom-dates { display: flex; flex-wrap: wrap; gap: 12px; }
   .analysis-custom-dates label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
   .analysis-custom-dates input { padding: 9px 10px; border: 1px solid var(--border); border-radius: 9px; color: var(--ink); background: #fff; font: inherit; }
+  html[data-theme='dark'] .analysis-custom-dates label,
+  html[data-theme='dark'] .analysis-custom-dates input { color: #111; }
+  html[data-theme='dark'] .analysis-custom-dates input { color-scheme: light; }
   .analysis-cost-notice { margin: 0; color: var(--muted); font-size: 12px; }
   .analysis-cost-notice.warning { color: var(--orange-dark); font-weight: 700; }
   .assistant-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 5px; }
