@@ -153,6 +153,7 @@
       clientsNode.replaceChildren();
       attentionNode.replaceChildren();
       windowNode.textContent = '';
+      if (typeof window.showAppNotice === 'function') window.showAppNotice(error.message || 'No se pudo cargar el informe.', { title: 'No se pudo cargar el informe' });
       messageNode.textContent = 'Puedes volver a intentarlo con «Actualizar».';
       messageNode.className = 'form-message error';
     } finally {

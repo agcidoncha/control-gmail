@@ -19,16 +19,41 @@
   const sharedUsersNode = document.querySelector('#sharedAiUsers');
   const adminMessageNode = document.querySelector('#adminAiMessage');
   const guideRoleNode = document.querySelector('#aiGuideRole');
-  const assignmentWarningNode = document.querySelector('#aiAssignmentWarning');
   const assignmentWarningTitleNode = document.querySelector('#aiAssignmentWarningTitle');
   const assignmentWarningTextNode = document.querySelector('#aiAssignmentWarningText');
   const syncGlobalAiUsersNode = document.querySelector('#syncGlobalAiUsers');
-  if (!accountNode || !companyNameNode || !companyStatusNode || !companyDescriptionNode || !personalNameNode || !personalStatusNode || !personalDescriptionNode || !personalCard || !form || !personalProviderNode || !personalModelNode || !keyNode || !disconnectButton || !messageNode || !adminControls || !globalProviderNode || !globalModelNode || !sharedUsersNode || !adminMessageNode || !assignmentWarningNode || !assignmentWarningTitleNode || !assignmentWarningTextNode || !syncGlobalAiUsersNode) return;
+  const assignmentInfoModal = document.querySelector('#aiAssignmentInfoModal');
+  const assignmentInfoClose = document.querySelector('#aiAssignmentInfoClose');
+  if (!accountNode || !companyNameNode || !companyStatusNode || !companyDescriptionNode || !personalNameNode || !personalStatusNode || !personalDescriptionNode || !personalCard || !form || !personalProviderNode || !personalModelNode || !keyNode || !disconnectButton || !messageNode || !adminControls || !globalProviderNode || !globalModelNode || !sharedUsersNode || !adminMessageNode || !assignmentWarningTitleNode || !assignmentWarningTextNode || !syncGlobalAiUsersNode) return;
 
   const providerLabel = (provider) => provider === 'claude' ? 'Anthropic Claude' : provider === 'deepseek' ? 'DeepSeek' : 'OpenAI';
   const statusLabel = (status) => status === 'active' ? 'Activa' : status === 'not_configured' ? 'No configurada' : 'No conectada';
   let latestData = null;
   let latestAdminData = null;
+  let assignmentInfoWasShown = false;
+  let openAssignmentInfo = null;
+
+  if (assignmentInfoModal && assignmentInfoClose) {
+    let lastFocusedElement = null;
+    const closeAssignmentInfo = () => {
+      assignmentInfoModal.hidden = true;
+      document.documentElement.classList.remove('ai-assignment-info-open');
+      if (lastFocusedElement && typeof lastFocusedElement.focus === 'function') lastFocusedElement.focus();
+    };
+    openAssignmentInfo = () => {
+      lastFocusedElement = document.activeElement;
+      assignmentInfoModal.hidden = false;
+      document.documentElement.classList.add('ai-assignment-info-open');
+      assignmentInfoClose.focus();
+    };
+    assignmentInfoClose.addEventListener('click', closeAssignmentInfo);
+    assignmentInfoModal.addEventListener('click', (event) => {
+      if (event.target === assignmentInfoModal) closeAssignmentInfo();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (!assignmentInfoModal.hidden && event.key === 'Escape') closeAssignmentInfo();
+    });
+  }
 
   function modelTier(model = '') {
     const value = model.toLowerCase();
@@ -64,6 +89,9 @@
   }
 
   function showMessage(value, type = '') {
+    if (type === 'error' && typeof window.showAppNotice === 'function') {
+      window.showAppNotice(value, { title: 'No se pudo actualizar la conexión' });
+    }
     messageNode.textContent = value;
     messageNode.className = 'form-message' + (type ? ' ' + type : '');
   }
@@ -163,6 +191,9 @@
   });
 
   function showAdminMessage(value, type = '') {
+    if (type === 'error' && typeof window.showAppNotice === 'function') {
+      window.showAppNotice(value, { title: 'No se pudo actualizar la asignación' });
+    }
     adminMessageNode.textContent = value;
     adminMessageNode.className = 'form-message' + (type ? ' ' + type : '');
   }
@@ -175,15 +206,23 @@
         && (user.aiProvider !== data.activeProvider || user.aiModel !== data.activeModel);
     });
 
-    assignmentWarningNode.hidden = divergentUsers.length === 0;
     syncGlobalAiUsersNode.disabled = divergentUsers.length === 0;
     if (!divergentUsers.length) {
+      assignmentInfoWasShown = false;
       assignmentWarningTextNode.textContent = '';
+      if (assignmentInfoModal) {
+        assignmentInfoModal.hidden = true;
+        document.documentElement.classList.remove('ai-assignment-info-open');
+      }
       return;
     }
 
     assignmentWarningTitleNode.textContent = `${divergentUsers.length} comercial${divergentUsers.length === 1 ? '' : 'es'} con una asignación distinta`;
     assignmentWarningTextNode.textContent = `El modelo global es ${data.activeProvider} · ${data.activeModel}. Revisa estas asignaciones o sincronízalas si deben usarlo.`;
+    if (!assignmentInfoWasShown) {
+      assignmentInfoWasShown = true;
+      window.setTimeout(() => openAssignmentInfo?.(), 0);
+    }
   }
 
   function renderSharedUsers(users, data) {
@@ -214,7 +253,8 @@
       row.className = 'shared-ai-user';
       const heading = document.createElement('div');
       heading.className = 'shared-ai-user-heading';
-      const identity = document.createElement('strong');
+      const identity = document.createElement('span');
+      identity.className = 'shared-ai-user-email';
       identity.textContent = user.email;
       const role = document.createElement('small');
       role.textContent = user.role === 'admin' ? 'Administrador · acceso permanente' : 'Comercial';

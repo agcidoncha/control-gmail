@@ -250,6 +250,12 @@ export async function findStoredGmailMessages(email: string, clientEmail: string
     .slice(0, Math.min(Math.max(limit, 1), 100));
 }
 
+export async function listAllStoredGmailMessages(email: string, mailbox: StoredMailbox) {
+  return (await allStoredMessages(email))
+    .filter((message) => message.mailbox === mailbox)
+    .sort((left, right) => right.sortTimestamp - left.sortTimestamp);
+}
+
 async function allStoredMessages(email: string): Promise<StoredGmailMessage[]> {
   const accountEmail = normalizeEmail(email);
   if (isFirestoreEnabled()) {

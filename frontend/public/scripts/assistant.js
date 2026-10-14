@@ -17,7 +17,13 @@
   const clientStatusNode = document.querySelector('#assistantClientStatus');
   const loadingModal = document.querySelector('#assistantLoadingModal');
   const loadingDescription = document.querySelector('#assistantLoadingDescription');
-  if (!form || !questionNode || !submitButton || !connectionStatus || !messageNode || !answerNode || !analysisRangeNode || !analysisScopeNode || !customDatesNode || !analysisFromNode || !analysisToNode || !analysisCostNotice || !clientNode || !clientSearchNode || !clientResultsNode || !clientStatusNode || !loadingModal || !loadingDescription) return;
+  const confirmModal = document.querySelector('#assistantConfirmModal');
+  const confirmQuestionNode = document.querySelector('#assistantConfirmQuestion');
+  const confirmDetailsNode = document.querySelector('#assistantConfirmDetails');
+  const confirmCancelButton = document.querySelector('#assistantConfirmCancel');
+  const confirmAcceptButton = document.querySelector('#assistantConfirmAccept');
+  const resetButton = document.querySelector('#assistantReset');
+  if (!form || !questionNode || !submitButton || !connectionStatus || !messageNode || !answerNode || !analysisRangeNode || !analysisScopeNode || !customDatesNode || !analysisFromNode || !analysisToNode || !analysisCostNotice || !clientNode || !clientSearchNode || !clientResultsNode || !clientStatusNode || !loadingModal || !loadingDescription || !confirmModal || !confirmQuestionNode || !confirmDetailsNode || !confirmCancelButton || !confirmAcceptButton || !resetButton) return;
   const presetButtons = [...document.querySelectorAll('[data-assistant-prompt]')];
 
   const providerLabel = (provider) => provider === 'claude'
@@ -33,6 +39,9 @@
   const requestedClient = new URLSearchParams(window.location.search).get('client')?.trim().toLowerCase() || '';
 
   function showMessage(value, type = '') {
+    if (type === 'error' && typeof window.showAppNotice === 'function') {
+      window.showAppNotice(value, { title: 'No se puede continuar' });
+    }
     messageNode.textContent = value;
     messageNode.className = 'form-message' + (type ? ' ' + type : '');
   }
@@ -60,7 +69,7 @@
     if (!connection) {
       connectionStatus.textContent = 'Sin conexión IA';
       connectionStatus.className = 'status-pill status-warning';
-      showMessage('Conecta una clave personal o solicita al administrador acceso a la conexión global.');
+      showMessage('Conecta una clave personal o solicita al administrador acceso a la conexión global.', 'error');
       return;
     }
 
@@ -89,9 +98,11 @@
   function updateAnalysisWindow() {
     const isCustom = analysisRangeNode.value === 'custom';
     customDatesNode.hidden = !isCustom;
+    analysisCostNotice.hidden = !isCustom;
     analysisFromNode.required = isCustom;
     analysisToNode.required = isCustom;
-    const days = isCustom ? customRangeDays() : Number(analysisRangeNode.value);
+    if (!isCustom) return;
+    const days = customRangeDays();
     if (isCustom && !days) {
       analysisCostNotice.textContent = 'Elige una fecha inicial y una fecha final válidas.';
       analysisCostNotice.className = 'analysis-cost-notice warning';
@@ -128,8 +139,34 @@
       : selectedRange.analysisScope === 'spam'
         ? 'la carpeta Spam'
         : 'bandeja de entrada y enviados';
-    const clientLabel = selectedRange.clientEmail ? ` exclusivamente para ${selectedRange.clientEmail}` : '';
-    return window.confirm(`Esta acción consultará la IA y puede consumir crédito. Se revisarán ${selectedRange.days} días de ${scopeLabel}${clientLabel}. ¿Quieres ejecutar el análisis ahora?`);
+    const clientLabel = selectedRange.clientEmail || 'Todos los clientes (análisis general)';
+    const periodLabel = selectedRange.analysisFrom && selectedRange.analysisTo
+      ? `${formatDate(selectedRange.analysisFrom)} a ${formatDate(selectedRange.analysisTo)} (${selectedRange.days} días)`
+      : `últimos ${selectedRange.days} días`;
+    confirmQuestionNode.textContent = questionNode.value.trim();
+    confirmDetailsNode.textContent = `Cliente: ${clientLabel}\nPeriodo: ${periodLabel}\nAlcance: ${scopeLabel}`;
+    confirmModal.hidden = false;
+    const lastFocusedElement = document.activeElement;
+    return new Promise((resolve) => {
+      const close = (confirmed) => {
+        confirmModal.hidden = true;
+        document.documentElement.classList.remove('assistant-confirm-open');
+        document.removeEventListener('keydown', onKeyDown);
+        lastFocusedElement?.focus?.();
+        resolve(confirmed);
+      };
+      const onKeyDown = (event) => {
+        if (event.key === 'Escape') close(false);
+      };
+      confirmCancelButton.onclick = () => close(false);
+      confirmAcceptButton.onclick = () => close(true);
+      confirmModal.onclick = (event) => {
+        if (event.target === confirmModal) close(false);
+      };
+      document.addEventListener('keydown', onKeyDown);
+      document.documentElement.classList.add('assistant-confirm-open');
+      confirmAcceptButton.focus();
+    });
   }
 
   function addList(parent, title, values) {
@@ -160,7 +197,36 @@
     printButton.textContent = 'Imprimir / guardar PDF';
     printButton.title = 'Abre la ventana de impresión para imprimir o guardar la consulta como PDF';
     printButton.addEventListener('click', () => window.print());
-    toolbar.append(printButton);
+    const fullscreenButton = document.createElement('button');
+    fullscreenButton.type = 'button';
+    fullscreenButton.className = 'assistant-print-button assistant-fullscreen-button';
+    fullscreenButton.textContent = 'Pantalla completa';
+    fullscreenButton.title = 'Muestra el resultado de la consulta a pantalla completa';
+    const updateFullscreenButton = () => {
+      const isFullscreen = document.fullscreenElement === answerNode;
+      fullscreenButton.textContent = isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa';
+      fullscreenButton.title = isFullscreen
+        ? 'Vuelve a la vista normal de la consulta'
+        : 'Muestra el resultado de la consulta a pantalla completa';
+      fullscreenButton.setAttribute('aria-pressed', String(isFullscreen));
+    };
+    fullscreenButton.addEventListener('click', async () => {
+      try {
+        if (document.fullscreenElement === answerNode) {
+          await document.exitFullscreen();
+        } else if (typeof answerNode.requestFullscreen === 'function') {
+          await answerNode.requestFullscreen();
+        } else {
+          throw new Error('Tu navegador no permite abrir este resultado a pantalla completa.');
+        }
+      } catch (error) {
+        if (typeof window.showAppNotice === 'function') {
+          window.showAppNotice(error.message || 'No se pudo abrir la pantalla completa.', { title: 'Pantalla completa' });
+        }
+      }
+    });
+    document.addEventListener('fullscreenchange', updateFullscreenButton);
+    toolbar.append(printButton, fullscreenButton);
     answerNode.append(toolbar);
 
     const printMeta = document.createElement('p');
@@ -172,7 +238,9 @@
         ? `últimos ${context.selectedRange.days} días`
         : 'periodo seleccionado';
     const client = context.selectedRange?.clientEmail || 'todos los clientes';
-    printMeta.textContent = `Consulta comercial · Cliente: ${client} · Periodo: ${period} · Alcance: ${formatAnalysisScope(range?.scope || context.selectedRange?.analysisScope)}`;
+    const messageCount = Number.isInteger(context.messageCount) ? context.messageCount : null;
+    const countLabel = messageCount === null ? '' : ` · ${messageCount} ${messageCount === 1 ? 'mensaje analizado' : 'mensajes analizados'} en este periodo`;
+    printMeta.textContent = `Consulta comercial · Cliente: ${client} · Periodo: ${period} · Alcance: ${formatAnalysisScope(range?.scope || context.selectedRange?.analysisScope)}${countLabel}`;
     answerNode.append(printMeta);
 
     const printQuestion = document.createElement('p');
@@ -250,7 +318,7 @@
       showMessage(error.message || 'Revisa el periodo de análisis.', 'error');
       return;
     }
-    if (!confirmedSubmission && !confirmAnalysis(selectedRange)) return;
+    if (!confirmedSubmission && !(await confirmAnalysis(selectedRange))) return;
     confirmedSubmission = false;
     submitButton.disabled = true;
     answerNode.hidden = true;
@@ -264,7 +332,7 @@
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'No se pudo consultar al asistente.');
-      renderAnswer(data.analysis, { selectedRange, analysisWindow: data.analysisWindow, question });
+      renderAnswer(data.analysis, { selectedRange, analysisWindow: data.analysisWindow, question, messageCount: data.messageCount });
       const range = data.analysisWindow;
       const scopeLabel = range?.scope === 'all'
         ? 'todos los mensajes'
@@ -272,7 +340,15 @@
           ? 'Spam'
           : 'bandeja y enviados';
       const clientLabel = selectedRange.clientEmail ? ` · Cliente: ${selectedRange.clientEmail}` : '';
-      showMessage(range ? `Análisis completado: ${formatDate(range.from)} a ${formatDate(range.to)} · ${scopeLabel}${clientLabel}.` : 'Análisis completado.', 'success');
+      const countLabel = Number.isInteger(data.messageCount)
+        ? ` · ${data.messageCount} ${data.messageCount === 1 ? 'mensaje analizado' : 'mensajes analizados'}`
+        : '';
+      showMessage(range ? `Análisis completado: ${formatDate(range.from)} a ${formatDate(range.to)} · ${scopeLabel}${clientLabel}${countLabel}.` : `Análisis completado${countLabel}.`, 'success');
+      if (selectedClient() && Number.isInteger(data.messageCount)) {
+        const selectedOption = [...clientNode.options].find((option) => option.value === selectedClient());
+        if (selectedOption) selectedOption.textContent = `${selectedClient()} (${data.messageCount} ${data.messageCount === 1 ? 'mensaje' : 'mensajes'} en este periodo)`;
+        clientStatusNode.textContent = `Se han analizado ${data.messageCount} ${data.messageCount === 1 ? 'mensaje' : 'mensajes'} de ${selectedClient()} en este periodo.`;
+      }
       analysisCompleted = true;
     } catch (error) {
       showMessage(error.message || 'No se pudo consultar al asistente.', 'error');
@@ -284,7 +360,7 @@
   });
 
   presetButtons.forEach((button) => {
-    button.addEventListener('click', () => {
+    button.addEventListener('click', async () => {
       questionNode.value = button.dataset.assistantPrompt || '';
       if (!canAsk) {
         showMessage('Conecta una clave IA antes de iniciar el análisis.', 'error');
@@ -298,11 +374,35 @@
         showMessage(error.message || 'Revisa el periodo de análisis.', 'error');
         return;
       }
-      if (!confirmAnalysis(selectedRange)) return;
+      if (!(await confirmAnalysis(selectedRange))) return;
       confirmedSubmission = true;
       form.requestSubmit();
       questionNode.focus();
     });
+  });
+
+  resetButton.addEventListener('click', () => {
+    confirmedSubmission = false;
+    questionNode.value = '';
+    clientSearchNode.value = '';
+    clientNode.value = '';
+    clientNode.dispatchEvent(new Event('change', { bubbles: true }));
+    renderClientOptions();
+    analysisRangeNode.value = '30';
+    analysisScopeNode.value = 'mailbox';
+    analysisFromNode.value = '';
+    analysisToNode.value = '';
+    updateAnalysisWindow();
+    messageNode.textContent = '';
+    messageNode.className = 'form-message';
+    answerNode.replaceChildren();
+    answerNode.hidden = true;
+    loadingModal.hidden = true;
+    confirmModal.hidden = true;
+    document.documentElement.classList.remove('assistant-loading-open', 'assistant-confirm-open');
+    submitButton.disabled = !canAsk;
+    questionNode.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    questionNode.focus();
   });
 
   analysisRangeNode.addEventListener('change', updateAnalysisWindow);

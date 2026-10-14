@@ -8,30 +8,103 @@
       <span id="followUpCount" class="muted" aria-label="Cargando cantidad de seguimientos"><span class="skeleton skeleton-inline" aria-hidden="true"></span></span>
     </div>
 
+    <form id="followUpRangeForm" class="follow-up-range" aria-label="Elegir mensajes y fechas">
+      <div class="follow-up-range-control follow-up-page-size-fixed">
+        <span>Mostrar</span>
+        <span>10 seguimientos por página</span>
+      </div>
+      <label class="follow-up-range-control follow-up-date-mode-control">
+        <span>Buscar por fecha</span>
+        <select id="followUpDateMode">
+          <option value="this-month" selected>Este mes</option>
+          <option value="day">Un día concreto</option>
+          <option value="range">Un periodo</option>
+        </select>
+        <small id="followUpRangeSummary" class="follow-up-range-summary muted">Este mes: consultando…</small>
+      </label>
+      <label id="followUpExactDateField" class="follow-up-range-control" hidden>
+        <span>Fecha</span>
+        <input id="followUpExactDate" type="date" />
+      </label>
+      <div id="followUpDateRangeFields" class="follow-up-date-range" hidden>
+        <label class="follow-up-range-control">
+          <span>Desde</span>
+          <input id="followUpDateFrom" type="date" />
+        </label>
+        <label class="follow-up-range-control">
+          <span>Hasta</span>
+          <input id="followUpDateTo" type="date" />
+        </label>
+      </div>
+      <button id="applyFollowUpRange" type="submit">Aplicar</button>
+      <button id="clearFollowUpRange" class="secondary-button" type="button" hidden>Limpiar fechas</button>
+    </form>
+    <p class="follow-up-range-help muted">Se muestran 10 seguimientos por página.</p>
+
     <div class="follow-up-tools">
       <input id="followUpSearch" type="search" placeholder="Buscar cliente o asunto…" aria-label="Buscar seguimientos" />
-      <select id="followUpAge" aria-label="Filtrar por antigüedad">
-        <option value="all">Cualquier antigüedad</option>
-        <option value="5">Desde 5 días</option>
-        <option value="10">Desde 10 días</option>
-        <option value="15">Desde 15 días</option>
-      </select>
-      <select id="followUpCategory" aria-label="Filtrar por tipo de seguimiento">
-        <option value="all">Todos los motivos</option>
-        <option value="Posible presupuesto">Presupuestos</option>
-        <option value="Posible propuesta">Propuestas</option>
-        <option value="Briefing pendiente">Briefing</option>
-        <option value="Solicitud de información">Información</option>
-        <option value="Seguimiento general">General</option>
-      </select>
+      <div class="follow-up-category-filter">
+        <select id="followUpCategory" aria-label="Filtrar por tipo de seguimiento">
+          <option value="all">Todos los motivos</option>
+          <option value="Posible presupuesto">Presupuestos</option>
+          <option value="Posible propuesta">Propuestas</option>
+          <option value="Briefing pendiente">Briefing</option>
+          <option value="Solicitud de información">Información</option>
+          <option value="Seguimiento general">General</option>
+          <option value="Revisión humana">Revisión humana</option>
+        </select>
+        <button id="followUpCategoryInfoButton" class="follow-up-info-button" type="button" aria-label="Qué significa cada motivo" aria-haspopup="dialog">
+          <img src="/icons/home/question-mark.svg" alt="" aria-hidden="true" />
+        </button>
+      </div>
     </div>
+  </div>
 
-    <div id="followUpAlerts" class="follow-up-alerts" aria-live="polite" hidden></div>
+  <div class="follow-up-pagination follow-up-pagination-top" data-follow-up-pagination-container>
+    <div class="follow-up-pagination-actions">
+      <button class="secondary-button follow-up-pagination-arrow" type="button" data-follow-up-pagination="previous" aria-label="Página anterior" title="Página anterior" hidden><span class="follow-up-pagination-arrow-icon follow-up-pagination-arrow-left" aria-hidden="true"></span></button>
+      <span class="follow-up-page-numbers" data-follow-up-page-numbers aria-live="polite"></span>
+      <button class="secondary-button follow-up-pagination-arrow" type="button" data-follow-up-pagination="next" aria-label="Página siguiente" title="Página siguiente" hidden><span class="follow-up-pagination-arrow-icon follow-up-pagination-arrow-right" aria-hidden="true"></span></button>
+    </div>
+    <span class="follow-up-pagination-status muted" data-follow-up-pagination-status aria-live="polite"></span>
   </div>
 
   <div id="followUps" class="skeleton-list follow-ups-list" aria-live="polite" aria-busy="true" aria-label="Cargando seguimientos" aria-hidden="true">
     <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line short"></span></div>
     <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line short"></span></div>
+  </div>
+
+  <div class="follow-up-pagination" data-follow-up-pagination-container>
+    <div class="follow-up-pagination-actions">
+      <button class="secondary-button follow-up-pagination-arrow" type="button" data-follow-up-pagination="previous" aria-label="Página anterior" title="Página anterior" hidden><span class="follow-up-pagination-arrow-icon follow-up-pagination-arrow-left" aria-hidden="true"></span></button>
+      <span class="follow-up-page-numbers" data-follow-up-page-numbers aria-live="polite"></span>
+      <button class="secondary-button follow-up-pagination-arrow" type="button" data-follow-up-pagination="next" aria-label="Página siguiente" title="Página siguiente" hidden><span class="follow-up-pagination-arrow-icon follow-up-pagination-arrow-right" aria-hidden="true"></span></button>
+    </div>
+    <span class="follow-up-pagination-status muted" data-follow-up-pagination-status aria-live="polite"></span>
+  </div>
+
+  <div id="followUpCategoryInfoModal" class="follow-up-info-modal" hidden role="dialog" aria-modal="true" aria-labelledby="followUpCategoryInfoTitle" aria-describedby="followUpCategoryInfoDescription">
+    <div class="follow-up-info-dialog">
+      <div class="follow-up-info-heading">
+        <img src="/icons/home/question-mark.svg" alt="" aria-hidden="true" />
+        <h2 id="followUpCategoryInfoTitle">Qué significa cada motivo</h2>
+      </div>
+      <div id="followUpCategoryInfoDescription">
+        <p>Son categorías orientativas que la aplicación asigna automáticamente al revisar el asunto y el contenido del hilo. Primero aplica reglas rápidas; si no encuentra una señal clara, consulta un modelo económico. No son etiquetas de Gmail ni compromisos confirmados.</p>
+        <ul>
+          <li><strong>Presupuestos:</strong> aparecen referencias a presupuestos, precios, cotizaciones, tarifas o costes.</li>
+          <li><strong>Propuestas:</strong> aparecen propuestas, ofertas o términos equivalentes.</li>
+          <li><strong>Briefing:</strong> se menciona un briefing o brief pendiente.</li>
+          <li><strong>Información:</strong> se piden detalles, datos, confirmaciones o alcance.</li>
+          <li><strong>General:</strong> el hilo requiere seguimiento, pero no contiene señales claras de las categorías anteriores.</li>
+          <li><strong>Revisión humana:</strong> el significado no es suficientemente claro para clasificarlo con seguridad.</li>
+        </ul>
+        <p class="follow-up-info-subtle">Comprueba siempre el hilo completo antes de actuar: la clasificación es una ayuda para filtrar, no una decisión comercial.</p>
+      </div>
+      <div class="follow-up-info-actions">
+        <button id="followUpCategoryInfoClose" class="button-link" type="button">Entendido</button>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -39,15 +112,32 @@
 
 <style is:global>
   .follow-ups-screen { display: grid; gap: 14px; margin-top: 18px; }
+  .follow-up-range { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin: 14px 0 4px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-ai); }
+  .follow-up-range [hidden] { display: none; }
+  .follow-up-range-control { display: grid; flex: 0 0 auto; align-items: center; grid-template-columns: auto auto auto; gap: 7px; color: var(--muted); font-size: 12px; }
+  .follow-up-page-size-fixed { grid-template-columns: auto auto; }
+  .follow-up-range-control > span:first-child { color: var(--ink); font-weight: 700; }
+  .follow-up-range-control select { min-height: 44px; min-width: 0; }
+  .follow-up-range-control input { min-height: 36px; min-width: 0; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; color: var(--ink); background: var(--surface-input); font: inherit; }
+  .follow-up-date-mode-control { min-width: 0; grid-template-columns: auto minmax(190px, auto) auto; }
+  .follow-up-range-summary { font-size: 11px; white-space: nowrap; }
+  .follow-up-date-range { display: flex; flex-wrap: wrap; gap: 10px; }
+  .follow-up-date-range .follow-up-range-control { grid-template-columns: auto minmax(140px, 1fr); }
+  .follow-up-range button { min-height: 36px; padding: 7px 11px; border: 1px solid var(--border); border-radius: 8px; color: #fff; background: var(--orange); font: inherit; font-size: 12px; cursor: pointer; }
+  .follow-up-range button.secondary-button { color: var(--orange-dark); background: var(--warm); }
+  .follow-up-range button:hover, .follow-up-range button:focus-visible { background: var(--orange-dark); }
+  .follow-up-range button.secondary-button:hover, .follow-up-range button.secondary-button:focus-visible { color: var(--ink); background: var(--orange-light); }
+  .follow-up-range button:disabled { cursor: wait; opacity: .65; }
+  .follow-up-range-help { margin: 8px 0 0; font-size: 12px; }
   .follow-up-tools { display: flex; gap: 12px; margin: 18px 0 4px; }
   .follow-up-tools input { min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; background: var(--surface-input); color: var(--ink); }
   .follow-up-tools select { min-width: 0; }
+  .follow-up-tools select[hidden] { display: none; }
   .follow-up-tools input { flex: 1; }
-  .follow-up-alerts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 14px 0 6px; }
-  .follow-up-alert { display: grid; gap: 3px; justify-items: start; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; color: var(--ink); background: var(--surface-ai); text-align: left; }
-  .follow-up-alert:hover, .follow-up-alert:focus-visible { background: var(--surface-alt); transform: none; }
-  .follow-up-alert strong { font-size: 13px; font-weight: 500; }
-  .follow-up-alert span { color: var(--muted); font-size: 12px; font-weight: 400; }
+  .follow-up-category-filter { display: flex; align-items: center; gap: 8px; }
+  .follow-up-info-button { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; padding: 6px; border: 1px solid var(--border); border-radius: 50%; color: var(--muted); background: var(--surface-ai); cursor: pointer; }
+  .follow-up-info-button:hover, .follow-up-info-button:focus-visible { border-color: var(--orange-light); color: var(--orange-dark); background: var(--surface-hover); outline: none; }
+  .follow-up-info-button img { display: block; width: 100%; height: 100%; }
   .follow-ups-list { display: grid; gap: 12px; margin-top: 10px; }
   .follow-up { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); box-shadow: var(--shadow); }
   .follow-up strong, .follow-up small, .follow-up p { display: block; overflow-wrap: anywhere; }
@@ -83,9 +173,39 @@
   .thread-message strong, .thread-message small, .thread-message p { display: block; }
   .thread-message small { margin-top: 3px; color: var(--muted); }
   .thread-message p { margin: 7px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .follow-up-pagination { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 74px; margin: 26px 0; }
+  .follow-up-pagination-top { margin: 22px 0 28px; }
+  .follow-up-pagination[hidden] { display: none; }
+  .follow-up-pagination button[hidden] { display: none; }
+  .follow-up-pagination-actions { display: inline-flex; align-items: center; gap: 8px; }
+  .follow-up-pagination button { color: #171717; background: #fff; border: 1px solid #171717; font-size: 13px; }
+  .follow-up-pagination .follow-up-pagination-arrow { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; min-height: 34px; padding: 0; }
+  .follow-up-pagination-arrow-icon { display: block; width: 18px; height: 18px; background: currentColor; mask-position: center; mask-size: contain; mask-repeat: no-repeat; -webkit-mask-position: center; -webkit-mask-size: contain; -webkit-mask-repeat: no-repeat; }
+  .follow-up-pagination-arrow-left { mask-image: url('/icons/home/arrow-bar-left.svg'); -webkit-mask-image: url('/icons/home/arrow-bar-left.svg'); }
+  .follow-up-pagination-arrow-right { mask-image: url('/icons/home/arrow-bar-right.svg'); -webkit-mask-image: url('/icons/home/arrow-bar-right.svg'); }
+  .follow-up-page-numbers { display: inline-flex; align-items: center; gap: 5px; }
+  .follow-up-page-number { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; min-height: 34px; padding: 0; border-radius: 8px; color: #171717; background: #fff; font-size: 13px; font-weight: 500; }
+  .follow-up-page-number.is-current { color: #fff; background: #171717; border-color: #171717; font-weight: 700; }
+  .follow-up-pagination button:hover, .follow-up-pagination button:focus-visible { color: #fff; background: #171717; border-color: #171717; }
+  .follow-up-pagination button:disabled { cursor: default; opacity: .7; }
+  .follow-up-info-modal { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 24px; background: rgba(35, 31, 32, .42); backdrop-filter: blur(3px); }
+  .follow-up-info-modal[hidden] { display: none; }
+  .follow-up-info-dialog { width: min(100%, 560px); max-height: min(720px, calc(100vh - 48px)); overflow: auto; padding: 24px; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); box-shadow: 0 24px 70px rgba(35, 31, 32, .24); }
+  .follow-up-info-heading { display: flex; align-items: center; gap: 10px; }
+  .follow-up-info-heading img { flex: 0 0 26px; width: 26px; height: 26px; }
+  .follow-up-info-dialog h2 { margin: 0; font-size: 20px; }
+  .follow-up-info-dialog p { margin: 14px 0 0; color: var(--body-copy); }
+  .follow-up-info-dialog ul { display: grid; gap: 8px; margin: 16px 0 0; padding-left: 24px; color: var(--body-copy); }
+  .follow-up-info-subtle { color: var(--muted) !important; font-size: 12px; }
+  .follow-up-info-actions { display: flex; justify-content: flex-end; margin-top: 22px; }
+  .follow-up-info-actions button { min-width: 100px; font-size: 13px; font-weight: 500; }
+  html.follow-up-info-open { overflow: hidden; }
+  html[data-theme='dark'] .follow-up-pagination button { color: #fff; background: #171717; border-color: #fff; }
+  html[data-theme='dark'] .follow-up-page-number.is-current { color: #171717; background: #fff; border-color: #fff; }
+  html[data-theme='dark'] .follow-up-pagination button:hover, html[data-theme='dark'] .follow-up-pagination button:focus-visible { color: #171717; background: #fff; border-color: #fff; }
   html[data-theme='dark'] .follow-up-urgency.normal { color: var(--muted); background: var(--neutral-bg); } html[data-theme='dark'] .follow-up-urgency.attention { color: var(--orange-light); background: var(--surface-alt); } html[data-theme='dark'] .follow-up-urgency.priority { color: #FFD18C; background: #5A3B23; } html[data-theme='dark'] .follow-up-urgency.urgent { color: #FFFFFF; background: #A33C28; }
   html[data-theme='dark'] .follow-up-category { color: var(--muted); background: var(--neutral-bg); }
   html[data-theme='dark'] .follow-up-thread-button { color: #fff; background: var(--panel-dark); }
-  @media (max-width: 760px) { .follow-up-alerts { grid-template-columns: 1fr; } }
-  @media (max-width: 640px) { .follow-up-tools { flex-direction: column; } .follow-up-tools input, .follow-up-tools select { width: 100%; } .follow-up { grid-template-columns: 1fr; gap: 10px; } .follow-up-side { align-items: flex-start; flex-direction: row; flex-wrap: wrap; } .follow-up-age, .follow-up-urgency { align-self: center; } .follow-up-action-divider { display: none; } .follow-up-actions { width: 100%; } }
+  @media (prefers-reduced-motion: reduce) { .follow-up-info-modal { transition: none; } }
+  @media (max-width: 640px) { .follow-up-range { align-items: stretch; flex-direction: column; } .follow-up-range-control, .follow-up-date-mode-control, .follow-up-date-range .follow-up-range-control { grid-template-columns: minmax(110px, auto) minmax(0, 1fr) auto; } .follow-up-range-summary { grid-column: 1 / -1; white-space: normal; } .follow-up-date-range { flex-direction: column; } .follow-up-range button { width: 100%; } .follow-up-tools { flex-direction: column; } .follow-up-tools input, .follow-up-tools select { width: 100%; } .follow-up-category-filter { width: 100%; } .follow-up-category-filter select { flex: 1; } .follow-up-info-modal { padding: 14px; } .follow-up-info-dialog { padding: 20px; max-height: calc(100vh - 28px); } .follow-up { grid-template-columns: 1fr; gap: 10px; } .follow-up-side { align-items: flex-start; flex-direction: row; flex-wrap: wrap; } .follow-up-age, .follow-up-urgency { align-self: center; } .follow-up-action-divider { display: none; } .follow-up-actions { width: 100%; } }
 </style>

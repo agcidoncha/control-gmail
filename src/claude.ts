@@ -9,6 +9,8 @@ type ClaudeResponse = {
 };
 
 export type CommercialAnalysis = {
+  /** Null means the provider did not return its optional self-reported count. */
+  mensajes_analizados: number | null;
   respuesta: string;
   hechos: string[];
   inferencias: string[];
@@ -70,6 +72,7 @@ export function parseCommercialAnalysis(text: string): CommercialAnalysis {
   const partialResponse = extractJsonStringProperty(cleaned, 'respuesta');
   if (partialResponse !== null) {
     return {
+      mensajes_analizados: null,
       respuesta: cleanPlainText(partialResponse),
       hechos: [],
       inferencias: [],
@@ -80,6 +83,7 @@ export function parseCommercialAnalysis(text: string): CommercialAnalysis {
   }
 
   return {
+    mensajes_analizados: null,
     respuesta: cleanPlainText(text),
     hechos: [],
     inferencias: [],
@@ -120,6 +124,7 @@ function extractJsonStringProperty(value: string, property: string) {
 
 function normalizeAnalysis(parsed: Partial<CommercialAnalysis>): CommercialAnalysis {
   return {
+    mensajes_analizados: Number.isInteger(parsed.mensajes_analizados) ? Number(parsed.mensajes_analizados) : null,
     respuesta: cleanPlainText(parsed.respuesta ?? ''),
     hechos: cleanStringList(parsed.hechos),
     inferencias: cleanStringList(parsed.inferencias),

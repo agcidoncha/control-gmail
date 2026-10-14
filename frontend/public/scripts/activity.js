@@ -76,6 +76,7 @@
     } catch (error) {
       scopeNode.textContent = '';
       listNode.replaceChildren(text('p', error.message || 'No se pudo cargar la actividad.', 'activity-empty'));
+      if (typeof window.showAppNotice === 'function') window.showAppNotice(error.message || 'No se pudo cargar la actividad.', { title: 'No se pudo cargar la actividad' });
       messageNode.textContent = 'Puedes volver a intentarlo con «Actualizar».';
       messageNode.className = 'form-message error';
     } finally {

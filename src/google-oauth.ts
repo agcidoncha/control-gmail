@@ -5,6 +5,7 @@ import {
   findStoredGmailMessages,
   getGmailSyncState,
   getStoredGmailThread,
+  listAllStoredGmailMessages,
   listStoredGmailMessages,
   saveGmailSyncSnapshot,
   type StoredGmailMessage,
@@ -12,11 +13,12 @@ import {
   type StoredThreadMessage,
 } from './gmail-store.js';
 import { listGmailActions } from './gmail-action-store.js';
+import { classifyFollowUpByRules, classifyFollowUpWithAi } from './follow-up-classifier.js';
 
 const gmailModifyScope = 'https://www.googleapis.com/auth/gmail.modify';
 const gmailSendScope = 'https://www.googleapis.com/auth/gmail.send';
 const pendingStates = new Set<string>();
-const gmailCacheTtlMs = 30_000;
+const gmailCacheTtlMs = 2 * 60_000;
 const defaultAnalysisDays = 30;
 const maxAnalysisDays = 3650;
 
@@ -307,8 +309,8 @@ export async function syncGmailAccount(email: string, analysisWindow = getAnalys
   });
 }
 
-export async function refreshGmailAccount(email: string) {
-  await ensureGmailSnapshot(email, true);
+export async function refreshGmailAccount(email: string, analysisWindow = getAnalysisWindow()) {
+  await ensureGmailSnapshot(email, true, analysisWindow);
   clearAccountCaches(email);
   const state = await getGmailSyncState(email);
   return {
@@ -665,6 +667,9 @@ export async function listRecentMessagesPage(
       messageCache.delete(cacheKey);
       nextPageTokenCache.delete(cacheKey);
     }
+    if (fetchAll && dateQuery && !pageToken) {
+      return listAllMessagesForLabelCached(email, mailbox, mailbox === 'spam' ? 'SPAM' : mailbox === 'trash' ? 'TRASH' : undefined, [mailbox === 'archived' ? archivedMailboxQuery : '', dateQuery].filter(Boolean).join(' '));
+    }
     if (!pageToken) {
       const messages = await listRecentMessages(email, maxResults, mailbox, dateQuery);
       return {
@@ -682,9 +687,10 @@ export async function listRecentMessagesPage(
   }
 
   if (dateQuery) {
-    const gmail = await getGmailClient(email);
     const label = mailbox === 'sent' ? 'SENT' : 'INBOX';
-    if (fetchAll) return listAllMessagesForLabel(gmail, label, dateQuery);
+    const storedResult = await listStoredMessagesForDateRangePage(email, mailbox === 'sent' ? 'sent' : 'inbox', maxResults, pageToken, dateFrom, dateTo);
+    if (storedResult) return storedResult;
+    const gmail = await getGmailClient(email);
     return listMessagesForLabel(gmail, label, maxResults, pageToken, dateQuery);
   }
 
@@ -698,6 +704,69 @@ export async function listRecentMessagesPage(
 }
 
 const mailboxDateResultLimit = 1000;
+
+async function listStoredMessagesForDateRangePage(
+  email: string,
+  mailbox: 'inbox' | 'sent',
+  maxResults: number,
+  pageToken: string | undefined,
+  dateFrom?: string,
+  dateTo?: string,
+) {
+  const requestedWindow = getAnalysisWindow({ from: dateFrom, to: dateTo });
+  await ensureGmailSnapshot(email, false, requestedWindow);
+  const state = await getGmailSyncState(email);
+  if (!state || !syncStateCoversWindow(state, requestedWindow)) return null;
+
+  const fromTimestamp = Date.parse(`${requestedWindow.from.replaceAll('/', '-')}T00:00:00.000Z`);
+  const toTimestamp = Date.parse(`${requestedWindow.to.replaceAll('/', '-')}T23:59:59.999Z`);
+  const filteredMessages = (await listAllStoredGmailMessages(email, mailbox))
+    .filter((message) => message.sortTimestamp >= fromTimestamp && message.sortTimestamp <= toTimestamp)
+    .map(fromStoredMessage);
+  const offset = decodePageOffset(pageToken);
+  const size = Math.min(Math.max(maxResults, 1), 50);
+  const messages = filteredMessages.slice(offset, offset + size);
+  const pageCount = Math.max(1, Math.ceil(filteredMessages.length / size));
+  return {
+    messages,
+    nextPageToken: offset + messages.length < filteredMessages.length ? encodePageOffset(offset + messages.length) : null,
+    pageCount,
+    pageTokens: Array.from({ length: pageCount }, (_, index) => index === 0 ? null : encodePageOffset(index * size)),
+    truncated: Boolean(state.truncated),
+  };
+}
+
+async function listAllMessagesForLabelCached(
+  email: string,
+  mailbox: GmailMailbox,
+  label: 'INBOX' | 'SENT' | 'SPAM' | 'TRASH' | undefined,
+  query: string,
+) {
+  const cacheKey = messageCacheKey(email, mailbox, `${query}:all`);
+  const cached = messageCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return { messages: cached.value, nextPageToken: null, truncated: cached.value.length >= mailboxDateResultLimit };
+  }
+
+  const existingRequest = messageRequests.get(cacheKey);
+  if (existingRequest) {
+    const messages = await existingRequest;
+    return { messages, nextPageToken: null, truncated: messages.length >= mailboxDateResultLimit };
+  }
+
+  const request = (async () => {
+    const gmail = await getGmailClient(email);
+    return listAllMessagesForLabel(gmail, label, query);
+  })();
+  messageRequests.set(cacheKey, request.then((result) => result.messages));
+  try {
+    const result = await request;
+    messageCache.set(cacheKey, { expiresAt: Date.now() + gmailCacheTtlMs, value: result.messages });
+    return result;
+  } finally {
+    messageRequests.delete(cacheKey);
+  }
+}
 
 async function listAllMessagesForLabel(
   gmail: ReturnType<typeof google.gmail>,
@@ -837,8 +906,8 @@ export async function listAccountInsights(email: string, maxResults = 25, analys
   return insights;
 }
 
-export async function listPendingFollowUps(email: string, maxResults = 10, analysisWindow = getAnalysisWindow(), ensureSnapshot = true) {
-  const cacheKey = analysisCacheKey(email, analysisWindow);
+export async function listPendingFollowUps(email: string, maxResults = 10, analysisWindow = getAnalysisWindow(), ensureSnapshot = true, contextMaxPerFolder = 10) {
+  const cacheKey = `${analysisCacheKey(email, analysisWindow)}:followups:${contextMaxPerFolder}`;
   const cached = followUpCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value.slice(0, maxResults);
 
@@ -846,14 +915,17 @@ export async function listPendingFollowUps(email: string, maxResults = 10, analy
   if (existingRequest) return (await existingRequest).slice(0, maxResults);
 
   const request = (async (): Promise<PendingFollowUp[]> => {
-    const context = await listRecentMailboxContext(email, 10, analysisWindow, false, ensureSnapshot);
+    // Los seguimientos no deben quedar limitados al contexto de IA. La interfaz
+    // pagina los resultados, pero aquí necesitamos calcular el total y los
+    // avisos de antigüedad del periodo seleccionado.
+    const context = await listRecentMailboxContext(email, contextMaxPerFolder, analysisWindow, false, ensureSnapshot);
     const threads = new Map<string, GmailThreadMessage[]>();
     context.forEach((candidate) => {
       if (!candidate.threadId) return;
       const current = threads.get(candidate.threadId) ?? candidate.threadMessages;
       threads.set(candidate.threadId, current);
     });
-    const pending = [...threads.values()].flatMap((thread) => {
+    const pending = (await mapWithConcurrency([...threads.values()], 3, async (thread) => {
       const ordered = [...thread].sort((left, right) => messageTimestamp(left) - messageTimestamp(right));
       const lastMessage = ordered.at(-1);
       if (!lastMessage || !isMessageFromAccount(lastMessage.from, email)) return [];
@@ -862,6 +934,8 @@ export async function listPendingFollowUps(email: string, maxResults = 10, analy
       if (!timestamp) return [];
 
       const ageDays = Math.max(0, Math.floor((Date.now() - timestamp) / 86_400_000));
+      const ruleCategory = classifyFollowUpByRules(ordered);
+      const category = ruleCategory ?? await classifyFollowUpWithAi(email, ordered);
       return [{
         threadId: lastMessage.threadId,
         messageId: lastMessage.id,
@@ -869,12 +943,12 @@ export async function listPendingFollowUps(email: string, maxResults = 10, analy
         subject: lastMessage.subject,
         date: lastMessage.date,
         ageDays,
-        category: classifyFollowUp(ordered),
+        category,
         reason: ageDays > 0
           ? `Último mensaje enviado sin respuesta; han pasado ${ageDays} días.`
           : 'Último mensaje enviado sin respuesta; se envió hoy.',
       }];
-    });
+    })).flat();
 
     const dedupeSeen = new Set<string>();
     return pending
@@ -895,6 +969,44 @@ export async function listPendingFollowUps(email: string, maxResults = 10, analy
   } finally {
     followUpRequests.delete(cacheKey);
   }
+}
+
+export async function listPendingFollowUpsPage(
+  email: string,
+  maxResults = 10,
+  page = 1,
+  analysisWindow = getAnalysisWindow(),
+  ageFilter = 'all',
+  category = 'all',
+) {
+  const allFollowUps = await listPendingFollowUps(email, getSyncMessageLimit(), analysisWindow, true, getSyncMessageLimit());
+  const normalizedPageSize = Math.min(Math.max(Number(maxResults) || 10, 1), 50);
+  const normalizedPage = Math.max(Number(page) || 1, 1);
+  const filtered = allFollowUps.filter((item) => {
+    const ageMatches = ageFilter === '5-9'
+      ? item.ageDays >= 5 && item.ageDays < 10
+      : ageFilter === '10-14'
+        ? item.ageDays >= 10 && item.ageDays < 15
+        : ageFilter === '15+'
+          ? item.ageDays >= 15
+          : true;
+    return ageMatches && (category === 'all' || item.category === category);
+  });
+  const pageCount = Math.max(1, Math.ceil(filtered.length / normalizedPageSize));
+  const currentPage = Math.min(normalizedPage, pageCount);
+  const offset = (currentPage - 1) * normalizedPageSize;
+  return {
+    followUps: filtered.slice(offset, offset + normalizedPageSize),
+    total: filtered.length,
+    page: currentPage,
+    pageCount,
+    summary: {
+      total: allFollowUps.length,
+      from5To9Days: allFollowUps.filter((item) => item.ageDays >= 5 && item.ageDays < 10).length,
+      from10To14Days: allFollowUps.filter((item) => item.ageDays >= 10 && item.ageDays < 15).length,
+      from15Days: allFollowUps.filter((item) => item.ageDays >= 15).length,
+    },
+  };
 }
 
 export async function listDetectedCommitments(email: string, maxResults = 10, analysisWindow = getAnalysisWindow(), ensureSnapshot = true) {
@@ -1220,12 +1332,7 @@ function isPastExplicitDate(value: string) {
 }
 
 export function classifyFollowUp(thread: GmailThreadMessage[]) {
-  const content = thread.map((message) => `${message.subject}\n${message.body}`).join('\n').toLowerCase();
-  if (/\bbriefing\b|\bbrief\b/.test(content)) return 'Briefing pendiente';
-  if (/\bpresupuesto(?:s)?\b|\bcotizaci[oó]n(?:es)?\b|\bquotation(?:s)?\b|\bquote(?:s)?\b|\bpricing\b|\bprecio(?:s)?\b|\bcoste(?:s)?\b|\bcosto(?:s)?\b|\btarifa(?:s)?\b|\bpropuesta\s+econ[oó]mica\b/.test(content)) return 'Posible presupuesto';
-  if (/\bpropuesta(?:s)?\b|\boferta(?:s)?\b|\bproposal(?:s)?\b/.test(content)) return 'Posible propuesta';
-  if (/\bbriefing\b|\binformaci[oó]n\b|\bdetalles?\b|\bconfirm(?:ar|aci[oó]n)\b|\bdatos\b|\balcance\b/.test(content)) return 'Solicitud de información';
-  return 'Seguimiento general';
+  return classifyFollowUpByRules(thread) ?? 'Seguimiento general';
 }
 
 function looksLikeBounce(subject: string, snippet: string) {
@@ -1446,6 +1553,7 @@ async function listMessagesForLabel(
   return {
     messages: messages.filter((message): message is NonNullable<typeof message> => message !== null),
     nextPageToken: listed.data.nextPageToken ?? null,
+    resultSizeEstimate: listed.data.resultSizeEstimate ?? null,
     truncated: false,
   };
 }

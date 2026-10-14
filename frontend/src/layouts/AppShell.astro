@@ -31,6 +31,47 @@ const pageTitle = currentPath === '/settings/ai' ? 'Configuración de IA' : acti
     <link rel="stylesheet" href="/fonts/fonts.css" />
     <script is:inline src="/scripts/nav-counts.js"></script>
     <script is:inline src="/scripts/email-text.js"></script>
+    <script is:inline>
+      (() => {
+        window.showAppLoading = (message, options = {}) => {
+          const modal = document.querySelector('#appLoadingModal');
+          const titleNode = document.querySelector('#appLoadingTitle');
+          const messageNode = document.querySelector('#appLoadingMessage');
+          if (!modal || !titleNode || !messageNode) return;
+          titleNode.textContent = options.title || 'Consultando datos';
+          messageNode.textContent = String(message || 'Estamos preparando la información solicitada.');
+          modal.hidden = false;
+        };
+        window.hideAppLoading = () => {
+          const modal = document.querySelector('#appLoadingModal');
+          if (modal) modal.hidden = true;
+        };
+        window.showAppNotice = (message, options = {}) => {
+          const modal = document.querySelector('#appNoticeModal');
+          const titleNode = document.querySelector('#appNoticeTitle');
+          const messageNode = document.querySelector('#appNoticeMessage');
+          const closeButton = document.querySelector('#appNoticeClose');
+          if (!modal || !titleNode || !messageNode || !closeButton) return;
+          const lastFocusedElement = document.activeElement;
+          const close = () => {
+            modal.hidden = true;
+            lastFocusedElement?.focus?.();
+          };
+          titleNode.textContent = options.title || 'Aviso';
+          messageNode.textContent = String(message || 'Revisa la información antes de continuar.');
+          closeButton.onclick = close;
+          modal.onclick = (event) => { if (event.target === modal) close(); };
+          modal.hidden = false;
+          closeButton.focus();
+        };
+        document.addEventListener('keydown', (event) => {
+          const modal = document.querySelector('#appNoticeModal');
+          if (modal && !modal.hidden && event.key === 'Escape') {
+            modal.hidden = true;
+          }
+        });
+      })();
+    </script>
   </head>
   <body>
     <div class="app-shell" data-resizable-shell>
@@ -44,7 +85,6 @@ const pageTitle = currentPath === '/settings/ai' ? 'Configuración de IA' : acti
           {navItems.map((item) => (
             <a class:list={['nav-link', { active: item.key === activeItem.key, 'nav-link-ai': item.key === '/consultar-ia' }]} href={item.href} data-admin-only={item.adminOnly ? 'true' : 'false'} hidden={item.adminOnly ? true : undefined}>
               <span><span class:list={['nav-icon', { 'nav-icon-image': item.icon.startsWith('/') }]} style={item.icon.startsWith('/') ? `--nav-icon-url: url('${item.icon}')` : undefined} aria-hidden="true">{item.icon.startsWith('/') ? '' : item.icon}</span>{item.label}</span>
-              {item.key === '/mailbox' && <b id="navMessageCount" hidden aria-label="Mensajes">0</b>}
               {item.key === '/follow-ups' && <b id="navFollowUpCount" hidden aria-label="Seguimientos">0</b>}
               {item.key === '/commitments' && <b id="navCommitmentCount" hidden aria-label="Compromisos">0</b>}
             </a>
@@ -81,6 +121,20 @@ const pageTitle = currentPath === '/settings/ai' ? 'Configuración de IA' : acti
           <slot />
         </div>
       </main>
+      <div id="appNoticeModal" class="app-notice-modal" hidden role="alertdialog" aria-modal="true" aria-labelledby="appNoticeTitle" aria-describedby="appNoticeMessage">
+        <div class="app-notice-dialog">
+          <div class="app-notice-heading"><span class="app-notice-icon" aria-hidden="true">!</span><h2 id="appNoticeTitle">Aviso</h2></div>
+          <p id="appNoticeMessage"></p>
+          <div class="app-notice-actions"><button id="appNoticeClose" type="button">Entendido</button></div>
+        </div>
+      </div>
+      <div id="appLoadingModal" class="app-loading-modal" hidden role="status" aria-live="polite" aria-atomic="true" aria-labelledby="appLoadingTitle" aria-describedby="appLoadingMessage">
+        <div class="app-loading-dialog">
+          <span class="app-loading-spinner" aria-hidden="true"></span>
+          <h2 id="appLoadingTitle">Consultando datos</h2>
+          <p id="appLoadingMessage">Estamos preparando la información solicitada.</p>
+        </div>
+      </div>
     </div>
     <script is:inline src="/scripts/session.js"></script>
     <script is:inline src="/scripts/sidebar-resizer.js"></script>
@@ -119,6 +173,8 @@ const pageTitle = currentPath === '/settings/ai' ? 'Configuración de IA' : acti
   .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 18px; } .stat { padding: 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); } .stat span, .stat small { display: block; color: var(--muted); font-size: 12px; } .stat strong { display: block; margin: 7px 0 2px; color: var(--orange-dark); font-size: 27px; letter-spacing: -.04em; }
   .button-link, button { display: inline-flex; align-items: center; justify-content: center; border: 0; padding: 10px 14px; border-radius: 10px; background: var(--orange); color: #fff; text-decoration: none; cursor: pointer; font: inherit; font-weight: 750; } .button-link:hover, button:hover { background: var(--orange-dark); }
   .screen-note { margin: 18px 0 0; padding: 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--warm); color: var(--muted); } .screen-card { margin-top: 18px; min-height: 220px; } .screen-card form { display: grid; gap: 12px; margin-top: 18px; } textarea { width: 100%; min-height: 130px; padding: 13px; border: 1px solid var(--border); border-radius: 10px; resize: vertical; font: inherit; background: var(--surface-input); color: var(--ink); }
+  .app-notice-modal { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 24px; background: rgba(23, 20, 21, .52); backdrop-filter: blur(3px); } .app-notice-modal[hidden] { display: none; } .app-notice-dialog { width: min(100%, 460px); padding: 25px 26px 22px; border: 1px solid var(--border); border-radius: 16px; color: var(--ink); background: var(--panel); box-shadow: 0 24px 70px rgba(0, 0, 0, .22); } .app-notice-heading { display: flex; align-items: center; gap: 11px; } .app-notice-heading h2 { margin: 0; font-size: 19px; } .app-notice-icon { display: inline-grid; place-items: center; width: 27px; height: 27px; border-radius: 50%; color: #fff; background: var(--orange); font-weight: 800; } .app-notice-dialog p { margin: 13px 0 0; color: var(--body-copy); line-height: 1.5; } .app-notice-actions { display: flex; justify-content: flex-end; margin-top: 22px; } .app-notice-actions button { min-width: 100px; font-size: 13px; font-weight: 500; }
+  .app-loading-modal { position: fixed; inset: 0; z-index: 190; display: grid; place-items: center; padding: 24px; background: rgba(23, 20, 21, .42); backdrop-filter: blur(3px); } .app-loading-modal[hidden] { display: none; } .app-loading-dialog { width: min(100%, 430px); padding: 29px 27px 25px; border: 1px solid var(--border); border-radius: 16px; color: var(--ink); background: var(--panel); box-shadow: 0 24px 70px rgba(0, 0, 0, .2); text-align: center; } .app-loading-spinner { display: block; width: 30px; height: 30px; margin: 0 auto 15px; border: 3px solid var(--border); border-top-color: var(--orange); border-radius: 50%; animation: app-loading-spin .8s linear infinite; } .app-loading-dialog h2 { margin: 0; font-size: 19px; } .app-loading-dialog p { margin: 9px 0 0; color: var(--body-copy); line-height: 1.5; } @keyframes app-loading-spin { to { transform: rotate(360deg); } } @media (prefers-reduced-motion: reduce) { .app-loading-spinner { animation: none; } }
   .app-shell select { min-height: 44px; padding: 10px 42px 10px 13px; border: 1px solid var(--border); border-radius: 10px; color: var(--ink); background-color: var(--surface-input); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236F6864' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 13px center; background-size: 16px; font: inherit; font-weight: 500; line-height: 1.2; appearance: none; -webkit-appearance: none; cursor: pointer; transition: background-color .15s ease, box-shadow .15s ease; }
   .app-shell select:hover { background-color: var(--surface-hover); }
   .app-shell select:focus-visible { outline: 3px solid rgba(240, 162, 79, .2); outline-offset: 1px; }

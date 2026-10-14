@@ -25,6 +25,19 @@ test('normaliza una respuesta JSON válida de la IA', () => {
   assert.equal(analysis.fuentes[0].mensaje_id, 'message-1');
 });
 
+test('distingue un recuento omitido por el proveedor de un recuento incorrecto', () => {
+  const analysis = parseCommercialAnalysis(JSON.stringify({
+    respuesta: 'No hay suficiente contexto.',
+    hechos: [],
+    inferencias: [],
+    acciones_propuestas: [],
+    requiere_revision: true,
+    fuentes: [],
+  }));
+
+  assert.equal(analysis.mensajes_analizados, null);
+});
+
 test('desenvuelve JSON anidado y limpia Markdown escapado', () => {
   const analysis = parseCommercialAnalysis(JSON.stringify({
     respuesta: JSON.stringify({

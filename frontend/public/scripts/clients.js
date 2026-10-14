@@ -19,6 +19,11 @@
     return node;
   };
 
+  function showErrorNotice(error, fallback, title = 'No se pudo completar la acción') {
+    const message = error?.message || fallback;
+    if (typeof window.showAppNotice === 'function') window.showAppNotice(message, { title });
+  }
+
   function formatDate(value) {
     if (!value) return 'Fecha desconocida';
     const date = new Date(value);
@@ -61,6 +66,7 @@
       button.textContent = 'Ver historial';
       const message = text('p', error.message || 'No se pudo cargar el historial.', 'muted');
       card.append(message);
+      showErrorNotice(error, 'No se pudo cargar el historial.', 'No se pudo cargar el historial');
     }
   }
 
@@ -142,6 +148,7 @@
       countNode.removeAttribute('aria-label');
       countNode.textContent = 'No disponible';
       listNode.replaceChildren(text('p', error.message || 'No se pudieron cargar los clientes.', 'muted'));
+      showErrorNotice(error, 'No se pudieron cargar los clientes.', 'No se pudieron cargar los clientes');
     }
   }
 

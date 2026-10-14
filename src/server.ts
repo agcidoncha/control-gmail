@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import Fastify from 'fastify';
-import { completeAuthorization, createAuthorizationUrl, getAnalysisWindow, getThreadMessages, listAccountInsights, listClientHistory, listDetectedCommitments, listPendingFollowUps, listRecentMessagesPage, modifyGmailMessage, refreshGmailAccount, sendGmailMessage, syncGmailAccount, type GmailMailbox, type GmailMessageAction, type GmailSendInput } from './google-oauth.js';
+import { completeAuthorization, createAuthorizationUrl, getAnalysisWindow, getThreadMessages, listAccountInsights, listClientHistory, listDetectedCommitments, listPendingFollowUps, listPendingFollowUpsPage, listRecentMessagesPage, modifyGmailMessage, refreshGmailAccount, sendGmailMessage, syncGmailAccount, type GmailMailbox, type GmailMessageAction, type GmailSendInput } from './google-oauth.js';
 import { clearSessionCookieHeader, readSession, readSessionContext, sessionCookieHeaderForOrganization } from './session.js';
 import { authorizeUser, deleteUser, disconnectUser, getUser, listUsers, updateUserAiSettings, upsertUser } from './user-store.js';
 import { deleteGoogleTokens } from './token-store.js';
@@ -821,12 +821,14 @@ app.post<{ Body: { question?: string; clientEmail?: string; analysisDays?: numbe
       scope: request.body?.analysisScope,
     });
     await refreshGmailAccount(email);
+    const assistantResult = await askCommercialAssistant(email, question, context?.organizationId, analysisWindow, clientEmail);
     return {
       account: email,
       organizationId: context?.organizationId,
       analysisWindow: { from: analysisWindow.from, to: analysisWindow.to, days: analysisWindow.days, scope: analysisWindow.scope },
       clientEmail,
-      analysis: await askCommercialAssistant(email, question, context?.organizationId, analysisWindow, clientEmail),
+      messageCount: assistantResult.messageCount,
+      analysis: assistantResult.analysis,
     };
   } catch (error) {
     if (error instanceof Error && /fecha|rango máximo/.test(error.message)) {
@@ -843,7 +845,10 @@ app.post('/gmail/sync', async (request, reply) => {
   if (!account) return reply.code(401).send({ error: 'Sesión no iniciada.' });
 
   try {
-    return { account, ...(await refreshGmailAccount(account)) };
+    const now = new Date();
+    const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
+    const currentMonth = getAnalysisWindow({ from: monthStart });
+    return { account, ...(await refreshGmailAccount(account, currentMonth)) };
   } catch (error) {
     return reply.code(500).send({
       error: gmailErrorMessage(error, 'No se pudo actualizar Gmail.'),
@@ -871,7 +876,7 @@ app.get<{ Querystring: { max?: string; mailbox?: string; pageToken?: string; ref
             : 'inbox';
       const context = readSessionContext(request.headers.cookie);
       const page = await listRecentMessagesPage(account, Number(request.query.max ?? 10), mailbox, request.query.pageToken, context?.organizationId, request.query.refresh === '1', request.query.from, request.query.to, request.query.all === '1');
-      return { account, mailbox, messages: page.messages, nextPageToken: page.nextPageToken, truncated: page.truncated ?? false };
+      return { account, mailbox, messages: page.messages, nextPageToken: page.nextPageToken, pageCount: 'pageCount' in page ? page.pageCount : null, pageTokens: 'pageTokens' in page ? page.pageTokens : null, truncated: page.truncated ?? false };
     } catch (error) {
       if (error instanceof Error && /fecha/.test(error.message.toLowerCase())) {
         return reply.code(400).send({ error: error.message });
@@ -963,7 +968,7 @@ app.get<{ Querystring: { max?: string; days?: string; from?: string; to?: string
   }
 });
 
-app.get<{ Querystring: { max?: string; days?: string; from?: string; to?: string } }>('/gmail/follow-ups', async (request, reply) => {
+app.get<{ Querystring: { max?: string; page?: string; age?: string; category?: string; days?: string; from?: string; to?: string } }>('/gmail/follow-ups', async (request, reply) => {
   const account = readSession(request.headers.cookie);
   if (!account) return reply.code(401).send({ error: 'Sesión no iniciada.' });
 
@@ -973,8 +978,15 @@ app.get<{ Querystring: { max?: string; days?: string; from?: string; to?: string
       from: request.query.from,
       to: request.query.to,
     });
-    const followUps = await listPendingFollowUps(account, Number(request.query.max ?? 10), analysisWindow);
-    return { account, analysisWindow: { from: analysisWindow.from, to: analysisWindow.to, days: analysisWindow.days }, followUps };
+    const result = await listPendingFollowUpsPage(
+      account,
+      Number(request.query.max ?? 10),
+      Number(request.query.page ?? 1),
+      analysisWindow,
+      request.query.age ?? 'all',
+      request.query.category ?? 'all',
+    );
+    return { account, analysisWindow: { from: analysisWindow.from, to: analysisWindow.to, days: analysisWindow.days }, ...result };
   } catch (error) {
     if (error instanceof Error && /fecha|rango máximo/.test(error.message)) return reply.code(400).send({ error: error.message });
     return reply.code(500).send({

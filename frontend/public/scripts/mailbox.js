@@ -5,10 +5,10 @@
   const countNode = document.querySelector('#mailboxCount');
   const syncStatusNode = document.querySelector('#mailboxSyncStatus');
   const refreshButton = document.querySelector('#mailboxRefreshButton');
-  const paginationStatusNode = document.querySelector('#mailboxPaginationStatus');
+  const paginationStatusNodes = [...document.querySelectorAll('[data-mailbox-pagination-status]')];
+  const pageNumberContainers = [...document.querySelectorAll('[data-mailbox-page-numbers]')];
   const rangeForm = document.querySelector('#messageRangeForm');
   const pageSizeField = document.querySelector('#messagePageSizeField');
-  const pageSizeNode = document.querySelector('#messagePageSize');
   const dateModeNode = document.querySelector('#messageDateMode');
   const exactDateField = document.querySelector('#messageExactDateField');
   const exactDateNode = document.querySelector('#messageExactDate');
@@ -18,6 +18,8 @@
   const syncWindowNode = document.querySelector('#messageSyncWindow');
   const applyRangeButton = document.querySelector('#applyMessageRange');
   const clearRangeButton = document.querySelector('#clearMessageRange');
+  const previousPageButtons = [...document.querySelectorAll('[data-mailbox-pagination="previous"]')];
+  const nextPageButtons = [...document.querySelectorAll('[data-mailbox-pagination="next"]')];
   const archivedNoticeNode = document.querySelector('#archivedMailboxNotice');
   const undoNode = document.querySelector('#mailboxUndo');
   const undoMessageNode = document.querySelector('#mailboxUndoMessage');
@@ -44,6 +46,9 @@
   let commitments = [];
   let filter = 'all';
   let nextPageToken = null;
+  let pageTokenHistory = [];
+  let currentPageIndex = 0;
+  let totalPageCount = null;
   let resultsTruncated = false;
   let loadingMessages = false;
   let undoState = null;
@@ -52,9 +57,22 @@
   let syncTimer = null;
   const syncIntervalMs = 10 * 60 * 1000;
 
+  function formatDateInput(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function getPresetDateRange(mode) {
+    const today = new Date();
+    const to = formatDateInput(today);
+    return { from: formatDateInput(new Date(today.getFullYear(), today.getMonth(), 1)), to };
+  }
+
   function getDateRange() {
     const mode = dateModeNode.value;
-    if (mode === 'all') return { from: '', to: '' };
+    if (mode === 'this-month') return getPresetDateRange(mode);
     if (mode === 'day') {
       if (!exactDateNode.value) throw new Error('Selecciona el día que quieres consultar.');
       return { from: exactDateNode.value, to: exactDateNode.value };
@@ -68,29 +86,32 @@
 
   function updateDateFields() {
     const mode = dateModeNode.value;
-    pageSizeField.hidden = mode !== 'all';
+    pageSizeField.hidden = false;
     exactDateField.hidden = mode !== 'day';
     dateRangeFields.hidden = mode !== 'range';
-    applyRangeButton.hidden = mode === 'all';
-    clearRangeButton.hidden = mode === 'all';
+    applyRangeButton.hidden = mode !== 'day' && mode !== 'range';
+    clearRangeButton.hidden = mode === 'this-month';
   }
 
   function resetMessageView() {
     messages = [];
     nextPageToken = null;
+    pageTokenHistory = [];
+    currentPageIndex = 0;
+    totalPageCount = null;
     resultsTruncated = false;
-    paginationStatusNode.textContent = '';
+    paginationStatusNodes.forEach((node) => { node.textContent = ''; });
     render();
   }
 
   function showPendingRangeChange() {
-    paginationStatusNode.textContent = 'Hay cambios sin aplicar. Pulsa «Aplicar» para actualizar la bandeja.';
+    paginationStatusNodes.forEach((node) => { node.textContent = 'Hay cambios sin aplicar. Pulsa «Aplicar» para actualizar la bandeja.'; });
   }
 
   async function reloadMessages() {
     loadingMessages = true;
     resetMessageView();
-    paginationStatusNode.textContent = 'Buscando mensajes en Gmail…';
+    paginationStatusNodes.forEach((node) => { node.textContent = 'Buscando mensajes en Gmail…'; });
     render();
     applyRangeButton.disabled = true;
     applyRangeButton.textContent = 'Aplicando…';
@@ -100,6 +121,7 @@
       loadingMessages = false;
       applyRangeButton.disabled = false;
       applyRangeButton.textContent = 'Aplicar';
+      render();
     }
   }
 
@@ -200,11 +222,25 @@
     return node;
   };
 
+  function showErrorNotice(error, fallback, title = 'No se pudo completar la acción') {
+    const message = error?.message || fallback;
+    if (typeof window.showAppNotice === 'function') window.showAppNotice(message, { title });
+  }
+
   async function fetchJson(url, options = {}) {
-    const response = await fetch(url, options);
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'No se pudo cargar la información.');
-    return result;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 30_000);
+    try {
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'No se pudo cargar la información.');
+      return result;
+    } catch (error) {
+      if (error?.name === 'AbortError') throw new Error('La consulta de Gmail ha tardado demasiado. Pulsa «Actualizar Gmail» para volver a intentarlo.');
+      throw error;
+    } finally {
+      window.clearTimeout(timeout);
+    }
   }
 
   function render() {
@@ -241,17 +277,45 @@
       return matchesQuery && matchesFilter;
     });
 
-    const hasDateFilter = dateModeNode.value !== 'all';
-    countNode.textContent = hasDateFilter
-      ? filtered.length + ' mensajes encontrados'
-      : filtered.length + ' mensajes mostrados (límite: ' + pageSizeNode.value + ')';
-    paginationStatusNode.textContent = nextPageToken
-      ? Number(pageSizeNode.value) >= 50
-        ? 'Hay más mensajes disponibles. Busca por fecha para localizarlos.'
-        : 'Hay más mensajes disponibles. Aumenta «Mostrar» para ver más.'
+    const hasDateFilter = true;
+    const currentPage = currentPageIndex + 1;
+    countNode.textContent = filtered.length + ' mensajes mostrados · página ' + currentPage;
+    const knownPageCount = Math.max(
+      currentPage,
+      totalPageCount || 0,
+      pageTokenHistory.length - 1 + (nextPageToken ? 1 : 0),
+    );
+    const visiblePageStart = Math.min(
+      Math.max(currentPage - 2, 1),
+      Math.max(1, knownPageCount - 4),
+    );
+    const visiblePageEnd = Math.min(knownPageCount, visiblePageStart + 4);
+    pageNumberContainers.forEach((container) => {
+      container.replaceChildren();
+      for (let page = visiblePageStart; page <= visiblePageEnd; page += 1) {
+        const pageButton = text('button', String(page), 'mailbox-page-number' + (page === currentPage ? ' is-current' : ''));
+        pageButton.type = 'button';
+        pageButton.dataset.mailboxPage = String(page);
+        pageButton.setAttribute('aria-label', 'Ir a la página ' + page);
+        pageButton.setAttribute('aria-current', page === currentPage ? 'page' : 'false');
+        pageButton.disabled = loadingMessages || page === currentPage;
+        container.append(pageButton);
+      }
+    });
+    const paginationMessage = nextPageToken
+      ? 'Hay más mensajes disponibles en este periodo.'
       : resultsTruncated
         ? 'Hay demasiados resultados. Acota el periodo para verlos todos.'
         : '';
+    paginationStatusNodes.forEach((node) => { node.textContent = paginationMessage; });
+    previousPageButtons.forEach((button) => {
+      button.hidden = currentPageIndex === 0;
+      button.disabled = loadingMessages;
+    });
+    nextPageButtons.forEach((button) => {
+      button.hidden = !nextPageToken;
+      button.disabled = loadingMessages;
+    });
     messagesNode.replaceChildren();
     if (!filtered.length) {
       messagesNode.append(text('p', loadingMessages ? 'Buscando mensajes en Gmail…' : query ? 'No hay mensajes que coincidan.' : 'No hay mensajes en la bandeja.', 'muted'));
@@ -317,15 +381,16 @@
     try {
       const dateRange = getDateRange();
       const hasDateFilter = Boolean(dateRange.from || dateRange.to);
-      const maxResults = hasDateFilter ? 50 : Number(pageSizeNode.value || 10);
-      const shared = !forceFetch && !hasDateFilter && maxResults === 10 && mailboxNode.value === 'inbox' && window.__commercialNavDataPromise
+      const maxResults = 10;
+      const pageToken = pageTokenHistory[currentPageIndex] || null;
+      const shared = !forceFetch && currentPageIndex === 0 && !hasDateFilter && maxResults === 10 && mailboxNode.value === 'inbox' && window.__commercialNavDataPromise
         ? await window.__commercialNavDataPromise
         : null;
       const messageParams = new URLSearchParams({ max: String(maxResults), mailbox: mailboxNode.value });
+      if (pageToken) messageParams.set('pageToken', pageToken);
       if (mailboxNode.value === 'sent' || mailboxNode.value === 'trash') messageParams.set('refresh', '1');
       if (dateRange.from) messageParams.set('from', dateRange.from);
       if (dateRange.to) messageParams.set('to', dateRange.to);
-      if (hasDateFilter) messageParams.set('all', '1');
       const messageResult = shared?.messages?.messages
         ? shared.messages
         : await fetchJson('/gmail/messages?' + messageParams.toString());
@@ -336,6 +401,9 @@
       }
       messages = messageResult.messages || [];
       nextPageToken = messageResult.nextPageToken || null;
+      if (Array.isArray(messageResult.pageTokens)) pageTokenHistory = messageResult.pageTokens;
+      else pageTokenHistory[currentPageIndex + 1] = nextPageToken;
+      totalPageCount = Number.isInteger(messageResult.pageCount) ? messageResult.pageCount : null;
       resultsTruncated = Boolean(messageResult.truncated);
       if (followUpResult) followUps = followUpResult.followUps || [];
       if (commitmentResult) commitments = commitmentResult.commitments || [];
@@ -345,6 +413,7 @@
       if (navFollowUpCount && followUpResult) { navFollowUpCount.textContent = String(followUps.length); navFollowUpCount.hidden = false; }
       const navCommitmentCount = document.querySelector('#navCommitmentCount');
       if (navCommitmentCount && commitmentResult) { navCommitmentCount.textContent = String(commitments.length); navCommitmentCount.hidden = false; }
+      if (!syncing) setSyncStatus('success', 'Bandeja cargada');
       render();
       if (requestedReply && !replyOpened) {
         const replyMessage = messages.find((message) => message.id === requestedReply);
@@ -360,7 +429,14 @@
       messagesNode.removeAttribute('aria-label');
       countNode.removeAttribute('aria-label');
       messagesNode.replaceChildren(text('p', error.message || 'No se pudieron cargar los mensajes.', 'muted'));
-      paginationStatusNode.textContent = '';
+      paginationStatusNodes.forEach((node) => { node.textContent = ''; });
+      showErrorNotice(error, 'No se pudieron cargar los mensajes.', 'No se pudo cargar la bandeja');
+    } finally {
+      // A failed or interrupted request must never leave pagination locked.
+      if (!syncing) {
+        loadingMessages = false;
+        render();
+      }
     }
   }
 
@@ -381,8 +457,8 @@
     const start = formatSyncWindowDate(from);
     const end = formatSyncWindowDate(to);
     syncWindowNode.textContent = start && end
-      ? `Último mes: ${start} – ${end}`
-      : 'Último mes: no disponible';
+      ? `Este mes: ${start} – ${end}`
+      : 'Este mes: no disponible';
   }
 
   function setSyncStatus(state, message, syncedAt = null) {
@@ -407,10 +483,15 @@
       setSyncStatus('success', 'Actualizado el ' + formatSyncDate(result.syncedAt), result.syncedAt);
     } catch (error) {
       setSyncStatus('error', showErrors ? (error.message || 'No se pudo actualizar Gmail.') : 'No se pudo actualizar Gmail. Pulsa «Actualizar Gmail».');
+      showErrorNotice(error, 'No se pudo actualizar Gmail.', 'No se pudo actualizar Gmail');
     } finally {
+      // Gmail synchronization is independent from the page currently visible.
+      // It must not leave the pagination controls disabled.
+      loadingMessages = false;
       syncing = false;
       refreshButton.disabled = false;
       refreshButton.textContent = 'Actualizar Gmail';
+      render();
     }
   }
 
@@ -468,6 +549,7 @@
       } catch (error) {
         status.textContent = error.message || 'No se pudo aplicar la acción.';
         buttons.forEach((button) => { button.disabled = false; });
+        showErrorNotice(error, 'No se pudo aplicar la acción.', 'No se pudo actualizar el correo');
       }
       return;
     }
@@ -505,6 +587,7 @@
       });
     } catch (error) {
       thread.replaceChildren(text('p', error.message || 'No se pudo cargar el hilo.', 'muted'));
+      showErrorNotice(error, 'No se pudo cargar el hilo.', 'No se pudo cargar el hilo');
     }
   });
 
@@ -546,6 +629,7 @@
     } catch (error) {
       undoMessageNode.textContent = error.message || 'No se pudo deshacer la acción.';
       undoButton.disabled = false;
+      showErrorNotice(error, 'No se pudo deshacer la acción.', 'No se pudo deshacer la acción');
     }
   });
 
@@ -557,7 +641,7 @@
   }));
   dateModeNode.addEventListener('change', async () => {
     updateDateFields();
-    if (dateModeNode.value === 'all') {
+    if (dateModeNode.value === 'this-month') {
       exactDateNode.value = '';
       dateFromNode.value = '';
       dateToNode.value = '';
@@ -567,7 +651,7 @@
     showPendingRangeChange();
   });
   [exactDateNode, dateFromNode, dateToNode].forEach((node) => node.addEventListener('change', () => {
-    if (dateModeNode.value !== 'all') showPendingRangeChange();
+    if (dateModeNode.value === 'day' || dateModeNode.value === 'range') showPendingRangeChange();
   }));
   rangeForm.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -575,15 +659,12 @@
       getDateRange();
       await reloadMessages();
     } catch (error) {
-      paginationStatusNode.textContent = error.message || 'Revisa las fechas seleccionadas.';
+      paginationStatusNodes.forEach((node) => { node.textContent = error.message || 'Revisa las fechas seleccionadas.'; });
+      showErrorNotice(error, 'Revisa las fechas seleccionadas.', 'No se puede aplicar el periodo');
     }
   });
-  pageSizeNode.addEventListener('change', async () => {
-    if (dateModeNode.value === 'all') await reloadMessages();
-    else showPendingRangeChange();
-  });
   clearRangeButton.addEventListener('click', async () => {
-    dateModeNode.value = 'all';
+    dateModeNode.value = 'this-month';
     exactDateNode.value = '';
     dateFromNode.value = '';
     dateToNode.value = '';
@@ -593,6 +674,34 @@
   composeButton.addEventListener('click', () => openCompose());
   cancelComposeButton.addEventListener('click', closeCompose);
   refreshButton.addEventListener('click', () => syncMailbox(true));
+  nextPageButtons.forEach((button) => button.addEventListener('click', async () => {
+    if (loadingMessages || !nextPageToken) return;
+    currentPageIndex += 1;
+    messages = [];
+    nextPageToken = null;
+    render();
+    await load();
+  }));
+  pageNumberContainers.forEach((container) => container.addEventListener('click', async (event) => {
+    const pageButton = event.target.closest('[data-mailbox-page]');
+    if (!pageButton || loadingMessages) return;
+    const requestedPage = Number(pageButton.dataset.mailboxPage);
+    if (!Number.isInteger(requestedPage) || requestedPage < 1 || requestedPage === currentPageIndex + 1) return;
+    if (requestedPage > 1 && !pageTokenHistory[requestedPage - 1]) return;
+    currentPageIndex = requestedPage - 1;
+    messages = [];
+    nextPageToken = null;
+    render();
+    await load();
+  }));
+  previousPageButtons.forEach((button) => button.addEventListener('click', async () => {
+    if (loadingMessages || currentPageIndex === 0) return;
+    currentPageIndex -= 1;
+    messages = [];
+    nextPageToken = null;
+    render();
+    await load();
+  }));
   composeForm.addEventListener('submit', (event) => {
     event.preventDefault();
     showComposePreview();
@@ -601,6 +710,6 @@
   confirmComposeButton.addEventListener('click', sendComposeMessage);
   mailboxNode.addEventListener('change', reloadMessages);
   updateDateFields();
-  syncMailbox(true);
+  load();
   syncTimer = window.setInterval(() => syncMailbox(false), syncIntervalMs);
 })();

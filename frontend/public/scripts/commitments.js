@@ -14,6 +14,11 @@
     return node;
   };
 
+  function showErrorNotice(error, fallback, title = 'No se pudo completar la acción') {
+    const message = error?.message || fallback;
+    if (typeof window.showAppNotice === 'function') window.showAppNotice(message, { title });
+  }
+
   function formatDate(value) {
     if (!value) return 'Fecha desconocida';
     const date = new Date(value);
@@ -90,6 +95,7 @@
       countNode.removeAttribute('aria-label');
       listNode.replaceChildren(text('p', error.message || 'No se pudieron cargar los compromisos.', 'muted'));
       countNode.textContent = 'No disponible';
+      showErrorNotice(error, 'No se pudieron cargar los compromisos.', 'No se pudieron cargar los compromisos');
     }
   }
 
@@ -122,6 +128,7 @@
       });
     } catch (error) {
       thread.replaceChildren(text('p', error.message || 'No se pudo cargar el hilo.', 'muted'));
+      showErrorNotice(error, 'No se pudo cargar el hilo.', 'No se pudo cargar el hilo');
     }
   });
 

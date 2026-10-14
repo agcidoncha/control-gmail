@@ -11,6 +11,9 @@
   let authorizedUsers = [];
 
   const showMessage = (value, type = '') => {
+    if (type === 'error' && typeof window.showAppNotice === 'function') {
+      window.showAppNotice(value, { title: 'No se pudo completar la acción' });
+    }
     messageNode.textContent = value;
     messageNode.className = 'form-message' + (type ? ' ' + type : '');
   };

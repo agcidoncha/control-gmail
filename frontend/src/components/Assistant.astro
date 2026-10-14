@@ -18,6 +18,7 @@
       </div>
       <label for="assistantQuestion">¿Qué quieres revisar?</label>
       <textarea id="assistantQuestion" placeholder="Ejemplo: ¿Qué seguimientos pendientes detectas?" required></textarea>
+      <div id="assistantMessage" class="form-message" role="status" aria-live="polite"></div>
     </div>
 
     <div class="assistant-form-right">
@@ -65,7 +66,7 @@
         <button class="secondary-button assistant-preset" type="button" title="Resume los hilos y destaca decisiones, compromisos y próximos pasos." data-assistant-prompt="Resúmeme las conversaciones largas y destaca decisiones, compromisos y próximos pasos.">Resumir conversaciones y próximos pasos</button>
         <button class="secondary-button assistant-preset" type="button" title="Detecta qué necesita cada cliente y separa los hechos de las suposiciones." data-assistant-prompt="Interpreta las necesidades de cada cliente a partir de las conversaciones y separa hechos de inferencias.">Detectar necesidades de clientes</button>
       </div>
-      <div id="assistantMessage" class="form-message" role="status" aria-live="polite"></div>
+      <button id="assistantReset" class="secondary-button assistant-reset-button" type="button">Nueva consulta</button>
     </div>
   </form>
 
@@ -77,6 +78,20 @@
       <h3 id="assistantLoadingTitle">La IA está trabajando</h3>
       <p id="assistantLoadingDescription">Actualizando Gmail y preparando el análisis…</p>
       <span class="assistant-loading-dots" aria-hidden="true"></span>
+    </div>
+  </div>
+
+  <div id="assistantConfirmModal" class="assistant-confirm-modal" hidden role="dialog" aria-modal="true" aria-labelledby="assistantConfirmTitle" aria-describedby="assistantConfirmDescription">
+    <div class="assistant-confirm-dialog">
+      <h3 id="assistantConfirmTitle">Confirma la consulta</h3>
+      <p id="assistantConfirmDescription">Antes de continuar, revisa qué información se enviará a la IA.</p>
+      <blockquote id="assistantConfirmQuestion"></blockquote>
+      <div id="assistantConfirmDetails" class="assistant-confirm-details"></div>
+      <p class="assistant-confirm-warning">La consulta puede consumir crédito de IA. ¿Quieres ejecutarla?</p>
+      <div class="assistant-confirm-actions">
+        <button id="assistantConfirmCancel" class="secondary-button" type="button">Cancelar</button>
+        <button id="assistantConfirmAccept" type="button">Confirmar análisis</button>
+      </div>
     </div>
   </div>
 </section>
@@ -118,6 +133,7 @@
   .analysis-window select:hover { background-color: var(--surface-hover); }
   .analysis-window select:focus-visible { outline: 3px solid rgba(240, 162, 79, .2); outline-offset: 1px; }
   .analysis-custom-dates { display: flex; flex-wrap: wrap; gap: 12px; }
+  .analysis-custom-dates[hidden], .analysis-cost-notice[hidden] { display: none; }
   .analysis-custom-dates label { display: grid; gap: 5px; color: var(--muted); font-size: 13px; font-weight: 500; }
   .analysis-custom-dates input { padding: 9px 10px; border: 1px solid var(--border); border-radius: 9px; color: var(--ink); background: #fff; font: inherit; }
   html[data-theme='dark'] .analysis-custom-dates label,
@@ -125,16 +141,23 @@
   html[data-theme='dark'] .analysis-custom-dates input { color-scheme: light; }
   .analysis-cost-notice { margin: 0; color: var(--muted); font-size: 12px; }
   .analysis-cost-notice.warning { color: var(--orange-dark); font-weight: 700; }
-  .assistant-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 5px; }
-  .assistant-actions button { min-height: 38px; padding: 8px 11px; font-size: 13px; font-weight: 500; line-height: 1.2; }
+  .assistant-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr) minmax(0, 1.4fr); gap: 8px; align-items: stretch; margin-top: 5px; }
+  .assistant-actions button { width: 100%; min-width: 0; min-height: 38px; padding: 8px 8px; font-size: 12px; font-weight: 500; line-height: 1.2; }
   .assistant-actions button:disabled { opacity: .55; cursor: not-allowed; }
   .assistant-actions .secondary-button { color: var(--orange-dark); background: var(--warm); border: 1px solid var(--border); }
   .assistant-actions .secondary-button:hover { color: var(--ink); background: var(--orange-light); }
+  .assistant-reset-button { justify-self: end; min-height: 34px; padding: 7px 12px; color: var(--muted); background: transparent; border: 1px solid var(--border); font-size: 12px; font-weight: 500; }
+  .assistant-reset-button:hover, .assistant-reset-button:focus-visible { color: var(--ink); background: var(--surface-hover); }
   .assistant-answer { margin-top: 22px; padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--warm); }
   .assistant-answer[hidden] { display: none; }
   .assistant-answer-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-bottom: 14px; }
   .assistant-print-button { color: var(--orange-dark); background: var(--panel); border: 1px solid var(--border); font-size: 13px; font-weight: 500; }
   .assistant-print-button:hover, .assistant-print-button:focus-visible { color: var(--ink); background: var(--orange-light); }
+  .assistant-fullscreen-button[aria-pressed='true'] { color: var(--ink); background: var(--orange-light); }
+  .assistant-answer:fullscreen { box-sizing: border-box; width: 100vw; height: 100vh; overflow-y: auto; margin: 0; padding: 32px clamp(20px, 5vw, 72px); border: 0; border-radius: 0; background: var(--warm); }
+  .assistant-answer:fullscreen .assistant-answer-toolbar { position: sticky; top: 0; z-index: 1; padding-bottom: 14px; background: var(--warm); }
+  .assistant-answer:-webkit-full-screen { box-sizing: border-box; width: 100vw; height: 100vh; overflow-y: auto; margin: 0; padding: 32px clamp(20px, 5vw, 72px); border: 0; border-radius: 0; background: var(--warm); }
+  .assistant-answer:-webkit-full-screen .assistant-answer-toolbar { position: sticky; top: 0; z-index: 1; padding-bottom: 14px; background: var(--warm); }
   .assistant-print-meta { margin: 0 0 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 12px; }
   .assistant-print-question { margin: 0 0 18px !important; padding: 10px 12px; border-left: 3px solid var(--orange); color: var(--body-copy); background: var(--surface-ai); font-size: 13px; }
   .assistant-loading-modal { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px; background: rgba(23, 20, 21, .52); backdrop-filter: blur(3px); }
@@ -145,6 +168,17 @@
   .assistant-loading-dialog p { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
   .assistant-loading-dots::after { display: inline-block; min-width: 18px; color: var(--orange-dark); content: ''; font-size: 20px; line-height: 1; animation: assistant-thinking 1.4s steps(4, end) infinite; }
   html.assistant-loading-open { overflow: hidden; }
+  html.assistant-confirm-open { overflow: hidden; }
+  .assistant-confirm-modal { position: fixed; inset: 0; z-index: 101; display: grid; place-items: center; padding: 24px; background: rgba(23, 20, 21, .52); backdrop-filter: blur(3px); }
+  .assistant-confirm-modal[hidden] { display: none; }
+  .assistant-confirm-dialog { width: min(100%, 560px); padding: 26px; border: 1px solid var(--border); border-radius: 16px; color: var(--ink); background: var(--panel); box-shadow: 0 24px 70px rgba(0, 0, 0, .22); }
+  .assistant-confirm-dialog h3 { margin: 0; font-size: 20px; }
+  .assistant-confirm-dialog > p { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+  .assistant-confirm-dialog blockquote { margin: 18px 0 12px; padding: 12px 14px; border-left: 3px solid var(--orange); color: var(--body-copy); background: var(--surface-ai); font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .assistant-confirm-details { display: grid; gap: 5px; color: var(--body-copy); font-size: 13px; white-space: pre-line; }
+  .assistant-confirm-warning { color: var(--orange-dark) !important; }
+  .assistant-confirm-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+  .assistant-confirm-actions button { min-height: 38px; padding: 8px 13px; font-size: 13px; font-weight: 500; }
   .assistant-answer h3 { margin: 0 0 8px; font-size: 17px; }
   .assistant-answer h4 { margin: 18px 0 7px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--orange-dark); }
   .assistant-answer p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -167,12 +201,12 @@
   .status-pill { padding: 5px 9px; border-radius: 999px; color: #28683B; background: #E5F3E8; font-size: 12px; font-weight: 500; white-space: nowrap; }
   .status-pill.status-neutral { color: var(--muted); background: #EAE6E2; }
   .status-pill.status-warning { color: var(--orange-dark); background: #FFF1E2; }
-  @media (max-width: 900px) { .assistant-form { grid-template-columns: 1fr; } }
-  @media (max-width: 640px) { .assistant-actions { align-items: stretch; flex-direction: column; } .assistant-actions a, .assistant-actions button { width: 100%; } .assistant-header-actions { align-items: stretch; flex-direction: column; width: 100%; } .assistant-header-actions .status-pill, .assistant-header-actions .assistant-config-link { width: 100%; } .assistant-header-actions a { text-align: center; } .assistant-answer-toolbar { align-items: stretch; } .assistant-print-button { width: 100%; } .card-header { flex-direction: column; } }
+  @media (max-width: 900px) { .assistant-form { grid-template-columns: 1fr; } .assistant-actions { display: flex; flex-wrap: wrap; } .assistant-actions button { width: auto; } }
+  @media (max-width: 640px) { .assistant-actions { align-items: stretch; flex-direction: column; } .assistant-actions a, .assistant-actions button { width: 100%; } .assistant-reset-button { justify-self: stretch; width: 100%; } .assistant-header-actions { align-items: stretch; flex-direction: column; width: 100%; } .assistant-header-actions .status-pill, .assistant-header-actions .assistant-config-link { width: 100%; } .assistant-header-actions a { text-align: center; } .assistant-answer-toolbar { align-items: stretch; } .assistant-print-button { width: 100%; } .card-header { flex-direction: column; } }
   @media print {
     @page { size: auto; margin: 18mm; }
     body { background: #fff !important; color: #111 !important; }
-    .sidebar, .sidebar-resizer, .topbar, .assistant-intro, .assistant-form, .assistant-header-actions, .assistant-screen > .card-header, .assistant-print-button, .assistant-loading-modal { display: none !important; }
+    .sidebar, .sidebar-resizer, .topbar, .assistant-intro, .assistant-form, .assistant-header-actions, .assistant-screen > .card-header, .assistant-print-button, .assistant-loading-modal, .assistant-confirm-modal { display: none !important; }
     .app-shell { display: block !important; min-height: 0 !important; }
     .main { padding: 0 !important; }
     .content { width: 100% !important; }

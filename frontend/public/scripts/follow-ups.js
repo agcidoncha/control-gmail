@@ -2,12 +2,33 @@
   const listNode = document.querySelector('#followUps');
   const countNode = document.querySelector('#followUpCount');
   const searchNode = document.querySelector('#followUpSearch');
-  const ageNode = document.querySelector('#followUpAge');
   const categoryNode = document.querySelector('#followUpCategory');
-  const alertsNode = document.querySelector('#followUpAlerts');
-  if (!listNode || !countNode || !searchNode || !ageNode || !categoryNode || !alertsNode) return;
+  const categoryInfoButton = document.querySelector('#followUpCategoryInfoButton');
+  const categoryInfoModal = document.querySelector('#followUpCategoryInfoModal');
+  const categoryInfoClose = document.querySelector('#followUpCategoryInfoClose');
+  const rangeForm = document.querySelector('#followUpRangeForm');
+  const dateModeNode = document.querySelector('#followUpDateMode');
+  const exactDateField = document.querySelector('#followUpExactDateField');
+  const exactDateNode = document.querySelector('#followUpExactDate');
+  const dateRangeFields = document.querySelector('#followUpDateRangeFields');
+  const dateFromNode = document.querySelector('#followUpDateFrom');
+  const dateToNode = document.querySelector('#followUpDateTo');
+  const rangeSummaryNode = document.querySelector('#followUpRangeSummary');
+  const applyRangeButton = document.querySelector('#applyFollowUpRange');
+  const clearRangeButton = document.querySelector('#clearFollowUpRange');
+  const paginationContainers = [...document.querySelectorAll('[data-follow-up-pagination-container]')];
+  const paginationStatusNodes = [...document.querySelectorAll('[data-follow-up-pagination-status]')];
+  const pageNumberContainers = [...document.querySelectorAll('[data-follow-up-page-numbers]')];
+  const previousPageButtons = [...document.querySelectorAll('[data-follow-up-pagination="previous"]')];
+  const nextPageButtons = [...document.querySelectorAll('[data-follow-up-pagination="next"]')];
+  if (!listNode || !countNode || !searchNode || !categoryNode || !rangeForm || !dateModeNode || !exactDateField || !exactDateNode || !dateRangeFields || !dateFromNode || !dateToNode || !rangeSummaryNode || !applyRangeButton || !clearRangeButton) return;
 
   let items = [];
+  let total = 0;
+  let currentPage = 1;
+  let pageCount = 1;
+  let summary = { total: 0 };
+  let loading = false;
 
   const text = (tag, value, className = '') => {
     const node = document.createElement(tag);
@@ -16,10 +37,101 @@
     return node;
   };
 
+  function showErrorNotice(error, fallback, title = 'No se pudo completar la acción') {
+    const message = error?.message || fallback;
+    if (typeof window.showAppNotice === 'function') window.showAppNotice(message, { title });
+  }
+
   function formatDate(value) {
     if (!value) return 'Fecha desconocida';
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
+  }
+
+  function formatDateInput(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function formatWindowDate(value) {
+    if (!value) return '';
+    const date = new Date(`${String(value).replaceAll('/', '-')}T00:00:00.000Z`);
+    return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }).format(date);
+  }
+
+  function getPresetDateRange() {
+    const today = new Date();
+    return {
+      from: formatDateInput(new Date(today.getFullYear(), today.getMonth(), 1)),
+      to: formatDateInput(today),
+    };
+  }
+
+  function getDateRange() {
+    if (dateModeNode.value === 'this-month') return getPresetDateRange();
+    if (dateModeNode.value === 'day') {
+      if (!exactDateNode.value) throw new Error('Selecciona el día que quieres consultar.');
+      return { from: exactDateNode.value, to: exactDateNode.value };
+    }
+    if (!dateFromNode.value && !dateToNode.value) throw new Error('Indica al menos una fecha para buscar el periodo.');
+    if (dateFromNode.value && dateToNode.value && dateFromNode.value > dateToNode.value) {
+      throw new Error('La fecha «Desde» no puede ser posterior a «Hasta».');
+    }
+    return { from: dateFromNode.value, to: dateToNode.value };
+  }
+
+  function updateDateFields() {
+    const mode = dateModeNode.value;
+    exactDateField.hidden = mode !== 'day';
+    dateRangeFields.hidden = mode !== 'range';
+    applyRangeButton.hidden = mode !== 'day' && mode !== 'range';
+    clearRangeButton.hidden = mode === 'this-month';
+  }
+
+  function setRangeSummary(analysisWindow) {
+    if (!analysisWindow) return;
+    const from = formatWindowDate(analysisWindow.from);
+    const to = formatWindowDate(analysisWindow.to);
+    const prefix = dateModeNode.value === 'this-month' ? 'Este mes' : dateModeNode.value === 'day' ? 'Día concreto' : 'Periodo';
+    rangeSummaryNode.textContent = `${prefix}: ${from} – ${to}`;
+  }
+
+  function renderLoadingState() {
+    listNode.removeAttribute('aria-hidden');
+    listNode.setAttribute('aria-busy', 'true');
+    listNode.setAttribute('aria-label', 'Consultando seguimientos');
+    listNode.replaceChildren(text('p', 'Consultando los seguimientos…', 'muted'));
+  }
+
+  function renderPagination() {
+    const showPagination = loading || pageCount > 1;
+    paginationContainers.forEach((container) => { container.hidden = !showPagination; });
+    const visiblePageStart = Math.min(Math.max(currentPage - 2, 1), Math.max(1, pageCount - 4));
+    const visiblePageEnd = Math.min(pageCount, visiblePageStart + 4);
+    pageNumberContainers.forEach((container) => {
+      container.replaceChildren();
+      for (let page = visiblePageStart; page <= visiblePageEnd; page += 1) {
+        const pageButton = text('button', String(page), 'follow-up-page-number' + (page === currentPage ? ' is-current' : ''));
+        pageButton.type = 'button';
+        pageButton.dataset.followUpPage = String(page);
+        pageButton.setAttribute('aria-label', 'Ir a la página ' + page);
+        pageButton.setAttribute('aria-current', page === currentPage ? 'page' : 'false');
+        pageButton.disabled = loading || page === currentPage;
+        container.append(pageButton);
+      }
+    });
+    previousPageButtons.forEach((button) => {
+      button.hidden = currentPage <= 1;
+      button.disabled = loading;
+    });
+    nextPageButtons.forEach((button) => {
+      button.hidden = currentPage >= pageCount;
+      button.disabled = loading;
+    });
+    const paginationMessage = pageCount > 1 ? `Página ${currentPage} de ${pageCount} · ${total} seguimientos en el periodo.` : '';
+    paginationStatusNodes.forEach((node, index) => { node.textContent = index === 0 ? paginationMessage : ''; });
   }
 
   function urgencyFor(ageDays) {
@@ -29,45 +141,22 @@
     return ['normal', 'Reciente'];
   }
 
-  function renderAlerts() {
-    const thresholds = [
-      { days: 5, tone: 'attention', title: 'Desde 5 días', description: 'Revisar esta semana' },
-      { days: 10, tone: 'priority', title: 'Desde 10 días', description: 'Prioridad comercial' },
-      { days: 15, tone: 'urgent', title: 'Desde 15 días', description: 'Atención urgente' },
-    ];
-    const alerts = thresholds
-      .map((threshold) => ({ ...threshold, count: items.filter((item) => item.ageDays >= threshold.days).length }))
-      .filter((threshold) => threshold.count > 0);
-
-    alertsNode.replaceChildren();
-    alertsNode.hidden = alerts.length === 0;
-    alerts.forEach((alert) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'follow-up-alert ' + alert.tone;
-      button.dataset.ageAlert = String(alert.days);
-      button.append(text('strong', alert.count + (alert.count === 1 ? ' seguimiento' : ' seguimientos') + ' · ' + alert.title));
-      button.append(text('span', alert.description));
-      alertsNode.append(button);
-    });
-  }
-
   function render() {
     listNode.removeAttribute('aria-hidden');
     listNode.removeAttribute('aria-busy');
     listNode.removeAttribute('aria-label');
     countNode.removeAttribute('aria-label');
     const query = searchNode.value.trim().toLowerCase();
-    const minimumAge = ageNode.value === 'all' ? 0 : Number(ageNode.value);
     const visible = items.filter((item) => {
       const haystack = [item.client, item.subject, item.reason].join(' ').toLowerCase();
       return (!query || haystack.includes(query))
-        && item.ageDays >= minimumAge
         && (categoryNode.value === 'all' || item.category === categoryNode.value);
     });
 
-    renderAlerts();
-    countNode.textContent = visible.length + (visible.length === 1 ? ' pendiente' : ' pendientes');
+    countNode.textContent = query
+      ? visible.length + (visible.length === 1 ? ' coincidencia' : ' coincidencias') + ' · página ' + currentPage
+      : total + (total === 1 ? ' pendiente' : ' pendientes') + ' · página ' + currentPage;
+    renderPagination();
     listNode.replaceChildren();
     if (!visible.length) {
       listNode.append(text('p', items.length ? 'No hay seguimientos que coincidan con los filtros.' : 'No hay seguimientos pendientes verificables en los mensajes consultados.', 'muted'));
@@ -135,28 +224,66 @@
     });
   }
 
-  async function load() {
+  async function load({ resetPage = false } = {}) {
+    if (loading) return;
+    if (resetPage) currentPage = 1;
+    loading = true;
+    items = [];
+    total = 0;
+    summary = { total: 0 };
+    countNode.textContent = 'Consultando…';
+    renderLoadingState();
+    rangeSummaryNode.textContent = 'Consultando…';
+    [...rangeForm.querySelectorAll('button, select, input')].forEach((control) => { control.disabled = true; });
+    paginationStatusNodes.forEach((node, index) => { node.textContent = index === 0 ? 'Buscando seguimientos en Gmail…' : ''; });
+    renderPagination();
+    if (typeof window.showAppLoading === 'function') {
+      window.showAppLoading('Estamos consultando Gmail y preparando los seguimientos del periodo seleccionado.', { title: 'Buscando seguimientos' });
+    }
     try {
-      const shared = window.__commercialNavDataPromise
-        ? await window.__commercialNavDataPromise
-        : null;
-      const result = shared?.followUps ?? await (async () => {
-        const response = await fetch('/gmail/follow-ups?max=10');
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'No se pudieron detectar seguimientos.');
-        return data;
-      })();
+      const dateRange = getDateRange();
+      const params = new URLSearchParams({
+        max: '10',
+        page: String(currentPage),
+        from: dateRange.from || '',
+        to: dateRange.to || '',
+        age: 'all',
+        category: categoryNode.value,
+      });
+      const response = await fetch('/gmail/follow-ups?' + params.toString());
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'No se pudieron detectar seguimientos.');
       items = result.followUps || [];
+      total = Number(result.total ?? items.length);
+      currentPage = Number(result.page ?? currentPage);
+      pageCount = Math.max(1, Number(result.pageCount ?? 1));
+      summary = result.summary || { total };
+      setRangeSummary(result.analysisWindow);
       const navCount = document.querySelector('#navFollowUpCount');
-      if (navCount) { navCount.textContent = String(items.length); navCount.hidden = false; }
+      if (navCount) { navCount.textContent = String(summary.total); navCount.hidden = false; }
       render();
     } catch (error) {
+      items = [];
+      total = 0;
+      currentPage = 1;
+      pageCount = 1;
+      summary = { total: 0 };
+      rangeSummaryNode.textContent = 'No disponible temporalmente';
       listNode.removeAttribute('aria-hidden');
       listNode.removeAttribute('aria-busy');
       listNode.removeAttribute('aria-label');
       countNode.removeAttribute('aria-label');
       listNode.replaceChildren(text('p', error.message || 'No se pudieron cargar los seguimientos.', 'muted'));
       countNode.textContent = '—';
+      const navCount = document.querySelector('#navFollowUpCount');
+      if (navCount) navCount.textContent = '—';
+      if (typeof window.hideAppLoading === 'function') window.hideAppLoading();
+      showErrorNotice(error, 'No se pudieron cargar los seguimientos.', 'No se pudieron cargar los seguimientos');
+    } finally {
+      loading = false;
+      if (typeof window.hideAppLoading === 'function') window.hideAppLoading();
+      [...rangeForm.querySelectorAll('button, select, input')].forEach((control) => { control.disabled = false; });
+      renderPagination();
     }
   }
 
@@ -190,6 +317,7 @@
       } catch (error) {
         status.textContent = error.message || 'No se pudo aplicar la acción.';
         buttons.forEach((button) => { button.disabled = false; });
+        showErrorNotice(error, 'No se pudo aplicar la acción.', 'No se pudo actualizar el seguimiento');
       }
       return;
     }
@@ -221,18 +349,85 @@
       });
     } catch (error) {
       thread.replaceChildren(text('p', error.message || 'No se pudo cargar el hilo.', 'muted'));
+      showErrorNotice(error, 'No se pudo cargar el hilo.', 'No se pudo cargar el hilo');
     }
   });
 
   searchNode.addEventListener('input', render);
-  ageNode.addEventListener('change', render);
-  categoryNode.addEventListener('change', render);
-  alertsNode.addEventListener('click', (event) => {
-    const button = event.target.closest('[data-age-alert]');
-    if (!button) return;
-    ageNode.value = button.dataset.ageAlert || 'all';
-    render();
-    listNode.focus?.({ preventScroll: true });
+  categoryNode.addEventListener('change', () => load({ resetPage: true }));
+  if (categoryInfoButton && categoryInfoModal && categoryInfoClose) {
+    let lastFocusedElement = null;
+    const closeCategoryInfo = () => {
+      categoryInfoModal.hidden = true;
+      document.documentElement.classList.remove('follow-up-info-open');
+      if (lastFocusedElement && typeof lastFocusedElement.focus === 'function') lastFocusedElement.focus();
+    };
+    categoryInfoButton.addEventListener('click', () => {
+      lastFocusedElement = document.activeElement;
+      categoryInfoModal.hidden = false;
+      document.documentElement.classList.add('follow-up-info-open');
+      categoryInfoClose.focus();
+    });
+    categoryInfoClose.addEventListener('click', closeCategoryInfo);
+    categoryInfoModal.addEventListener('click', (event) => {
+      if (event.target === categoryInfoModal) closeCategoryInfo();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (!categoryInfoModal.hidden && event.key === 'Escape') closeCategoryInfo();
+    });
+  }
+  dateModeNode.addEventListener('change', async () => {
+    updateDateFields();
+    if (dateModeNode.value === 'this-month') {
+      exactDateNode.value = '';
+      dateFromNode.value = '';
+      dateToNode.value = '';
+      await load({ resetPage: true });
+      return;
+    }
+    rangeSummaryNode.textContent = 'Pendiente de aplicar';
   });
+  [exactDateNode, dateFromNode, dateToNode].forEach((node) => node.addEventListener('change', () => {
+    if (dateModeNode.value === 'day' || dateModeNode.value === 'range') {
+      rangeSummaryNode.textContent = 'Pendiente de aplicar';
+    }
+  }));
+  rangeForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      getDateRange();
+      await load({ resetPage: true });
+    } catch (error) {
+      paginationStatusNodes.forEach((node) => { node.textContent = error.message || 'Revisa las fechas seleccionadas.'; });
+      showErrorNotice(error, 'Revisa las fechas seleccionadas.', 'No se puede aplicar el periodo');
+    }
+  });
+  clearRangeButton.addEventListener('click', async () => {
+    dateModeNode.value = 'this-month';
+    exactDateNode.value = '';
+    dateFromNode.value = '';
+    dateToNode.value = '';
+    updateDateFields();
+    await load({ resetPage: true });
+  });
+  previousPageButtons.forEach((button) => button.addEventListener('click', () => {
+    if (loading || currentPage <= 1) return;
+    currentPage -= 1;
+    load();
+  }));
+  nextPageButtons.forEach((button) => button.addEventListener('click', () => {
+    if (loading || currentPage >= pageCount) return;
+    currentPage += 1;
+    load();
+  }));
+  pageNumberContainers.forEach((container) => container.addEventListener('click', (event) => {
+    const pageButton = event.target.closest('[data-follow-up-page]');
+    if (!pageButton || loading) return;
+    const requestedPage = Number(pageButton.dataset.followUpPage);
+    if (!Number.isInteger(requestedPage) || requestedPage < 1 || requestedPage === currentPage) return;
+    currentPage = requestedPage;
+    load();
+  }));
+  updateDateFields();
   load();
 })();
