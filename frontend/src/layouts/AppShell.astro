@@ -4,7 +4,7 @@ import HelpPanel from '../components/HelpPanel.astro';
 const currentPath = Astro.url.pathname;
 const currentMailbox = Astro.url.searchParams.get('mailbox');
 const navItems = [
-  { href: '/dashboard', label: 'Resumen comercial', icon: '/icons/home/resumen.svg', key: '/dashboard' },
+  { href: '/dashboard', label: 'Kick-off', icon: '/icons/home/clock-play.svg', key: '/dashboard' },
   { href: '/mailbox', label: 'Bandeja comercial', icon: '/icons/home/bandeja.svg', key: '/mailbox' },
   { href: '/follow-ups', label: 'Seguimientos', icon: '/icons/home/seguimientos.svg', key: '/follow-ups' },
   { href: '/commitments', label: 'Compromisos', icon: '/icons/home/compromiso.svg', key: '/commitments' },
