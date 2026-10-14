@@ -102,11 +102,14 @@ Alcance del buzón aplicado: ${analysisWindow.scope === 'all' ? 'todos los mensa
     return result;
   }
 
-  const client = new OpenAI({ apiKey: connection.apiKey });
+  const client = new OpenAI({
+    apiKey: connection.apiKey,
+    ...(connection.provider === 'deepseek' ? { baseURL: 'https://api.deepseek.com' } : {}),
+  });
   const response = await client.responses.create({
     model: connection.model,
-    reasoning: { effort: connection.reasoningEffort },
-    max_output_tokens: 1600,
+    ...(connection.provider === 'openai' ? { reasoning: { effort: connection.reasoningEffort } } : {}),
+    max_output_tokens: connection.provider === 'deepseek' ? 2800 : 1600,
     instructions,
     input: prompt,
     text: {

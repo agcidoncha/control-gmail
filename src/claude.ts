@@ -65,6 +65,20 @@ export function parseCommercialAnalysis(text: string): CommercialAnalysis {
     // Algunos proveedores pueden devolver texto plano pese a las instrucciones de formato.
   }
 
+  // Si el proveedor corta la salida antes de cerrar el JSON, conservamos la
+  // respuesta principal y evitamos enseñar al usuario el objeto técnico entero.
+  const partialResponse = extractJsonStringProperty(cleaned, 'respuesta');
+  if (partialResponse !== null) {
+    return {
+      respuesta: cleanPlainText(partialResponse),
+      hechos: [],
+      inferencias: [],
+      acciones_propuestas: [],
+      requiere_revision: true,
+      fuentes: [],
+    };
+  }
+
   return {
     respuesta: cleanPlainText(text),
     hechos: [],
@@ -73,6 +87,35 @@ export function parseCommercialAnalysis(text: string): CommercialAnalysis {
     requiere_revision: true,
     fuentes: [],
   };
+}
+
+function extractJsonStringProperty(value: string, property: string) {
+  const marker = `"${property}"`;
+  const start = value.indexOf(marker);
+  if (start < 0) return null;
+  const colon = value.indexOf(':', start + marker.length);
+  if (colon < 0) return null;
+  let index = colon + 1;
+  while (/\s/.test(value[index] ?? '')) index += 1;
+  if (value[index] !== '"') return null;
+
+  const stringStart = index;
+  let escaped = false;
+  for (index += 1; index < value.length; index += 1) {
+    const character = value[index];
+    if (escaped) {
+      escaped = false;
+    } else if (character === '\\') {
+      escaped = true;
+    } else if (character === '"') {
+      try {
+        return JSON.parse(value.slice(stringStart, index + 1)) as string;
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
 }
 
 function normalizeAnalysis(parsed: Partial<CommercialAnalysis>): CommercialAnalysis {
@@ -132,5 +175,40 @@ function isAnalysisSource(value: unknown): value is { mensaje_id: string; asunto
 
 function extractJson(text: string) {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  return (fenced?.[1] ?? text).trim();
+  const candidate = (fenced?.[1] ?? text).trim();
+  if (fenced) return candidate;
+
+  // Algunos modelos anteponen un título o una explicación al JSON, aunque
+  // hayan recibido la instrucción de devolver únicamente el objeto.
+  // Extraemos el primer objeto JSON completo sin tocar las llaves que puedan
+  // aparecer dentro de cadenas de texto.
+  const start = candidate.indexOf('{');
+  if (start < 0) return candidate;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < candidate.length; index += 1) {
+    const character = candidate[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === '\\') {
+        escaped = true;
+      } else if (character === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (character === '"') {
+      inString = true;
+    } else if (character === '{') {
+      depth += 1;
+    } else if (character === '}') {
+      depth -= 1;
+      if (depth === 0) return candidate.slice(start, index + 1);
+    }
+  }
+
+  return candidate;
 }

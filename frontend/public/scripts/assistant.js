@@ -20,7 +20,11 @@
   if (!form || !questionNode || !submitButton || !connectionStatus || !messageNode || !answerNode || !analysisRangeNode || !analysisScopeNode || !customDatesNode || !analysisFromNode || !analysisToNode || !analysisCostNotice || !clientNode || !clientSearchNode || !clientResultsNode || !clientStatusNode || !loadingModal || !loadingDescription) return;
   const presetButtons = [...document.querySelectorAll('[data-assistant-prompt]')];
 
-  const providerLabel = (provider) => provider === 'claude' ? 'Anthropic Claude' : 'OpenAI';
+  const providerLabel = (provider) => provider === 'claude'
+    ? 'Anthropic Claude'
+    : provider === 'deepseek'
+      ? 'DeepSeek'
+      : 'OpenAI';
   const allClientsValue = '__all__';
   let detectedClients = [];
   const selectedClient = () => clientNode.value && clientNode.value !== allClientsValue ? clientNode.value : undefined;
@@ -396,7 +400,7 @@
 
   async function loadClients() {
     try {
-      const response = await fetch('/gmail/insights?max=1000');
+      const response = await fetch('/gmail/insights?max=1000&refresh=1');
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'No se pudieron cargar los clientes.');
       detectedClients = (data.insights?.clients || []).sort((left, right) => left.email.localeCompare(right.email));

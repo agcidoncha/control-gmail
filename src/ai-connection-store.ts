@@ -4,11 +4,13 @@ import { dirname, resolve } from 'node:path';
 import { getFirestore, isFirestoreEnabled } from './firestore.js';
 import { getMysqlPool, isMysqlEnabled, mysqlDateTime } from './mysql.js';
 import type { AiProvider } from './ai-connections.js';
+import { getDefaultAiModel } from './ai-models.js';
 
 export type PersonalAiConnection = {
   organizationId: string;
   userEmail: string;
   provider: AiProvider;
+  model?: string;
   apiKey: string;
   createdAt: string;
   updatedAt: string;
@@ -34,10 +36,10 @@ export async function savePersonalAiConnection(connection: Omit<PersonalAiConnec
   }
   if (isMysqlEnabled()) {
     await getMysqlPool().query(
-      `INSERT INTO ai_connections (organization_id, user_email, provider, api_key_ciphertext, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE provider = VALUES(provider), api_key_ciphertext = VALUES(api_key_ciphertext), updated_at = VALUES(updated_at)`,
-      [next.organizationId, next.userEmail.toLowerCase(), next.provider, encryptValue(next.apiKey), mysqlDateTime(next.createdAt), mysqlDateTime(next.updatedAt)],
+      `INSERT INTO ai_connections (organization_id, user_email, provider, model, api_key_ciphertext, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE provider = VALUES(provider), model = VALUES(model), api_key_ciphertext = VALUES(api_key_ciphertext), updated_at = VALUES(updated_at)`,
+      [next.organizationId, next.userEmail.toLowerCase(), next.provider, next.model ?? getDefaultAiModel(next.provider), encryptValue(next.apiKey), mysqlDateTime(next.createdAt), mysqlDateTime(next.updatedAt)],
     );
     return;
   }
@@ -65,7 +67,8 @@ export async function loadPersonalAiConnection(organizationId: string, userEmail
     return {
       organizationId: String(row.organization_id),
       userEmail: String(row.user_email),
-      provider: row.provider === 'claude' ? 'claude' : 'openai',
+      provider: row.provider === 'claude' ? 'claude' : row.provider === 'deepseek' ? 'deepseek' : 'openai',
+      model: typeof row.model === 'string' && row.model ? row.model : getDefaultAiModel(row.provider === 'claude' ? 'claude' : row.provider === 'deepseek' ? 'deepseek' : 'openai'),
       apiKey: decryptValue(String(row.api_key_ciphertext)),
       createdAt: String(row.created_at),
       updatedAt: String(row.updated_at),

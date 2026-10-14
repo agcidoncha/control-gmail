@@ -41,3 +41,30 @@ test('desenvuelve JSON anidado y limpia Markdown escapado', () => {
   assert.deepEqual(analysis.hechos, ['El cliente respondió.']);
   assert.equal(analysis.requiere_revision, false);
 });
+
+test('extrae JSON precedido por un encabezado del proveedor', () => {
+  const analysis = parseCommercialAnalysis(`### Resultado del análisis
+
+${JSON.stringify({
+    respuesta: 'Solo hay un boletín promocional.',
+    hechos: ['Se recibió un mensaje.'],
+    inferencias: [],
+    acciones_propuestas: ['No crear seguimiento.'],
+    requiere_revision: true,
+    fuentes: [],
+  })}`);
+
+  assert.equal(analysis.respuesta, 'Solo hay un boletín promocional.');
+  assert.deepEqual(analysis.hechos, ['Se recibió un mensaje.']);
+  assert.deepEqual(analysis.acciones_propuestas, ['No crear seguimiento.']);
+});
+
+test('conserva la respuesta si el proveedor corta el JSON', () => {
+  const analysis = parseCommercialAnalysis(
+    '{"respuesta":"La respuesta principal sigue siendo útil.","hechos":["Se recibió un mensaje.",',
+  );
+
+  assert.equal(analysis.respuesta, 'La respuesta principal sigue siendo útil.');
+  assert.deepEqual(analysis.hechos, []);
+  assert.equal(analysis.requiere_revision, true);
+});

@@ -3,6 +3,8 @@ import { dirname, resolve } from 'node:path';
 import { getFirestore, isFirestoreEnabled } from './firestore.js';
 import { getMysqlPool, isMysqlEnabled, mysqlDateTime } from './mysql.js';
 import { defaultOrganizationId, ensureDefaultOrganization } from './organization-store.js';
+import { normalizeAiProvider } from './ai-models.js';
+import type { AiProvider } from './ai-connections.js';
 
 export type UserRole = 'commercial' | 'admin';
 export type UserAccessStatus = 'active' | 'pending' | 'revoked';
@@ -12,6 +14,9 @@ export type AppUser = {
   organizationId: string;
   role: UserRole;
   accessStatus?: UserAccessStatus;
+  aiAccessEnabled?: boolean;
+  aiProvider?: AiProvider;
+  aiModel?: string;
   createdAt: string;
   lastLoginAt: string;
 };
@@ -166,6 +171,61 @@ export async function listUsers() {
   return (await readUsers()).map(normalizeUser);
 }
 
+export async function updateUserAiSettings(email: string, settings: {
+  aiAccessEnabled?: boolean;
+  aiProvider?: AiProvider | null;
+  aiModel?: string | null;
+}) {
+  const normalizedEmail = normalizeEmail(email);
+  if (isFirestoreEnabled()) {
+    const reference = getFirestore().collection('users').doc(normalizedEmail);
+    const snapshot = await reference.get();
+    if (!snapshot.exists) return null;
+    const update: Record<string, unknown> = {};
+    if (settings.aiAccessEnabled !== undefined) update.aiAccessEnabled = settings.aiAccessEnabled;
+    if (settings.aiProvider !== undefined) update.aiProvider = settings.aiProvider;
+    if (settings.aiModel !== undefined) update.aiModel = settings.aiModel;
+    await reference.set(update, { merge: true });
+    return normalizeUser({ ...(snapshot.data() as AppUser), ...update });
+  }
+  if (isMysqlEnabled()) {
+    const fields: string[] = [];
+    const values: unknown[] = [];
+    if (settings.aiAccessEnabled !== undefined) {
+      fields.push('ai_access_enabled = ?');
+      values.push(settings.aiAccessEnabled);
+    }
+    if (settings.aiProvider !== undefined) {
+      fields.push('ai_provider = ?');
+      values.push(settings.aiProvider);
+    }
+    if (settings.aiModel !== undefined) {
+      fields.push('ai_model = ?');
+      values.push(settings.aiModel);
+    }
+    if (fields.length) {
+      values.push(normalizedEmail);
+      await getMysqlPool().query(`UPDATE users SET ${fields.join(', ')} WHERE email = ?`, values);
+    }
+    return getMysqlUser(normalizedEmail);
+  }
+
+  const users = await readUsers();
+  const user = users.find((item) => item.email.toLowerCase() === normalizedEmail);
+  if (!user) return null;
+  if (settings.aiAccessEnabled !== undefined) user.aiAccessEnabled = settings.aiAccessEnabled;
+  if (settings.aiProvider !== undefined) {
+    if (settings.aiProvider === null) delete user.aiProvider;
+    else user.aiProvider = settings.aiProvider;
+  }
+  if (settings.aiModel !== undefined) {
+    if (settings.aiModel === null) delete user.aiModel;
+    else user.aiModel = settings.aiModel;
+  }
+  await writeUsers(users);
+  return normalizeUser(user);
+}
+
 async function upsertFirestoreUser(email: string) {
   const reference = getFirestore().collection('users').doc(email);
   const snapshot = await reference.get();
@@ -260,13 +320,22 @@ function fromMysqlUser(row: Record<string, unknown>): AppUser {
     organizationId: String(row.organization_id),
     role: row.role === 'admin' ? 'admin' : 'commercial',
     accessStatus: row.access_status === 'revoked' ? 'revoked' : row.access_status === 'pending' ? 'pending' : 'active',
+    aiAccessEnabled: row.ai_access_enabled === null || row.ai_access_enabled === undefined ? undefined : Boolean(row.ai_access_enabled),
+    aiProvider: normalizeAiProvider(row.ai_provider) ?? undefined,
+    aiModel: typeof row.ai_model === 'string' && row.ai_model ? row.ai_model : undefined,
     createdAt: String(row.created_at),
     lastLoginAt: String(row.last_login_at),
   });
 }
 
 function normalizeUser(user: AppUser): AppUser {
-  return { ...user, organizationId: user.organizationId ?? defaultOrganizationId, accessStatus: user.accessStatus ?? 'active' };
+  return {
+    ...user,
+    organizationId: user.organizationId ?? defaultOrganizationId,
+    accessStatus: user.accessStatus ?? 'active',
+    aiProvider: normalizeAiProvider(user.aiProvider) ?? undefined,
+    aiModel: user.aiModel || undefined,
+  };
 }
 
 function normalizeEmail(email: string) {

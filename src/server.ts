@@ -4,15 +4,15 @@ import { resolve } from 'node:path';
 import Fastify from 'fastify';
 import { completeAuthorization, createAuthorizationUrl, getAnalysisWindow, getThreadMessages, listAccountInsights, listClientHistory, listDetectedCommitments, listPendingFollowUps, listRecentMessagesPage, modifyGmailMessage, refreshGmailAccount, sendGmailMessage, syncGmailAccount, type GmailMailbox, type GmailMessageAction, type GmailSendInput } from './google-oauth.js';
 import { clearSessionCookieHeader, readSession, readSessionContext, sessionCookieHeaderForOrganization } from './session.js';
-import { authorizeUser, deleteUser, disconnectUser, getUser, listUsers, upsertUser } from './user-store.js';
+import { authorizeUser, deleteUser, disconnectUser, getUser, listUsers, updateUserAiSettings, upsertUser } from './user-store.js';
 import { deleteGoogleTokens } from './token-store.js';
 import { askCommercialAssistant } from './assistant.js';
 import { deletePersonalAiConnection, getPersonalAiConnectionStatus, savePersonalAiConnection } from './ai-connection-store.js';
 import { getOrganization, updateOrganizationAiSettings } from './organization-store.js';
-import type { AiProvider } from './ai-connections.js';
 import { getGmailSyncState, listStoredGmailMessages } from './gmail-store.js';
 import { listGmailActions, recordGmailAction, type GmailActionName } from './gmail-action-store.js';
 import { getMysqlPool, isMysqlEnabled } from './mysql.js';
+import { getAiApiKey, getAiModels, getDefaultAiModel, isSupportedAiModel, normalizeAiProvider, aiProviderLabels } from './ai-models.js';
 
 export const app = Fastify({ logger: true });
 const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:4321';
@@ -621,6 +621,19 @@ app.delete<{ Params: { email: string } }>('/admin/users/:email', async (request,
   return { user: deleted };
 });
 
+function aiProviderCatalog() {
+  return (['openai', 'claude', 'deepseek'] as const).reduce<Record<string, { label: string; configured: boolean; model: string; models: string[] }>>((catalog, provider) => {
+    const models = getAiModels(provider);
+    catalog[provider] = {
+      label: aiProviderLabels[provider],
+      configured: Boolean(getAiApiKey(provider)),
+      model: models[0] ?? getDefaultAiModel(provider),
+      models,
+    };
+    return catalog;
+  }, {});
+}
+
 app.get('/admin/ai', async (request, reply) => {
   const email = readSession(request.headers.cookie);
   if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
@@ -629,42 +642,50 @@ app.get('/admin/ai', async (request, reply) => {
 
   const organization = await getOrganization(user.organizationId);
   const sharedAiUserEmails = organization?.sharedAiUserEmails ?? [];
-  const activeProvider = organization?.sharedAiProvider ?? ((process.env.DEFAULT_AI_PROVIDER ?? 'openai').toLowerCase() === 'claude' ? 'claude' : 'openai');
-  const providers = {
-    openai: { configured: Boolean(process.env.OPENAI_API_KEY), model: process.env.OPENAI_MODEL ?? 'gpt-6-luna' },
-    claude: { configured: Boolean(process.env.CLAUDE_API_KEY), model: process.env.CLAUDE_MODEL ?? 'claude-sonnet-4-6' },
-  };
+  const activeProvider = normalizeAiProvider(organization?.sharedAiProvider ?? process.env.DEFAULT_AI_PROVIDER ?? 'openai') ?? 'openai';
+  const providers = aiProviderCatalog();
   const users = (await listUsers())
     .filter((item) => item.organizationId === user.organizationId)
     .map((item) => ({
       email: item.email,
       role: item.role,
-      canUseSharedAi: item.role === 'admin' || sharedAiUserEmails.includes(item.email.toLowerCase()),
+      canUseSharedAi: item.role === 'admin' || item.aiAccessEnabled === true || sharedAiUserEmails.includes(item.email.toLowerCase()),
+      aiAccessEnabled: item.role === 'admin' || item.aiAccessEnabled === true || sharedAiUserEmails.includes(item.email.toLowerCase()),
+      aiProvider: item.role === 'admin' ? undefined : item.aiProvider,
+      aiModel: item.role === 'admin' ? undefined : item.aiModel,
     }));
 
-  return { organizationId: user.organizationId, activeProvider, providers, users };
+  return {
+    organizationId: user.organizationId,
+    activeProvider,
+    activeModel: organization?.sharedAiModel ?? getDefaultAiModel(activeProvider),
+    providers,
+    users,
+  };
 });
 
-app.put<{ Body: { provider?: string } }>('/admin/ai', async (request, reply) => {
+app.put<{ Body: { provider?: string; model?: string } }>('/admin/ai', async (request, reply) => {
   const email = readSession(request.headers.cookie);
   if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
   const user = await getUser(email);
   if (user?.role !== 'admin') return reply.code(403).send({ error: 'No tienes permisos de administración.' });
 
-  const provider = request.body?.provider;
-  if (provider !== 'openai' && provider !== 'claude') return reply.code(400).send({ error: 'Proveedor no válido.' });
-  const configured = provider === 'openai' ? Boolean(process.env.OPENAI_API_KEY) : Boolean(process.env.CLAUDE_API_KEY);
-  if (!configured) return reply.code(400).send({ error: `No hay una clave ${provider === 'openai' ? 'OPENAI_API_KEY' : 'CLAUDE_API_KEY'} configurada en .env.` });
+  const provider = normalizeAiProvider(request.body?.provider);
+  if (!provider) return reply.code(400).send({ error: 'Proveedor no válido.' });
+  const model = request.body?.model?.trim() || getDefaultAiModel(provider);
+  if (!isSupportedAiModel(provider, model)) return reply.code(400).send({ error: 'Modelo no válido para el proveedor seleccionado.' });
+  if (!getAiApiKey(provider)) return reply.code(400).send({ error: `No hay una clave ${provider.toUpperCase()}_API_KEY configurada en .env.` });
 
   const organization = await getOrganization(user.organizationId);
   const updated = await updateOrganizationAiSettings(user.organizationId, {
     provider,
+    model,
     sharedAiUserEmails: organization?.sharedAiUserEmails ?? [],
   });
-  return { activeProvider: updated?.sharedAiProvider ?? provider };
+  return { activeProvider: updated?.sharedAiProvider ?? provider, activeModel: updated?.sharedAiModel ?? model };
 });
 
-app.patch<{ Params: { email: string }; Body: { canUseSharedAi?: boolean } }>('/admin/ai/users/:email', async (request, reply) => {
+app.patch<{ Params: { email: string }; Body: { canUseSharedAi?: boolean; aiAccessEnabled?: boolean; provider?: string; model?: string } }>('/admin/ai/users/:email', async (request, reply) => {
   const email = readSession(request.headers.cookie);
   if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
   const user = await getUser(email);
@@ -674,13 +695,34 @@ app.patch<{ Params: { email: string }; Body: { canUseSharedAi?: boolean } }>('/a
   if (!target || target.organizationId !== user.organizationId) return reply.code(404).send({ error: 'Usuario no encontrado.' });
   const organization = await getOrganization(user.organizationId);
   const current = new Set(organization?.sharedAiUserEmails ?? []);
-  if (request.body?.canUseSharedAi) current.add(target.email.toLowerCase());
-  else current.delete(target.email.toLowerCase());
+  const accessEnabled = request.body?.aiAccessEnabled ?? request.body?.canUseSharedAi;
+  if (accessEnabled === true) current.add(target.email.toLowerCase());
+  if (accessEnabled === false) current.delete(target.email.toLowerCase());
+
+  // El administrador no tiene una asignación individual: siempre hereda la global.
+  const hasProviderUpdate = target.role !== 'admin' && request.body?.provider !== undefined;
+  const provider = hasProviderUpdate ? normalizeAiProvider(request.body?.provider) : target.aiProvider;
+  if (hasProviderUpdate && !provider) return reply.code(400).send({ error: 'Proveedor no válido.' });
+  const model = request.body?.model?.trim() || (provider ? target.aiModel ?? getDefaultAiModel(provider) : undefined);
+  if (provider && model && !isSupportedAiModel(provider, model)) return reply.code(400).send({ error: 'Modelo no válido para el proveedor seleccionado.' });
+  if (provider && !getAiApiKey(provider)) return reply.code(400).send({ error: `No hay una clave ${provider.toUpperCase()}_API_KEY configurada en .env.` });
+
+  const updatedUser = await updateUserAiSettings(target.email, {
+    aiAccessEnabled: accessEnabled,
+    aiProvider: hasProviderUpdate ? provider : undefined,
+    aiModel: hasProviderUpdate ? model : undefined,
+  });
   await updateOrganizationAiSettings(user.organizationId, {
     provider: organization?.sharedAiProvider,
     sharedAiUserEmails: [...current],
   });
-  return { email: target.email, canUseSharedAi: Boolean(request.body?.canUseSharedAi) };
+  return {
+    email: target.email,
+    canUseSharedAi: target.role === 'admin' || Boolean(updatedUser?.aiAccessEnabled),
+    aiAccessEnabled: target.role === 'admin' || Boolean(updatedUser?.aiAccessEnabled),
+    aiProvider: target.role === 'admin' ? undefined : updatedUser?.aiProvider,
+    aiModel: target.role === 'admin' ? undefined : updatedUser?.aiModel,
+  };
 });
 
 app.get('/ai/connections', async (request, reply) => {
@@ -690,16 +732,20 @@ app.get('/ai/connections', async (request, reply) => {
   if (!user) return reply.code(403).send({ error: 'Usuario no registrado.' });
 
   const organization = await getOrganization(user.organizationId);
-  const provider = organization?.sharedAiProvider ?? ((process.env.DEFAULT_AI_PROVIDER ?? 'openai').toLowerCase() === 'claude' ? 'claude' : 'openai');
-  const companyConfigured = provider === 'openai'
-    ? Boolean(process.env.OPENAI_API_KEY)
-    : provider === 'claude' && Boolean(process.env.CLAUDE_API_KEY);
-  const canUseCompany = user.role === 'admin' || Boolean(organization?.sharedAiUserEmails?.includes(email.toLowerCase()));
+  const provider = normalizeAiProvider(organization?.sharedAiProvider ?? process.env.DEFAULT_AI_PROVIDER ?? 'openai') ?? 'openai';
+  const companyModel = organization?.sharedAiModel ?? getDefaultAiModel(provider);
+  // El administrador hereda siempre el proveedor y modelo globales.
+  const assignedProvider = user.role === 'admin' ? null : normalizeAiProvider(user.aiProvider);
+  const assignedModel = assignedProvider ? user.aiModel ?? getDefaultAiModel(assignedProvider) : undefined;
+  const canUseCompany = user.role === 'admin' || user.aiAccessEnabled === true || Boolean(organization?.sharedAiUserEmails?.includes(email.toLowerCase()));
+  const effectiveProvider = assignedProvider ?? provider;
+  const effectiveModel = assignedModel ?? companyModel;
+  const effectiveConfigured = Boolean(getAiApiKey(effectiveProvider));
   const personal = await getPersonalAiConnectionStatus(user.organizationId, email);
   const activeConnection = personal
-    ? { mode: 'user_personal', provider: personal.provider }
-    : canUseCompany && companyConfigured
-      ? { mode: 'company_shared', provider: provider === 'claude' ? 'claude' : 'openai' }
+    ? { mode: 'user_personal', provider: personal.provider, model: personal.model ?? getDefaultAiModel(personal.provider) }
+    : canUseCompany && effectiveConfigured
+      ? { mode: 'company_shared', provider: effectiveProvider, model: effectiveModel }
       : null;
 
   return {
@@ -707,36 +753,43 @@ app.get('/ai/connections', async (request, reply) => {
     role: user.role,
     organizationId: user.organizationId,
     company: {
-      provider: provider === 'claude' ? 'claude' : 'openai',
+      provider: effectiveProvider,
       mode: 'company_shared',
-      status: companyConfigured ? 'active' : 'not_configured',
-      model: provider === 'claude' ? (process.env.CLAUDE_MODEL ?? 'claude-sonnet-4-6') : (process.env.OPENAI_MODEL ?? 'gpt-6-luna'),
+      status: effectiveConfigured ? 'active' : 'not_configured',
+      model: effectiveModel,
+      models: getAiModels(effectiveProvider),
       canUse: canUseCompany,
+      assignedProvider,
+      assignedModel,
     },
+    providers: aiProviderCatalog(),
     personal,
     activeConnection,
   };
 });
 
-app.post<{ Body: { provider?: string; apiKey?: string } }>('/ai/connections/personal', async (request, reply) => {
+app.post<{ Body: { provider?: string; model?: string; apiKey?: string } }>('/ai/connections/personal', async (request, reply) => {
   const email = readSession(request.headers.cookie);
   if (!email) return reply.code(401).send({ error: 'Sesión no iniciada.' });
   const user = await getUser(email);
   if (!user) return reply.code(403).send({ error: 'Usuario no registrado.' });
 
-  const provider = request.body?.provider;
+  const provider = normalizeAiProvider(request.body?.provider);
+  const model = request.body?.model?.trim() || (provider ? getDefaultAiModel(provider) : '');
   const apiKey = request.body?.apiKey?.trim();
-  if (provider !== 'openai' && provider !== 'claude') return reply.code(400).send({ error: 'Proveedor no válido.' });
+  if (!provider) return reply.code(400).send({ error: 'Proveedor no válido.' });
+  if (!isSupportedAiModel(provider, model)) return reply.code(400).send({ error: 'Modelo no válido para el proveedor seleccionado.' });
   if (!apiKey || apiKey.length < 10) return reply.code(400).send({ error: 'Introduce una clave de API válida.' });
 
   try {
     await savePersonalAiConnection({
       organizationId: user.organizationId,
       userEmail: email,
-      provider: provider as AiProvider,
+      provider,
+      model,
       apiKey,
     });
-    return { connected: true, provider, mode: 'user_personal' };
+    return { connected: true, provider, model, mode: 'user_personal' };
   } catch (error) {
     return reply.code(500).send({ error: error instanceof Error ? error.message : 'No se pudo guardar la conexión personal.' });
   }
@@ -889,11 +942,12 @@ app.get('/gmail/nav-counts', async (request, reply) => {
   }
 });
 
-app.get<{ Querystring: { max?: string; days?: string; from?: string; to?: string } }>('/gmail/insights', async (request, reply) => {
+app.get<{ Querystring: { max?: string; days?: string; from?: string; to?: string; refresh?: string } }>('/gmail/insights', async (request, reply) => {
   const account = readSession(request.headers.cookie);
   if (!account) return reply.code(401).send({ error: 'Sesión no iniciada.' });
 
   try {
+    if (request.query.refresh === '1') await refreshGmailAccount(account);
     const analysisWindow = getAnalysisWindow({
       days: request.query.days ? Number(request.query.days) : undefined,
       from: request.query.from,

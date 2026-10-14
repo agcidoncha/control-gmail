@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { getFirestore, isFirestoreEnabled } from './firestore.js';
 import { getMysqlPool, isMysqlEnabled, mysqlDateTime } from './mysql.js';
+import type { AiProvider } from './ai-connections.js';
 
 export const defaultOrganizationId = process.env.DEFAULT_ORGANIZATION_ID ?? 'org_publicidad_segmentada_tv';
 export const defaultOrganizationName = process.env.DEFAULT_ORGANIZATION_NAME ?? 'Publicidad Segmentada TV';
@@ -11,7 +12,8 @@ export type Organization = {
   name: string;
   status: 'active' | 'suspended';
   createdAt: string;
-  sharedAiProvider?: 'openai' | 'claude';
+  sharedAiProvider?: AiProvider;
+  sharedAiModel?: string;
   sharedAiUserEmails?: string[];
 };
 
@@ -72,11 +74,12 @@ export async function listOrganizations(): Promise<Organization[]> {
   return (await readOrganizations()).map(normalizeOrganization).sort((left, right) => left.name.localeCompare(right.name));
 }
 
-export async function updateOrganizationAiSettings(id: string, settings: { provider?: 'openai' | 'claude'; sharedAiUserEmails?: string[] }) {
+export async function updateOrganizationAiSettings(id: string, settings: { provider?: AiProvider; model?: string; sharedAiUserEmails?: string[] }) {
   const nextEmails = [...new Set((settings.sharedAiUserEmails ?? []).map((email) => email.trim().toLowerCase()).filter(Boolean))];
   if (isFirestoreEnabled()) {
     const update: Record<string, unknown> = { sharedAiUserEmails: nextEmails };
     if (settings.provider) update.sharedAiProvider = settings.provider;
+    if (settings.model) update.sharedAiModel = settings.model;
     await getFirestore().collection('organizations').doc(id).set(update, { merge: true });
     return getOrganization(id);
   }
@@ -88,6 +91,10 @@ export async function updateOrganizationAiSettings(id: string, settings: { provi
       fields.push('shared_ai_provider = ?');
       values.push(settings.provider);
     }
+    if (settings.model) {
+      fields.push('shared_ai_model = ?');
+      values.push(settings.model);
+    }
     values.push(id);
     await getMysqlPool().query(`UPDATE organizations SET ${fields.join(', ')} WHERE id = ?`, values);
     return getOrganization(id);
@@ -98,6 +105,7 @@ export async function updateOrganizationAiSettings(id: string, settings: { provi
   if (!organization) return null;
   organization.sharedAiUserEmails = nextEmails;
   if (settings.provider) organization.sharedAiProvider = settings.provider;
+  if (settings.model) organization.sharedAiModel = settings.model;
   await writeOrganizations(organizations);
   return normalizeOrganization(organization);
 }
@@ -115,7 +123,8 @@ function fromMysqlOrganization(row: Record<string, unknown>): Organization {
     name: String(row.name),
     status: row.status === 'suspended' ? 'suspended' : 'active',
     createdAt: String(row.created_at),
-    sharedAiProvider: row.shared_ai_provider === 'claude' ? 'claude' : row.shared_ai_provider === 'openai' ? 'openai' : undefined,
+    sharedAiProvider: row.shared_ai_provider === 'claude' ? 'claude' : row.shared_ai_provider === 'deepseek' ? 'deepseek' : row.shared_ai_provider === 'openai' ? 'openai' : undefined,
+    sharedAiModel: typeof row.shared_ai_model === 'string' && row.shared_ai_model ? row.shared_ai_model : undefined,
     sharedAiUserEmails: parseEmailList(row.shared_ai_user_emails),
   };
 }

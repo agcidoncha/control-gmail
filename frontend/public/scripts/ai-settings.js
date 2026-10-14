@@ -9,18 +9,32 @@
   const personalCard = document.querySelector('#personalAiConnection');
   const form = document.querySelector('#personalAiForm');
   const personalProviderNode = document.querySelector('#personalAiProvider');
+  const personalModelNode = document.querySelector('#personalAiModel');
   const keyNode = document.querySelector('#personalAiKey');
   const disconnectButton = document.querySelector('#disconnectPersonalAi');
   const messageNode = document.querySelector('#personalAiMessage');
   const adminControls = document.querySelector('#adminAiControls');
   const globalProviderNode = document.querySelector('#globalAiProvider');
-  const globalProviderStatusNode = document.querySelector('#globalAiProviderStatus');
+  const globalModelNode = document.querySelector('#globalAiModel');
   const sharedUsersNode = document.querySelector('#sharedAiUsers');
   const adminMessageNode = document.querySelector('#adminAiMessage');
-  if (!accountNode || !companyNameNode || !companyStatusNode || !companyDescriptionNode || !personalNameNode || !personalStatusNode || !personalDescriptionNode || !personalCard || !form || !personalProviderNode || !keyNode || !disconnectButton || !messageNode || !adminControls || !globalProviderNode || !globalProviderStatusNode || !sharedUsersNode || !adminMessageNode) return;
+  if (!accountNode || !companyNameNode || !companyStatusNode || !companyDescriptionNode || !personalNameNode || !personalStatusNode || !personalDescriptionNode || !personalCard || !form || !personalProviderNode || !personalModelNode || !keyNode || !disconnectButton || !messageNode || !adminControls || !globalProviderNode || !globalModelNode || !sharedUsersNode || !adminMessageNode) return;
 
-  const providerLabel = (provider) => provider === 'claude' ? 'Claude' : 'OpenAI';
+  const providerLabel = (provider) => provider === 'claude' ? 'Anthropic Claude' : provider === 'deepseek' ? 'DeepSeek' : 'OpenAI';
   const statusLabel = (status) => status === 'active' ? 'Activa' : status === 'not_configured' ? 'No configurada' : 'No conectada';
+  let latestData = null;
+
+  function renderModelOptions(node, models, selectedModel = '') {
+    node.replaceChildren();
+    if (!models?.length) {
+      node.add(new Option('No hay modelos configurados', ''));
+      node.disabled = true;
+      return;
+    }
+    models.forEach((model) => node.add(new Option(model, model)));
+    node.value = models.includes(selectedModel) ? selectedModel : models[0];
+    node.disabled = false;
+  }
 
   function showMessage(value, type = '') {
     messageNode.textContent = value;
@@ -40,6 +54,8 @@
     });
 
     personalProviderNode.value = currentProvider;
+    const personalProvider = data.providers?.[currentProvider];
+    renderModelOptions(personalModelNode, personalProvider?.models ?? [], personal?.model || personalProvider?.model || '');
   }
 
   function render(data) {
@@ -58,7 +74,7 @@
       ? 'La conexión global está configurada, pero el administrador todavía no te ha concedido acceso.'
       : 'La administra la organización. Ningún usuario verá la clave global y se usará mientras no haya una conexión personal.';
 
-    personalNameNode.textContent = personal ? providerLabel(personal.provider) : 'No conectada';
+    personalNameNode.textContent = personal ? providerLabel(personal.provider) + ' · ' + (personal.model || data.providers?.[personal.provider]?.model || 'modelo configurado') : 'No conectada';
     personalStatusNode.textContent = personal ? 'Activa' : 'No conectada';
     personalStatusNode.className = 'status-pill' + (personal ? '' : ' status-neutral');
     personalDescriptionNode.textContent = personal
@@ -74,6 +90,7 @@
     const response = await fetch('/ai/connections');
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'No se pudieron cargar las conexiones.');
+    latestData = data;
     render(data);
   }
 
@@ -86,7 +103,7 @@
       const response = await fetch('/ai/connections/personal', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ provider: personalProviderNode.value, apiKey: keyNode.value }),
+        body: JSON.stringify({ provider: personalProviderNode.value, model: personalModelNode.value, apiKey: keyNode.value }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'No se pudo guardar la conexión.');
@@ -121,45 +138,136 @@
     adminMessageNode.className = 'form-message' + (type ? ' ' + type : '');
   }
 
-  function renderSharedUsers(users) {
+  function renderSharedUsers(users, data) {
     sharedUsersNode.replaceChildren();
     if (!users.length) {
       sharedUsersNode.textContent = 'No hay usuarios registrados.';
       return;
     }
+    const adminGroup = document.createElement('section');
+    adminGroup.className = 'shared-ai-user-group shared-ai-user-group-admin';
+    const adminTitle = document.createElement('h5');
+    adminTitle.textContent = 'Administrador';
+    const adminRows = document.createElement('div');
+    adminRows.className = 'shared-ai-user-group-rows';
+    adminGroup.append(adminTitle, adminRows);
+
+    const commercialGroup = document.createElement('section');
+    commercialGroup.className = 'shared-ai-user-group shared-ai-user-group-commercial';
+    const commercialTitle = document.createElement('h5');
+    commercialTitle.textContent = 'Comerciales';
+    const commercialRows = document.createElement('div');
+    commercialRows.className = 'shared-ai-user-group-rows';
+    commercialGroup.append(commercialTitle, commercialRows);
+
     users.forEach((user) => {
       const row = document.createElement('div');
       row.className = 'shared-ai-user';
-      const label = document.createElement('label');
+      const heading = document.createElement('div');
+      heading.className = 'shared-ai-user-heading';
+      const identity = document.createElement('strong');
+      identity.textContent = user.email;
+      const role = document.createElement('small');
+      role.textContent = user.role === 'admin' ? 'Administrador · acceso permanente' : 'Comercial';
+      heading.append(identity, role);
+
+      const controls = document.createElement('div');
+      controls.className = 'shared-ai-user-controls';
+      const accessLabel = document.createElement('label');
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
-      checkbox.checked = user.canUseSharedAi;
+      checkbox.checked = user.aiAccessEnabled ?? user.canUseSharedAi;
       checkbox.disabled = user.role === 'admin';
-      checkbox.addEventListener('change', async () => {
+      accessLabel.append(checkbox, document.createTextNode(user.role === 'admin' ? 'Administrador: acceso permanente' : 'Puede usar IA'));
+
+      const providerLabelNode = document.createElement('label');
+      providerLabelNode.textContent = 'Proveedor';
+      const providerSelect = document.createElement('select');
+      Object.entries(data.providers ?? {}).forEach(([provider, details]) => {
+        const option = new Option(details.label, provider);
+        option.disabled = !details.configured;
+        providerSelect.add(option);
+      });
+      const isAdmin = user.role === 'admin';
+      const hasAiAccess = isAdmin || (user.aiAccessEnabled ?? user.canUseSharedAi) === true;
+      const selectedProvider = !isAdmin && hasAiAccess && user.aiProvider ? user.aiProvider : data.activeProvider;
+      providerSelect.value = selectedProvider;
+      providerLabelNode.append(providerSelect);
+
+      const providerField = document.createElement('div');
+      providerField.className = 'shared-ai-user-field';
+      providerField.append(providerLabelNode);
+
+      const modelLabelNode = document.createElement('label');
+      modelLabelNode.textContent = 'Modelo';
+      const modelSelect = document.createElement('select');
+      const renderAssignedModels = (provider, selectedModel = '') => {
+        const details = data.providers?.[provider];
+        renderModelOptions(modelSelect, details?.models ?? [], selectedModel || (provider === data.activeProvider ? data.activeModel : details?.model));
+      };
+      renderAssignedModels(selectedProvider, !isAdmin && hasAiAccess && user.aiModel ? user.aiModel : data.activeModel);
+      modelLabelNode.append(modelSelect);
+      const modelField = document.createElement('div');
+      modelField.className = 'shared-ai-user-field';
+      modelField.append(modelLabelNode);
+      controls.append(accessLabel, providerField, modelField);
+      row.append(heading, controls);
+
+      const syncAssignmentControls = () => {
+        const canEditAssignment = !isAdmin && checkbox.checked;
+        providerSelect.disabled = !canEditAssignment;
+        modelSelect.disabled = !canEditAssignment;
+        providerSelect.title = isAdmin
+          ? 'El administrador siempre usa el proveedor global de la empresa'
+          : canEditAssignment ? 'Proveedor asignado a este usuario' : 'Se usará el proveedor global de la empresa';
+        modelSelect.title = isAdmin
+          ? 'El administrador siempre usa el modelo global de la empresa'
+          : canEditAssignment ? 'Modelo asignado a este usuario' : 'Se usará el modelo global de la empresa';
+      };
+      syncAssignmentControls();
+
+      const saveUserSettings = async () => {
+        const previous = { access: checkbox.checked, provider: providerSelect.value, model: modelSelect.value };
         checkbox.disabled = true;
+        providerSelect.disabled = true;
+        modelSelect.disabled = true;
         try {
           const response = await fetch('/admin/ai/users/' + encodeURIComponent(user.email), {
             method: 'PATCH',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ canUseSharedAi: checkbox.checked }),
+            body: JSON.stringify({ aiAccessEnabled: previous.access, provider: previous.provider, model: previous.model }),
           });
-          const data = await response.json();
-          if (!response.ok) throw new Error(data.error || 'No se pudo cambiar el permiso.');
-          user.canUseSharedAi = data.canUseSharedAi;
-          showAdminMessage('Permiso actualizado.', 'success');
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || 'No se pudo guardar la asignación.');
+          user.aiAccessEnabled = result.aiAccessEnabled;
+          user.canUseSharedAi = result.canUseSharedAi;
+          user.aiProvider = result.aiProvider;
+          user.aiModel = result.aiModel;
+          showAdminMessage('Asignación de IA actualizada.', 'success');
         } catch (error) {
-          checkbox.checked = !checkbox.checked;
-          showAdminMessage(error.message || 'No se pudo cambiar el permiso.', 'error');
+          checkbox.checked = previous.access;
+          providerSelect.value = previous.provider;
+          renderAssignedModels(previous.provider, previous.model);
+          showAdminMessage(error.message || 'No se pudo guardar la asignación.', 'error');
         } finally {
           checkbox.disabled = user.role === 'admin';
+          syncAssignmentControls();
         }
+      };
+
+      checkbox.addEventListener('change', () => {
+        syncAssignmentControls();
+        void saveUserSettings();
       });
-      label.append(checkbox, document.createTextNode(user.email));
-      const role = document.createElement('small');
-      role.textContent = user.role === 'admin' ? 'Administrador · acceso permanente' : 'Comercial';
-      row.append(label, role);
-      sharedUsersNode.append(row);
+      providerSelect.addEventListener('change', () => {
+        renderAssignedModels(providerSelect.value);
+        void saveUserSettings();
+      });
+      modelSelect.addEventListener('change', () => void saveUserSettings());
+      (user.role === 'admin' ? adminRows : commercialRows).append(row);
     });
+    if (adminRows.children.length) sharedUsersNode.append(adminGroup);
+    if (commercialRows.children.length) sharedUsersNode.append(commercialGroup);
   }
 
   async function loadAdminSettings() {
@@ -169,33 +277,43 @@
     if (!response.ok) throw new Error(data.error || 'No se pudo cargar la configuración global.');
     adminControls.hidden = false;
     globalProviderNode.value = data.activeProvider;
-    const active = data.providers[data.activeProvider];
-    globalProviderStatusNode.textContent = active.configured
-      ? providerLabel(data.activeProvider) + ' disponible · ' + active.model
-      : providerLabel(data.activeProvider) + ' no tiene clave configurada en .env';
-    renderSharedUsers(data.users);
+    renderModelOptions(globalModelNode, data.providers[data.activeProvider]?.models ?? [], data.activeModel);
+    renderSharedUsers(data.users, data);
   }
 
-  globalProviderNode.addEventListener('change', async () => {
+  async function saveGlobalSettings() {
     globalProviderNode.disabled = true;
-    showAdminMessage('Guardando proveedor global…');
+    globalModelNode.disabled = true;
+    showAdminMessage('Guardando proveedor y modelo global…');
     try {
       const response = await fetch('/admin/ai', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ provider: globalProviderNode.value }),
+        body: JSON.stringify({ provider: globalProviderNode.value, model: globalModelNode.value }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'No se pudo cambiar el proveedor global.');
-      showAdminMessage('Proveedor global actualizado.', 'success');
       await load();
       await loadAdminSettings();
+      showAdminMessage('');
     } catch (error) {
       showAdminMessage(error.message || 'No se pudo cambiar el proveedor global.', 'error');
       await loadAdminSettings();
     } finally {
       globalProviderNode.disabled = false;
+      globalModelNode.disabled = false;
     }
+  }
+
+  globalProviderNode.addEventListener('change', () => {
+    const provider = latestData?.providers?.[globalProviderNode.value];
+    renderModelOptions(globalModelNode, provider?.models ?? [], provider?.model ?? '');
+    void saveGlobalSettings();
+  });
+  globalModelNode.addEventListener('change', () => void saveGlobalSettings());
+  personalProviderNode.addEventListener('change', () => {
+    const provider = latestData?.providers?.[personalProviderNode.value];
+    renderModelOptions(personalModelNode, provider?.models ?? [], provider?.model ?? '');
   });
 
   Promise.all([

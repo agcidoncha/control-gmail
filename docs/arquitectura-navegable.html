@@ -241,7 +241,7 @@
       <section id="ia" class="section" data-search="ia inteligencia artificial openai claude coste proveedor análisis hechos inferencias acciones revisión humana">
         <p class="eyebrow">05 · Inteligencia artificial</p>
         <h2>La IA ayuda a pensar; el comercial decide</h2>
-        <p class="section-intro">La aplicación puede usar OpenAI o Claude mediante un adaptador común. El proveedor recibe solo el contexto autorizado de la cuenta activa y nunca decide acciones de Gmail por su cuenta.</p>
+        <p class="section-intro">La aplicación puede usar OpenAI, Claude o DeepSeek mediante un adaptador común. El proveedor recibe solo el contexto autorizado de la cuenta activa y nunca decide acciones de Gmail por su cuenta.</p>
         <div class="diagram"><div class="diagram-flow">
           <div class="node"><strong>Pregunta del comercial</strong><small>Ej.: «¿Qué seguimientos están pendientes?»</small></div><span class="arrow">→</span>
           <div class="node accent"><strong>Backend</strong><small>Sincroniza, limita el alcance y prepara contexto</small></div><span class="arrow">→</span>
@@ -251,6 +251,7 @@
         <div class="grid two" style="margin-top:15px">
           <article class="card"><h3>OpenAI</h3><p>Es la opción práctica para análisis habituales de correo: resúmenes, clasificación, seguimientos y consultas comerciales. El coste depende del modelo y de la cantidad de texto enviado.</p><p><span class="badge done">Uso habitual</span></p></article>
           <article class="card"><h3>Claude</h3><p>Puede reservarse para análisis largos o especialmente complejos. No hace falta usarlo para cada búsqueda sencilla.</p><p><span class="badge next">Uso especializado</span></p></article>
+          <article class="card"><h3>DeepSeek</h3><p>Puede funcionar como alternativa económica para el trabajo diario. <code>deepseek-flash</code> es el modelo inicial y <code>deepseek-v4-pro</code> queda para análisis más exigentes.</p><p><span class="badge next">Alternativa configurable</span></p></article>
         </div>
         <h3 style="margin-top:28px">Cómo se controla el coste</h3>
         <div class="grid">
@@ -280,7 +281,7 @@
           <article class="card"><h3>Actividad</h3><p>Registra quién archivó, eliminó, restauró o envió, sin guardar el contenido privado del correo.</p></article>
           <article class="card"><h3>Papelera</h3><p>Vista de mensajes enviados a la papelera, con posibilidad de restaurar cuando Gmail y la acción lo permiten.</p></article>
           <article class="card"><h3>Consultar a la IA</h3><p>Pregunta sobre la cuenta activa con alcance y periodo visibles antes de consumir IA.</p></article>
-          <article class="card"><h3>Configuración IA</h3><p>Define el proveedor global de empresa —OpenAI o Anthropic Claude— y las conexiones personales sin exponer claves en pantalla. La pantalla indica si cada proveedor está disponible y qué modelo utilizará.</p></article>
+          <article class="card"><h3>Configuración IA</h3><p>Define el proveedor y modelo global de empresa —OpenAI, Anthropic Claude o DeepSeek— y las conexiones personales sin exponer claves en pantalla. La pantalla indica si cada proveedor está disponible y qué modelo utilizará.</p></article>
           <article class="card"><h3>Usuarios</h3><p>Solo para administración: autorizar, desconectar, eliminar y filtrar comerciales o administradores.</p></article>
           <article class="card"><h3>Cómo usarlo</h3><p>Guía accesible desde el icono de ayuda para explicar cada sección a personas no técnicas.</p></article>
           <article class="card"><h3>Cambiar de cuenta</h3><p>Cierra la cuenta activa y comienza un nuevo OAuth; no cambia silenciosamente de buzón.</p></article>
@@ -379,7 +380,7 @@ npm run dev</pre></article>
           <div><span>Login Google y sesiones separadas</span><span class="badge done">Hecho</span></div>
           <div><span>Roles administrador y comercial</span><span class="badge done">Hecho</span></div>
           <div><span>Bandeja, hilos, enviar, responder y papelera</span><span class="badge done">Hecho</span></div>
-          <div><span>IA con OpenAI y conexión preparada para Claude</span><span class="badge done">Hecho</span></div>
+          <div><span>IA con OpenAI, Claude y DeepSeek con modelo configurable</span><span class="badge done">Hecho</span></div>
           <div><span>Clientes, seguimientos, compromisos y actividad</span><span class="badge done">Base hecha</span></div>
           <div><span>Sincronización manual y aviso de actualización</span><span class="badge next">Mejorar UX</span></div>
           <div><span>Historial de consultas y coste por organización</span><span class="badge next">Siguiente bloque</span></div>

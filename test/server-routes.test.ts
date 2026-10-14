@@ -15,6 +15,7 @@ process.env.AI_CONNECTION_STORE_FILE = join(testDataDirectory, 'ai-connections.e
 process.env.AI_CONNECTION_ENCRYPTION_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 process.env.OPENAI_API_KEY = 'test-openai-key';
 process.env.CLAUDE_API_KEY = 'test-claude-key';
+process.env.DEEPSEEK_API_KEY = 'test-deepseek-key';
 await writeFile(process.env.USER_STORE_FILE, JSON.stringify([
   { email: 'angel.cidoncha@gmail.com', role: 'admin', createdAt: '2026-01-01T00:00:00.000Z', lastLoginAt: '2026-01-01T00:00:00.000Z' },
   { email: 'dev@publicidadsegmentadatv.com', role: 'commercial', createdAt: '2026-01-01T00:00:00.000Z', lastLoginAt: '2026-01-01T00:00:00.000Z' },
@@ -122,6 +123,7 @@ test('el administrador controla el proveedor global y el acceso por usuario', as
   assert.equal(initialAdmin.statusCode, 200);
   assert.equal(initialAdmin.json().activeProvider, 'openai');
   assert.equal(initialAdmin.json().providers.openai.configured, true);
+  assert.equal(initialAdmin.json().users.find((user: { email: string }) => user.email === 'angel.cidoncha@gmail.com').aiProvider, undefined);
   assert.equal(initialAdmin.json().users.find((user: { email: string }) => user.email === 'dev@publicidadsegmentadatv.com').canUseSharedAi, false);
 
   const commercialConnections = await app.inject({ method: 'GET', url: '/ai/connections', headers: commercialHeaders });
@@ -139,26 +141,52 @@ test('el administrador controla el proveedor global y el acceso por usuario', as
   assert.equal(permission.statusCode, 200);
   assert.equal(permission.json().canUseSharedAi, true);
 
+  const assignment = await app.inject({
+    method: 'PATCH',
+    url: '/admin/ai/users/dev%40publicidadsegmentadatv.com',
+    headers: { ...adminHeaders, 'content-type': 'application/json' },
+    payload: { aiAccessEnabled: true, provider: 'deepseek', model: 'deepseek-flash' },
+  });
+  assert.equal(assignment.statusCode, 200);
+  assert.deepEqual(assignment.json(), {
+    email: 'dev@publicidadsegmentadatv.com',
+    canUseSharedAi: true,
+    aiAccessEnabled: true,
+    aiProvider: 'deepseek',
+    aiModel: 'deepseek-flash',
+  });
+
   const grantedConnections = await app.inject({ method: 'GET', url: '/ai/connections', headers: commercialHeaders });
   assert.equal(grantedConnections.json().company.canUse, true);
-  assert.deepEqual(grantedConnections.json().activeConnection, { mode: 'company_shared', provider: 'openai' });
+  assert.deepEqual(grantedConnections.json().activeConnection, { mode: 'company_shared', provider: 'deepseek', model: 'deepseek-flash' });
 
   const personalConnection = await app.inject({
     method: 'POST',
     url: '/ai/connections/personal',
     headers: { ...commercialHeaders, 'content-type': 'application/json' },
-    payload: { provider: 'claude', apiKey: 'test-personal-claude-key' },
+    payload: { provider: 'claude', model: 'claude-sonnet-4-6', apiKey: 'test-personal-claude-key' },
   });
   assert.equal(personalConnection.statusCode, 200);
 
   const personalConnections = await app.inject({ method: 'GET', url: '/ai/connections', headers: commercialHeaders });
-  assert.deepEqual(personalConnections.json().activeConnection, { mode: 'user_personal', provider: 'claude' });
+  assert.deepEqual(personalConnections.json().activeConnection, { mode: 'user_personal', provider: 'claude', model: 'claude-sonnet-4-6' });
 
   const disconnectedPersonal = await app.inject({ method: 'DELETE', url: '/ai/connections/personal', headers: commercialHeaders });
   assert.equal(disconnectedPersonal.statusCode, 200);
 
   const fallbackConnections = await app.inject({ method: 'GET', url: '/ai/connections', headers: commercialHeaders });
-  assert.deepEqual(fallbackConnections.json().activeConnection, { mode: 'company_shared', provider: 'openai' });
+  assert.deepEqual(fallbackConnections.json().activeConnection, { mode: 'company_shared', provider: 'deepseek', model: 'deepseek-flash' });
+
+  const attemptedAdminAssignment = await app.inject({
+    method: 'PATCH',
+    url: '/admin/ai/users/angel.cidoncha%40gmail.com',
+    headers: { ...adminHeaders, 'content-type': 'application/json' },
+    payload: { provider: 'claude', model: 'claude-opus-4-6' },
+  });
+  assert.equal(attemptedAdminAssignment.statusCode, 200);
+  assert.equal(attemptedAdminAssignment.json().aiProvider, undefined);
+  const adminConnections = await app.inject({ method: 'GET', url: '/ai/connections', headers: adminHeaders });
+  assert.deepEqual(adminConnections.json().activeConnection, { mode: 'company_shared', provider: 'openai', model: 'gpt-6-luna' });
 
   const provider = await app.inject({
     method: 'PUT',
