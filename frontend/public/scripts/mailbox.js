@@ -66,8 +66,7 @@
 
   function getPresetDateRange(mode) {
     const today = new Date();
-    const to = formatDateInput(today);
-    return { from: formatDateInput(new Date(today.getFullYear(), today.getMonth(), 1)), to };
+    return { from: formatDateInput(new Date(today.getFullYear(), today.getMonth(), 1)) };
   }
 
   function getDateRange() {
@@ -75,13 +74,20 @@
     if (mode === 'this-month') return getPresetDateRange(mode);
     if (mode === 'day') {
       if (!exactDateNode.value) throw new Error('Selecciona el día que quieres consultar.');
-      return { from: exactDateNode.value, to: exactDateNode.value };
+      const today = formatDateInput(new Date());
+      return exactDateNode.value === today
+        ? { from: exactDateNode.value }
+        : { from: exactDateNode.value, to: exactDateNode.value };
     }
     if (!dateFromNode.value && !dateToNode.value) throw new Error('Indica al menos una fecha para buscar el periodo.');
     if (dateFromNode.value && dateToNode.value && dateFromNode.value > dateToNode.value) {
       throw new Error('La fecha «Desde» no puede ser posterior a «Hasta».');
     }
-    return { from: dateFromNode.value, to: dateToNode.value };
+    const today = formatDateInput(new Date());
+    return {
+      from: dateFromNode.value,
+      to: dateToNode.value === today ? undefined : dateToNode.value,
+    };
   }
 
   function updateDateFields() {

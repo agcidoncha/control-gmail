@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import Fastify from 'fastify';
-import { completeAuthorization, createAuthorizationUrl, getAnalysisWindow, getThreadMessages, listAccountInsights, listClientHistory, listDetectedCommitments, listPendingFollowUps, listPendingFollowUpsPage, listRecentMessagesPage, modifyGmailMessage, refreshGmailAccount, sendGmailMessage, syncGmailAccount, type GmailMailbox, type GmailMessageAction, type GmailSendInput } from './google-oauth.js';
+import { completeAuthorization, createAuthorizationUrl, getAnalysisWindow, getApplicationDateInput, getThreadMessages, listAccountInsights, listClientHistory, listDetectedCommitments, listPendingFollowUps, listPendingFollowUpsPage, listRecentMessagesPage, modifyGmailMessage, refreshGmailAccount, sendGmailMessage, syncGmailAccount, type GmailMailbox, type GmailMessageAction, type GmailSendInput } from './google-oauth.js';
 import { clearSessionCookieHeader, readSession, readSessionContext, sessionCookieHeaderForOrganization } from './session.js';
 import { authorizeUser, deleteUser, disconnectUser, getUser, listUsers, updateUserAiSettings, upsertUser } from './user-store.js';
 import { deleteGoogleTokens } from './token-store.js';
@@ -845,8 +845,7 @@ app.post('/gmail/sync', async (request, reply) => {
   if (!account) return reply.code(401).send({ error: 'Sesión no iniciada.' });
 
   try {
-    const now = new Date();
-    const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
+    const monthStart = `${getApplicationDateInput().slice(0, 7)}-01`;
     const currentMonth = getAnalysisWindow({ from: monthStart });
     return { account, ...(await refreshGmailAccount(account, currentMonth)) };
   } catch (error) {

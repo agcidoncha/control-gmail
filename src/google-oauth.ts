@@ -21,6 +21,7 @@ const pendingStates = new Set<string>();
 const gmailCacheTtlMs = 2 * 60_000;
 const defaultAnalysisDays = 30;
 const maxAnalysisDays = 3650;
+const applicationTimeZone = process.env.APP_TIME_ZONE ?? 'Europe/Madrid';
 
 export type GmailListMessage = {
   id: string;
@@ -171,9 +172,19 @@ function parseDateInput(value: string, field: string) {
   return date;
 }
 
+export function getApplicationDateInput(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: applicationTimeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
 export function getAnalysisWindow(input: AnalysisWindowInput = {}): AnalysisWindow {
-  const now = new Date();
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const today = parseDateInput(getApplicationDateInput(), 'La fecha actual');
   const to = input.to ? parseDateInput(input.to, 'La fecha final') : today;
   if (to > today) throw new Error('La fecha final no puede estar en el futuro.');
   const requestedDays = Number.isFinite(input.days) && Number(input.days) > 0
