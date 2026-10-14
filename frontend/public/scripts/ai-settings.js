@@ -19,11 +19,16 @@
   const sharedUsersNode = document.querySelector('#sharedAiUsers');
   const adminMessageNode = document.querySelector('#adminAiMessage');
   const guideRoleNode = document.querySelector('#aiGuideRole');
-  if (!accountNode || !companyNameNode || !companyStatusNode || !companyDescriptionNode || !personalNameNode || !personalStatusNode || !personalDescriptionNode || !personalCard || !form || !personalProviderNode || !personalModelNode || !keyNode || !disconnectButton || !messageNode || !adminControls || !globalProviderNode || !globalModelNode || !sharedUsersNode || !adminMessageNode) return;
+  const assignmentWarningNode = document.querySelector('#aiAssignmentWarning');
+  const assignmentWarningTitleNode = document.querySelector('#aiAssignmentWarningTitle');
+  const assignmentWarningTextNode = document.querySelector('#aiAssignmentWarningText');
+  const syncGlobalAiUsersNode = document.querySelector('#syncGlobalAiUsers');
+  if (!accountNode || !companyNameNode || !companyStatusNode || !companyDescriptionNode || !personalNameNode || !personalStatusNode || !personalDescriptionNode || !personalCard || !form || !personalProviderNode || !personalModelNode || !keyNode || !disconnectButton || !messageNode || !adminControls || !globalProviderNode || !globalModelNode || !sharedUsersNode || !adminMessageNode || !assignmentWarningNode || !assignmentWarningTitleNode || !assignmentWarningTextNode || !syncGlobalAiUsersNode) return;
 
   const providerLabel = (provider) => provider === 'claude' ? 'Anthropic Claude' : provider === 'deepseek' ? 'DeepSeek' : 'OpenAI';
   const statusLabel = (status) => status === 'active' ? 'Activa' : status === 'not_configured' ? 'No configurada' : 'No conectada';
   let latestData = null;
+  let latestAdminData = null;
 
   function modelTier(model = '') {
     const value = model.toLowerCase();
@@ -162,7 +167,27 @@
     adminMessageNode.className = 'form-message' + (type ? ' ' + type : '');
   }
 
+  function updateAssignmentWarning(users, data) {
+    const divergentUsers = users.filter((user) => {
+      const hasAccess = user.role === 'admin' || (user.aiAccessEnabled ?? user.canUseSharedAi) === true;
+      const hasIndividualAssignment = Boolean(user.aiProvider || user.aiModel);
+      return user.role !== 'admin' && hasAccess && hasIndividualAssignment
+        && (user.aiProvider !== data.activeProvider || user.aiModel !== data.activeModel);
+    });
+
+    assignmentWarningNode.hidden = divergentUsers.length === 0;
+    syncGlobalAiUsersNode.disabled = divergentUsers.length === 0;
+    if (!divergentUsers.length) {
+      assignmentWarningTextNode.textContent = '';
+      return;
+    }
+
+    assignmentWarningTitleNode.textContent = `${divergentUsers.length} comercial${divergentUsers.length === 1 ? '' : 'es'} con una asignación distinta`;
+    assignmentWarningTextNode.textContent = `El modelo global es ${data.activeProvider} · ${data.activeModel}. Revisa estas asignaciones o sincronízalas si deben usarlo.`;
+  }
+
   function renderSharedUsers(users, data) {
+    updateAssignmentWarning(users, data);
     sharedUsersNode.replaceChildren();
     if (!users.length) {
       sharedUsersNode.textContent = 'No hay usuarios registrados.';
@@ -214,7 +239,8 @@
       });
       const isAdmin = user.role === 'admin';
       const hasAiAccess = isAdmin || (user.aiAccessEnabled ?? user.canUseSharedAi) === true;
-      const selectedProvider = !isAdmin && hasAiAccess && user.aiProvider ? user.aiProvider : data.activeProvider;
+      const hasIndividualAssignment = !isAdmin && hasAiAccess && Boolean(user.aiProvider);
+      const selectedProvider = hasIndividualAssignment ? user.aiProvider : data.activeProvider;
       providerSelect.value = selectedProvider;
       providerLabelNode.append(providerSelect);
 
@@ -229,7 +255,10 @@
         const details = data.providers?.[provider];
         renderModelOptions(modelSelect, details?.models ?? [], selectedModel || (provider === data.activeProvider ? data.activeModel : details?.model));
       };
-      renderAssignedModels(selectedProvider, !isAdmin && hasAiAccess && user.aiModel ? user.aiModel : data.activeModel);
+      const selectedModel = hasIndividualAssignment
+        ? user.aiModel || data.providers?.[selectedProvider]?.model
+        : data.activeModel;
+      renderAssignedModels(selectedProvider, selectedModel);
       modelLabelNode.append(modelSelect);
       const modelField = document.createElement('div');
       modelField.className = 'shared-ai-user-field';
@@ -250,16 +279,21 @@
       };
       syncAssignmentControls();
 
-      const saveUserSettings = async () => {
+      const saveUserSettings = async (includeAssignment = false) => {
         const previous = { access: checkbox.checked, provider: providerSelect.value, model: modelSelect.value };
         checkbox.disabled = true;
         providerSelect.disabled = true;
         modelSelect.disabled = true;
         try {
+          const payload = { aiAccessEnabled: previous.access };
+          if (includeAssignment) {
+            payload.provider = previous.provider;
+            payload.model = previous.model;
+          }
           const response = await fetch('/admin/ai/users/' + encodeURIComponent(user.email), {
             method: 'PATCH',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ aiAccessEnabled: previous.access, provider: previous.provider, model: previous.model }),
+            body: JSON.stringify(payload),
           });
           const result = await response.json();
           if (!response.ok) throw new Error(result.error || 'No se pudo guardar la asignación.');
@@ -267,11 +301,13 @@
           user.canUseSharedAi = result.canUseSharedAi;
           user.aiProvider = result.aiProvider;
           user.aiModel = result.aiModel;
+          updateAssignmentWarning(latestAdminData?.users ?? [user], latestAdminData ?? data);
           showAdminMessage('Asignación de IA actualizada.', 'success');
         } catch (error) {
           checkbox.checked = previous.access;
           providerSelect.value = previous.provider;
           renderAssignedModels(previous.provider, previous.model);
+          updateAssignmentWarning(latestAdminData?.users ?? [user], latestAdminData ?? data);
           showAdminMessage(error.message || 'No se pudo guardar la asignación.', 'error');
         } finally {
           checkbox.disabled = user.role === 'admin';
@@ -280,14 +316,18 @@
       };
 
       checkbox.addEventListener('change', () => {
+        if (checkbox.checked && user.aiProvider) {
+          providerSelect.value = user.aiProvider;
+          renderAssignedModels(user.aiProvider, user.aiModel || data.providers?.[user.aiProvider]?.model);
+        }
         syncAssignmentControls();
-        void saveUserSettings();
+        void saveUserSettings(checkbox.checked && !user.aiProvider);
       });
       providerSelect.addEventListener('change', () => {
         renderAssignedModels(providerSelect.value);
-        void saveUserSettings();
+        void saveUserSettings(true);
       });
-      modelSelect.addEventListener('change', () => void saveUserSettings());
+      modelSelect.addEventListener('change', () => void saveUserSettings(true));
       (user.role === 'admin' ? adminRows : commercialRows).append(row);
     });
     if (adminRows.children.length) sharedUsersNode.append(adminGroup);
@@ -299,6 +339,7 @@
     if (response.status === 401 || response.status === 403) return;
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'No se pudo cargar la configuración global.');
+    latestAdminData = data;
     adminControls.hidden = false;
     globalProviderNode.value = data.activeProvider;
     renderModelOptions(globalModelNode, data.providers[data.activeProvider]?.models ?? [], data.activeModel);
@@ -339,6 +380,36 @@
   globalModelNode.addEventListener('change', () => {
     updateModelGuide(globalModelNode.value);
     void saveGlobalSettings();
+  });
+
+  syncGlobalAiUsersNode.addEventListener('click', async () => {
+    if (!latestAdminData) return;
+    const divergentUsers = latestAdminData.users.filter((user) => {
+      const hasAccess = user.role !== 'admin' && (user.aiAccessEnabled ?? user.canUseSharedAi) === true;
+      const hasIndividualAssignment = Boolean(user.aiProvider || user.aiModel);
+      return hasAccess && hasIndividualAssignment
+        && (user.aiProvider !== latestAdminData.activeProvider || user.aiModel !== latestAdminData.activeModel);
+    });
+    if (!divergentUsers.length) return;
+
+    syncGlobalAiUsersNode.disabled = true;
+    showAdminMessage('Sincronizando asignaciones…');
+    try {
+      for (const user of divergentUsers) {
+        const response = await fetch('/admin/ai/users/' + encodeURIComponent(user.email), {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ aiAccessEnabled: true, provider: latestAdminData.activeProvider, model: latestAdminData.activeModel }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || `No se pudo sincronizar a ${user.email}.`);
+      }
+      await loadAdminSettings();
+      showAdminMessage(`${divergentUsers.length} comercial${divergentUsers.length === 1 ? '' : 'es'} sincronizado${divergentUsers.length === 1 ? '' : 's'} con el modelo global.`, 'success');
+    } catch (error) {
+      showAdminMessage(error.message || 'No se pudieron sincronizar las asignaciones.', 'error');
+      syncGlobalAiUsersNode.disabled = false;
+    }
   });
   personalProviderNode.addEventListener('change', () => {
     const provider = latestData?.providers?.[personalProviderNode.value];
