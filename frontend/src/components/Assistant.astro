@@ -107,17 +107,16 @@
   .assistant-client-result:hover, .assistant-client-result:focus-visible, .assistant-client-result.is-selected { color: var(--orange-dark); background: var(--surface-alt); outline: none; }
   .assistant-client-result small { flex: 0 0 auto; color: var(--muted); font-size: 11px; font-weight: 400; }
   .assistant-client-result-empty { margin: 0; color: var(--muted); font-size: 12px; }
-  .assistant-client-native-select { position: static; width: 100%; height: auto; min-height: 44px; padding: 10px 13px; overflow: visible; clip: auto; white-space: normal; border: 1px solid var(--border); border-radius: 10px; color: var(--ink); background: var(--surface-input); }
-  .assistant-client-picker select { width: 100%; min-height: 44px; padding: 10px 13px; border: 1px solid var(--border); border-radius: 10px; color: var(--ink); background: var(--surface-input); font: inherit; font-weight: 500; }
+  .assistant-client-native-select { position: static; width: 100%; height: auto; min-height: 44px; overflow: visible; clip: auto; white-space: normal; }
+  .assistant-client-picker select { width: 100%; }
   .assistant-client-picker select:focus-visible { outline: 3px solid rgba(240, 162, 79, .2); outline-offset: 1px; }
   .analysis-window { display: grid; gap: 8px; margin-top: 0; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-ai); }
   .analysis-window > div:first-child { display: grid; gap: 3px; }
   .analysis-window label { font-size: 13px; font-weight: 500; }
   .analysis-help { margin: 0; color: var(--muted); font-size: 12px; }
-  .analysis-window select { width: 100%; min-height: 44px; padding: 10px 42px 10px 13px; border: 1px solid var(--border); border-radius: 10px; color: var(--ink); background-color: var(--surface-input); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236F6864' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 13px center; background-size: 16px; font: inherit; font-weight: 500; cursor: pointer; appearance: none; -webkit-appearance: none; transition: background-color .15s ease, box-shadow .15s ease; }
+  .analysis-window select { width: 100%; }
   .analysis-window select:hover { background-color: var(--surface-hover); }
   .analysis-window select:focus-visible { outline: 3px solid rgba(240, 162, 79, .2); outline-offset: 1px; }
-  html[data-theme='dark'] .analysis-window select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23F0A24F' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); }
   .analysis-custom-dates { display: flex; flex-wrap: wrap; gap: 12px; }
   .analysis-custom-dates label { display: grid; gap: 5px; color: var(--muted); font-size: 13px; font-weight: 500; }
   .analysis-custom-dates input { padding: 9px 10px; border: 1px solid var(--border); border-radius: 9px; color: var(--ink); background: #fff; font: inherit; }

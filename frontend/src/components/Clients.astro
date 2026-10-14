@@ -44,9 +44,9 @@
   .clients-search, .clients-page-size { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
   .clients-search { flex: 1 1 320px; }
   .clients-search span, .clients-page-size span:first-child { color: var(--ink); font-weight: 700; }
-  .clients-search input, .clients-page-size select { min-height: 36px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; }
-  .clients-search input { width: min(100%, 360px); padding: 8px 10px; }
-  .clients-page-size select { padding: 6px 28px 6px 9px; }
+  .clients-search input { width: min(100%, 360px); min-height: 44px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-input); color: var(--ink); font: inherit; }
+  .clients-page-size select { min-height: 44px; }
+  .clients-page-size select { min-width: 100px; }
   .clients-search input:focus-visible, .clients-page-size select:focus-visible, .clients-pagination button:focus-visible { outline: 3px solid var(--orange-light); outline-offset: 2px; }
   .clients-list { display: grid; gap: 0; margin-top: 16px; }
   .client-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 13px 0; border-bottom: 1px solid var(--border); }

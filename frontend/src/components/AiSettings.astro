@@ -51,22 +51,40 @@
     </article>
   </div>
 
+  <section class="ai-connection-guide" aria-label="Cómo funcionan los niveles de modelos de IA">
+    <div class="ai-connection-guide-heading">
+      <div>
+        <strong>Cómo se sitúan los modelos</strong>
+        <span>La barra activa indica el modelo que utilizará esta cuenta.</span>
+      </div>
+      <span id="aiGuideRole" class="ai-guide-role">Modelo en uso</span>
+    </div>
+    <div class="ai-model-chart" role="img" aria-label="Escala de modelos desde trabajo diario hasta casos excepcionales">
+      <div class="ai-model-chart-row ai-model-chart-daily" data-ai-model-tier="daily">
+        <div class="ai-model-chart-label"><strong>Trabajo diario</strong><small>OpenAI Luna · Claude Haiku · DeepSeek Flash</small></div>
+        <div class="ai-model-chart-track"><span style="--bar-size: 38%"></span></div>
+        <small class="ai-model-chart-note">Rápido</small>
+      </div>
+      <div class="ai-model-chart-row ai-model-chart-demanding" data-ai-model-tier="demanding">
+        <div class="ai-model-chart-label"><strong>Trabajo exigente</strong><small>OpenAI Sol · Claude Sonnet</small></div>
+        <div class="ai-model-chart-track"><span style="--bar-size: 68%"></span></div>
+        <small class="ai-model-chart-note">Más precisión</small>
+      </div>
+      <div class="ai-model-chart-row ai-model-chart-exceptional" data-ai-model-tier="exceptional">
+        <div class="ai-model-chart-label"><strong>Casos excepcionales</strong><small>OpenAI Astra · Claude Opus · DeepSeek Pro</small></div>
+        <div class="ai-model-chart-track"><span style="--bar-size: 100%"></span></div>
+        <small class="ai-model-chart-note">Máxima potencia</small>
+      </div>
+      <p class="ai-model-chart-legend">Los modelos con mayor capacidad suelen tener un coste mayor.</p>
+    </div>
+  </section>
+
   <section id="adminAiControls" class="admin-ai-controls" hidden>
     <section class="admin-ai-global-panel">
       <div class="card-header">
         <div>
           <span class="connection-label">Solo administrador</span>
           <h3>Conexiones y asignaciones</h3>
-          <p>Elige una conexión global para la empresa. Los comerciales usarán esta configuración mientras no les concedas acceso a una conexión propia.</p>
-          <div class="provider-recommendation">
-            <strong>Cómo elegir el modelo:</strong>
-            <ul>
-              <li><strong>Trabajo diario:</strong> OpenAI Luna o DeepSeek Flash. Son suficientes para resumir correos, detectar seguimientos y revisar clientes.</li>
-              <li><strong>Trabajo más exigente:</strong> OpenAI Sol o Claude Sonnet. Úsalos cuando el hilo sea largo o necesites comparar más información.</li>
-              <li><strong>Análisis excepcionalmente complejos:</strong> OpenAI Astra, Claude Opus o DeepSeek Pro. Resérvalos para informes difíciles; consumen más recursos.</li>
-            </ul>
-            <p>El administrador y los usuarios sin una asignación propia utilizarán el modelo global. No elijas un modelo avanzado salvo que tengas un motivo concreto.</p>
-          </div>
         </div>
         <span id="adminAiMessage" class="form-message" role="status" aria-live="polite"></span>
       </div>
@@ -117,7 +135,8 @@
   .status-pill.status-warning { color: var(--orange-dark); background: #FFF1E2; }
   .ai-form { display: grid; gap: 8px; max-width: 650px; margin-top: 18px; }
   .ai-form label { color: var(--ink); font-size: 13px; font-weight: 500; }
-  .ai-form input, .ai-form select { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; color: var(--ink); background: #fff; font: inherit; }
+  .ai-form input { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; color: var(--ink); background: var(--surface-input); font: inherit; }
+  .ai-form select { width: 100%; min-width: 0; }
   .ai-form input:focus, .ai-form select:focus { outline: 3px solid rgba(222, 217, 211, .8); border-color: var(--border); }
   .ai-form-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
   .personal-connection .ai-form-actions button { font-weight: 500; }
@@ -127,18 +146,39 @@
   .admin-ai-controls { display: grid; gap: 14px; margin-top: 16px; }
   .admin-ai-controls[hidden] { display: none; }
   .admin-ai-global-panel { display: grid; gap: 20px; padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-ai); }
+  .admin-ai-global-panel > .card-header { min-width: 0; }
+  .admin-ai-global-panel > .card-header > div { flex: 1 1 auto; min-width: 0; }
   .admin-ai-assignment-panel { display: grid; gap: 12px; }
   .admin-ai-assignment-intro { padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-ai); }
   .admin-ai-controls h3 { margin: 0 0 5px; font-size: 17px; }
-  .admin-ai-controls .provider-recommendation { margin-top: 8px; color: var(--muted); font-size: 13px; }
-  .admin-ai-controls .provider-recommendation strong { color: var(--ink); }
-  .admin-ai-controls .provider-recommendation ul { display: grid; gap: 5px; margin: 8px 0; padding-left: 18px; }
-  .admin-ai-controls .provider-recommendation p { margin: 8px 0 0; }
+  .ai-connection-guide { display: grid; width: 100%; box-sizing: border-box; gap: 14px; margin-top: 14px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
+  .ai-connection-guide-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+  .ai-connection-guide-heading > div { display: grid; gap: 3px; }
+  .ai-connection-guide-heading strong { color: var(--ink); font-size: 13px; }
+  .ai-connection-guide-heading span:not(.ai-guide-role) { color: var(--muted); font-size: 12px; }
+  .ai-guide-role { flex: 0 0 auto; padding: 5px 8px; border-radius: 999px; color: var(--orange-dark); background: var(--surface-alt); font-size: 11px; font-weight: 600; }
+  .ai-model-chart { display: grid; width: 100%; gap: 10px; padding: 4px 0; }
+  .ai-model-chart-row { --chart-color: #3EAF68; display: grid; grid-template-columns: minmax(190px, 220px) minmax(0, 1fr) minmax(100px, 110px); align-items: center; gap: 12px; }
+  .ai-model-chart-demanding { --chart-color: #D98A2B; }
+  .ai-model-chart-exceptional { --chart-color: #7651C8; }
+  .ai-model-chart-label { display: grid; gap: 2px; min-width: 0; }
+  .ai-model-chart-label strong { color: var(--ink); font-size: 12px; }
+  .ai-model-chart-label small, .ai-model-chart-note { color: var(--muted); font-size: 11px; line-height: 1.2; }
+  .ai-model-chart-track { width: 100%; height: 13px; overflow: hidden; border-radius: 999px; background: var(--surface-ai); }
+  .ai-model-chart-track span { display: block; position: relative; width: var(--bar-size); height: 100%; overflow: hidden; border-radius: inherit; background: var(--chart-color); animation: ai-chart-grow .8s ease-out both; }
+  .ai-model-chart-demanding .ai-model-chart-track span { background: #D98A2B; animation-delay: .12s; }
+  .ai-model-chart-exceptional .ai-model-chart-track span { background: #7651C8; animation-delay: .24s; }
+  .ai-model-chart-row.is-selected .ai-model-chart-track span { background-image: linear-gradient(110deg, transparent 22%, rgba(255, 255, 255, .68) 50%, transparent 78%); background-size: 200% 100%; animation: ai-model-selection-pulse 1.7s ease-in-out infinite, ai-model-selection-shimmer 1.25s linear infinite; }
+  .ai-model-chart-legend { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.35; }
+  @keyframes ai-chart-grow { from { width: 0; } to { width: var(--bar-size); } }
+  @keyframes ai-model-selection-pulse { 0%, 100% { opacity: .9; filter: saturate(1); box-shadow: 0 0 0 transparent; } 50% { opacity: 1; filter: saturate(1.45); box-shadow: 0 0 5px var(--chart-color), 0 0 16px var(--chart-color); } }
+  @keyframes ai-model-selection-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+  @media (prefers-reduced-motion: reduce) { .ai-model-chart-track span { animation: none; } }
   .admin-ai-controls h4 { margin: 0 0 10px; font-size: 14px; }
   .admin-ai-assignment-help { margin: -4px 0 10px; color: var(--muted); font-size: 13px; }
   .admin-ai-provider { display: grid; grid-template-columns: auto minmax(180px, 240px) auto minmax(180px, 240px) minmax(0, 1fr); align-items: center; gap: 12px; }
   .admin-ai-provider label { font-size: 13px; font-weight: 500; }
-  .admin-ai-provider select { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; color: var(--ink); background: #fff; font: inherit; }
+  .admin-ai-provider select { width: 100%; min-width: 0; }
   .shared-ai-users { display: grid; gap: 8px; }
   .shared-ai-user-group { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-ai); }
   .shared-ai-user-group h5 { margin: 0; color: var(--orange-dark); font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
@@ -149,7 +189,7 @@
   .shared-ai-user-heading { justify-content: space-between; }
   .shared-ai-user-controls { display: grid; grid-template-columns: auto minmax(190px, 1fr) minmax(190px, 1fr); align-items: stretch; gap: 10px; }
   .shared-ai-user-controls label { color: var(--muted); font-size: 12px; font-weight: 500; }
-  .shared-ai-user-controls select { width: 100%; min-width: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 9px; color: var(--ink); background: var(--panel); font: inherit; font-size: 13px; }
+  .shared-ai-user-controls select { width: 100%; min-width: 0; }
   .shared-ai-user-controls select:disabled { opacity: .6; }
   .shared-ai-user-field { display: grid; gap: 5px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
   .shared-ai-user small { color: var(--muted); }
@@ -162,5 +202,5 @@
   .security-note strong { color: var(--ink); }
   @media (max-width: 820px) { .top-actions { flex-wrap: wrap; } }
   @media (max-width: 980px) { .admin-ai-provider { grid-template-columns: auto minmax(180px, 1fr) auto minmax(180px, 1fr); } .admin-ai-provider .muted { grid-column: 1 / -1; } }
-  @media (max-width: 640px) { .connection-heading { flex-direction: column; } .ai-form-actions { align-items: stretch; flex-direction: column; } .ai-form-actions button { width: 100%; } .admin-ai-provider { align-items: stretch; grid-template-columns: 1fr; } .admin-ai-provider .muted { grid-column: auto; } .shared-ai-user-heading { align-items: stretch; flex-direction: column; } .shared-ai-user-controls { grid-template-columns: 1fr; } .shared-ai-user-controls select { width: 100%; } }
+  @media (max-width: 640px) { .connection-heading { flex-direction: column; } .ai-form-actions { align-items: stretch; flex-direction: column; } .ai-form-actions button { width: 100%; } .admin-ai-provider { align-items: stretch; grid-template-columns: 1fr; } .admin-ai-provider .muted { grid-column: auto; } .ai-connection-guide-heading { flex-direction: column; } .ai-model-chart-row { grid-template-columns: 1fr; gap: 5px; } .ai-model-chart-track { order: 3; } .ai-model-chart-note { order: 2; } .shared-ai-user-heading { align-items: stretch; flex-direction: column; } .shared-ai-user-controls { grid-template-columns: 1fr; } .shared-ai-user-controls select { width: 100%; } }
 </style>

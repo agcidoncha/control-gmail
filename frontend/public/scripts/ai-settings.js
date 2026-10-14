@@ -18,11 +18,33 @@
   const globalModelNode = document.querySelector('#globalAiModel');
   const sharedUsersNode = document.querySelector('#sharedAiUsers');
   const adminMessageNode = document.querySelector('#adminAiMessage');
+  const guideRoleNode = document.querySelector('#aiGuideRole');
   if (!accountNode || !companyNameNode || !companyStatusNode || !companyDescriptionNode || !personalNameNode || !personalStatusNode || !personalDescriptionNode || !personalCard || !form || !personalProviderNode || !personalModelNode || !keyNode || !disconnectButton || !messageNode || !adminControls || !globalProviderNode || !globalModelNode || !sharedUsersNode || !adminMessageNode) return;
 
   const providerLabel = (provider) => provider === 'claude' ? 'Anthropic Claude' : provider === 'deepseek' ? 'DeepSeek' : 'OpenAI';
   const statusLabel = (status) => status === 'active' ? 'Activa' : status === 'not_configured' ? 'No configurada' : 'No conectada';
   let latestData = null;
+
+  function modelTier(model = '') {
+    const value = model.toLowerCase();
+    const dailyModels = ['gpt-6-luna', 'claude-haiku-4-5', 'deepseek-flash'];
+    const demandingModels = ['gpt-6-sol', 'claude-sonnet-4-6'];
+    if (dailyModels.some((name) => value.includes(name)) || value.includes('luna') || value.includes('flash') || value.includes('haiku')) return 'daily';
+    if (demandingModels.some((name) => value.includes(name)) || value.includes('sol') || value.includes('sonnet')) return 'demanding';
+    return 'exceptional';
+  }
+
+  function updateModelGuide(model) {
+    const tier = modelTier(model);
+    const chart = document.querySelector('.ai-model-chart');
+    if (chart) chart.dataset.selectedTier = tier;
+    document.querySelectorAll('[data-ai-model-tier]').forEach((row) => {
+      const selected = row.dataset.aiModelTier === tier;
+      row.classList.toggle('is-selected', selected);
+      if (selected) row.setAttribute('aria-current', 'true');
+      else row.removeAttribute('aria-current');
+    });
+  }
 
   function renderModelOptions(node, models, selectedModel = '') {
     node.replaceChildren();
@@ -62,6 +84,8 @@
     accountNode.textContent = data.account || 'Cuenta activa';
     personalCard.hidden = data.role === 'admin';
     companyNameNode.textContent = providerLabel(data.company.provider) + ' · ' + (data.company.model || 'modelo configurado');
+    updateModelGuide(data.activeConnection?.model || data.company.model || '');
+    if (guideRoleNode) guideRoleNode.textContent = data.role === 'admin' ? 'Modelo global de la empresa' : 'Modelo en uso';
     const canUseCompany = data.company.canUse;
     const personal = data.personal;
     const personalIsActive = data.activeConnection?.mode === 'user_personal';
@@ -278,6 +302,7 @@
     adminControls.hidden = false;
     globalProviderNode.value = data.activeProvider;
     renderModelOptions(globalModelNode, data.providers[data.activeProvider]?.models ?? [], data.activeModel);
+    updateModelGuide(data.activeModel);
     renderSharedUsers(data.users, data);
   }
 
@@ -308,13 +333,19 @@
   globalProviderNode.addEventListener('change', () => {
     const provider = latestData?.providers?.[globalProviderNode.value];
     renderModelOptions(globalModelNode, provider?.models ?? [], provider?.model ?? '');
+    updateModelGuide(globalModelNode.value || provider?.model || '');
     void saveGlobalSettings();
   });
-  globalModelNode.addEventListener('change', () => void saveGlobalSettings());
+  globalModelNode.addEventListener('change', () => {
+    updateModelGuide(globalModelNode.value);
+    void saveGlobalSettings();
+  });
   personalProviderNode.addEventListener('change', () => {
     const provider = latestData?.providers?.[personalProviderNode.value];
     renderModelOptions(personalModelNode, provider?.models ?? [], provider?.model ?? '');
+    updateModelGuide(personalModelNode.value || provider?.model || '');
   });
+  personalModelNode.addEventListener('change', () => updateModelGuide(personalModelNode.value));
 
   Promise.all([
     load().catch((error) => showMessage(error.message || 'No se pudieron cargar las conexiones.', 'error')),

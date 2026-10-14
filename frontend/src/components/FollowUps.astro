@@ -40,7 +40,8 @@
 <style is:global>
   .follow-ups-screen { display: grid; gap: 14px; margin-top: 18px; }
   .follow-up-tools { display: flex; gap: 12px; margin: 18px 0 4px; }
-  .follow-up-tools input, .follow-up-tools select { min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; background: #fff; color: var(--ink); }
+  .follow-up-tools input { min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; background: var(--surface-input); color: var(--ink); }
+  .follow-up-tools select { min-width: 0; }
   .follow-up-tools input { flex: 1; }
   .follow-up-alerts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 14px 0 6px; }
   .follow-up-alert { display: grid; gap: 3px; justify-items: start; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; color: var(--ink); background: var(--surface-ai); text-align: left; }
