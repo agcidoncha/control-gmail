@@ -20,7 +20,7 @@
         <button type="button" data-help-target="help-overview">Parte superior</button>
         <button type="button" data-help-target="help-mailbox">Bandeja</button>
         <button type="button" data-help-target="help-workflow">Seguimientos</button>
-        <button type="button" data-help-target="help-clients">Clientes</button>
+        <button type="button" data-help-target="help-clients">Clientes en bandeja</button>
         <button type="button" data-help-target="help-ai">IA</button>
         <button type="button" data-help-target="help-reports">Informes</button>
         <button type="button" data-help-target="help-activity">Actividad y privacidad</button>
@@ -52,7 +52,7 @@
           <li><strong>“Conectado como”:</strong> indica qué cuenta de Gmail estás utilizando ahora.</li>
           <li><strong>Luna o sol:</strong> cambia entre modo oscuro y modo claro. No cambia ningún dato.</li>
           <li><strong>Icono de salida:</strong> desconecta la cuenta actual para entrar con otra autorizada.</li>
-          <li><strong>Menú de la izquierda:</strong> sirve para cambiar entre bandeja, clientes, IA e informes.</li>
+          <li><strong>Menú de la izquierda:</strong> sirve para cambiar entre bandeja, seguimientos, compromisos, IA e informes.</li>
         </ul>
         <p class="help-subtle">La cuenta visible arriba es importante: las búsquedas y los análisis se hacen sobre esa cuenta.</p>
       </section>
@@ -77,12 +77,15 @@
         <h3>Seguimientos y compromisos</h3>
         <p><strong>Seguimientos:</strong> son asuntos que parecen necesitar una respuesta posterior.</p>
         <ul>
+          <li>Al entrar no se consulta Gmail automáticamente.</li>
+          <li>Elige <strong>“Este mes”</strong>, un día o un periodo y pulsa <strong>“Aplicar”</strong>.</li>
           <li>Abre uno para recordar de qué conversación sale.</li>
           <li>Comprueba si ya se ha respondido antes de contactar de nuevo.</li>
           <li>Marca el asunto como atendido cuando ya no quede nada pendiente.</li>
         </ul>
         <p><strong>Compromisos:</strong> son tareas, fechas o promesas que aparecen en los correos.</p>
         <ul>
+          <li>Se consultan bajo demanda: elige el periodo y pulsa <strong>“Aplicar”</strong>.</li>
           <li>Comprueba quién debe hacer cada cosa.</li>
           <li>Revisa la fecha o el plazo.</li>
           <li>Úsalo como recordatorio, no como sustituto de tu agenda.</li>
@@ -91,15 +94,16 @@
       </section>
 
       <section id="help-clients" class="help-section">
-        <h3>Clientes</h3>
-        <p><strong>Qué es:</strong> una lista de las personas o empresas que aparecen en los correos revisados.</p>
+        <h3>Clientes en Bandeja comercial</h3>
+        <p><strong>Qué es:</strong> una agrupación de las personas o empresas que aparecen en los correos del periodo seleccionado.</p>
         <ol>
-          <li>Escribe un correo en <strong>“Buscar cliente”</strong>.</li>
-          <li>Elige cuántos clientes quieres ver por página.</li>
-          <li>Pulsa <strong>“Ver historial”</strong> para consultar sus conversaciones.</li>
+          <li>Elige <strong>“Mensajes”</strong> o <strong>“Clientes”</strong> debajo de los filtros de la bandeja.</li>
+          <li>La vista usa el mismo periodo que hayas seleccionado en <strong>“Buscar por fecha”</strong>.</li>
+          <li>Escribe un correo en <strong>“Buscar cliente”</strong> si quieres localizar uno.</li>
+          <li>Pulsa <strong>“Ver mensajes”</strong> para volver a la bandeja filtrada por ese cliente.</li>
           <li>Pulsa <strong>“Analizar necesidades”</strong> si quieres pedir una revisión a la IA.</li>
         </ol>
-        <p class="help-subtle">Que una dirección aparezca no significa necesariamente que sea un cliente: revisa siempre el historial.</p>
+        <p class="help-subtle">Que una dirección aparezca no significa necesariamente que sea un cliente real: revisa siempre sus mensajes.</p>
       </section>
 
       <section id="help-ai" class="help-section">

@@ -727,7 +727,10 @@ async function listStoredMessagesForDateRangePage(
   const requestedWindow = getAnalysisWindow({ from: dateFrom, to: dateTo });
   await ensureGmailSnapshot(email, false, requestedWindow);
   const state = await getGmailSyncState(email);
-  if (!state || !syncStateCoversWindow(state, requestedWindow)) return null;
+  // A truncated local snapshot cannot prove that this date range is complete.
+  // Fall back to Gmail's paginated query so an incomplete snapshot cannot
+  // produce an empty page together with a misleading "too many results" warning.
+  if (!state || state.truncated || !syncStateCoversWindow(state, requestedWindow)) return null;
 
   const fromTimestamp = Date.parse(`${requestedWindow.from.replaceAll('/', '-')}T00:00:00.000Z`);
   const toTimestamp = Date.parse(`${requestedWindow.to.replaceAll('/', '-')}T23:59:59.999Z`);

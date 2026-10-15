@@ -57,12 +57,12 @@ El asistente recibe solo el contexto de la cuenta activa. No ejecuta acciones po
 - Dentro del periodo elegido el backend recorre las páginas de Gmail, no solo los 10 mensajes visibles. `AI_MAX_MESSAGES=100` establece el límite de protección por bandeja; se puede subir conscientemente si la organización acepta el coste y el tiempo adicional.
 - `POST /assistant/ask` acepta `analysisDays` o un rango `analysisFrom`/`analysisTo` en formato `AAAA-MM-DD`. La interfaz ofrece un mes, tres meses, seis meses, un año o un rango personalizado; al ampliar el periodo avisa de que puede aumentar el consumo y pide confirmación.
 - `POST /assistant/ask` también acepta `analysisScope`: `mailbox` (bandeja y enviados, opción predeterminada), `all` (todos los mensajes, incluidos los archivados) o `spam`. Los dos últimos alcances consultan Gmail directamente y avisan en la interfaz de que pueden aumentar las consultas y el coste.
-- Los seguimientos, compromisos y fichas de clientes también parten de la ventana por defecto de 30 días. El historial de un cliente se mantiene bajo demanda y puede consultar mensajes anteriores.
+- Seguimientos, compromisos y clientes se consultan bajo demanda: la pantalla entra sin periodo ni consulta Gmail, y solo carga la ventana elegida cuando el usuario pulsa `Aplicar`. El historial de un cliente se mantiene bajo demanda y puede consultar mensajes anteriores.
 - Cada mensaje de hilo conserva indicios de fechas y plazos para apoyar la revisión de compromisos.
 - Los compromisos se clasifican como posibles incumplimientos, pendientes de revisión o pendientes de respuesta según las fechas detectadas y la existencia de mensajes posteriores. Son heurísticas y siempre requieren revisión humana.
 - La categoría `Briefing pendiente` se detecta en seguimientos y se puede filtrar desde la pantalla de Seguimientos.
 - El botón `Analizar necesidades` prepara una consulta en `/consultar-ia`, pero no llama al proveedor ni consume API hasta que el usuario pulsa `Analizar correos`.
-- Los contadores del menú reutilizan durante 30 segundos los resultados de esa sesión del navegador para evitar duplicar consultas Gmail al cambiar de pantalla.
+- Los contadores del menú no hacen consultas automáticas al entrar; se actualizan cuando una pantalla ya ha cargado explícitamente un periodo.
 - Si Gmail devuelve una limitación de cuota, el backend la transforma en un aviso entendible y no expone el mensaje técnico completo en la interfaz.
 
 ## Persistencia y sincronización de Gmail

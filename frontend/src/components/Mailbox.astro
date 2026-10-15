@@ -1,8 +1,16 @@
 <section class="mailbox-screen">
   <div class="card mailbox-overview">
   <div class="card-header">
-    <div><h2>Correos que requieren atención</h2><p>Filtra por bandeja, asunto, remitente o contenido.</p></div>
-    <div class="mailbox-header-actions"><span id="mailboxCount" class="muted" aria-label="Cargando cantidad de mensajes"><span class="skeleton skeleton-inline" aria-hidden="true"></span></span><span id="mailboxSyncStatus" class="mailbox-sync-status muted" data-sync-state="syncing" role="status" aria-live="polite">Cargando Gmail…</span><button id="mailboxRefreshButton" class="secondary-button" type="button" title="Actualizar ahora los mensajes de Gmail">Actualizar Gmail</button><button id="composeMessageButton" type="button">Nuevo correo</button></div>
+    <div class="mailbox-heading">
+      <div class="mailbox-title-row">
+        <h2>Mensajes de la bandeja</h2>
+        <button id="messageRangeInfoButton" class="mailbox-info-button" type="button" aria-label="Cómo funciona esta bandeja" aria-haspopup="dialog">
+          <img src="/icons/home/question-mark.svg" alt="" aria-hidden="true" />
+        </button>
+      </div>
+      <p>Busca, revisa y gestiona tus correos de Gmail.</p>
+    </div>
+  <div class="mailbox-header-actions"><span id="mailboxCount" class="muted" aria-label="Sin periodo seleccionado"></span><span id="mailboxSyncStatus" class="mailbox-sync-status muted" data-sync-state="idle" role="status" aria-live="polite">Selecciona un periodo</span><button id="mailboxRefreshButton" class="secondary-button" type="button" title="Actualizar ahora los mensajes de Gmail">Actualizar Gmail</button><button id="composeMessageButton" type="button">Nuevo correo</button></div>
   </div>
   <div class="message-tools">
     <select id="messageMailbox" aria-label="Tipo de mensajes">
@@ -23,11 +31,12 @@
     <label class="message-range-control message-date-mode-control">
       <span>Buscar por fecha</span>
       <select id="messageDateMode">
-        <option value="this-month" selected>Este mes</option>
+        <option value="" selected>—</option>
+        <option value="this-month">Este mes</option>
         <option value="day">Un día concreto</option>
         <option value="range">Un periodo</option>
       </select>
-      <small id="messageSyncWindow" class="message-sync-window muted">Este mes: consultando…</small>
+      <small id="messageSyncWindow" class="message-sync-window muted" hidden></small>
     </label>
     <label id="messageExactDateField" class="message-range-control" hidden>
       <span>Fecha</span>
@@ -46,18 +55,14 @@
     <button id="applyMessageRange" type="submit">Aplicar</button>
     <button id="clearMessageRange" class="secondary-button" type="button" hidden>Limpiar fechas</button>
   </form>
-  <p class="message-range-help muted">“Este mes” muestra los mensajes de 10 en 10. Para consultar otra fecha, elige “Un día concreto” o “Un periodo”; si hay más de 10, también podrás paginar.</p>
-  <div id="messageFilters" class="quick-filters" role="group" aria-label="Filtrar mensajes">
-    <button class="filter-chip active" type="button" data-message-filter="all">Todos</button>
-    <button class="filter-chip" type="button" data-message-filter="attention">Atención</button>
-    <button class="filter-chip" type="button" data-message-filter="important">Importantes</button>
-    <button class="filter-chip" type="button" data-message-filter="bounced">Rebotados</button>
-    <button class="filter-chip" type="button" data-message-filter="follow-ups">Sin respuesta</button>
-    <button class="filter-chip" type="button" data-message-filter="commitments">Compromisos</button>
-  </div>
+  <p id="messagePeriodPrompt" class="message-period-prompt muted">Elige un periodo arriba y pulsa «Aplicar» para consultar los mensajes.</p>
   <p id="archivedMailboxNotice" class="mailbox-archived-notice muted" hidden></p>
-  <p class="mailbox-permissions muted">Puedes marcar, archivar, enviar a papelera, redactar y responder. Si conectaste Gmail antes de activar estas acciones, vuelve a autorizar la cuenta desde «Cambiar de cuenta».</p>
+  <div class="mailbox-view-switch" role="tablist" aria-label="Vista de la bandeja comercial">
+    <button id="mailboxMessagesTab" class="mailbox-view-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="mailboxMessagesView" data-mailbox-view="messages">Mensajes</button>
+    <button id="mailboxClientsTab" class="mailbox-view-tab" type="button" role="tab" aria-selected="false" aria-controls="mailboxClientsView" data-mailbox-view="clients">Clientes</button>
   </div>
+  </div>
+  <div id="mailboxMessagesView">
   <div class="mailbox-pagination mailbox-pagination-top">
     <div class="mailbox-pagination-actions">
       <button class="secondary-button pagination-arrow" type="button" data-mailbox-pagination="previous" aria-label="Página anterior" title="Página anterior" hidden><span class="pagination-arrow-icon pagination-arrow-left" aria-hidden="true"></span></button>
@@ -101,6 +106,85 @@
     </div>
     <span class="mailbox-pagination-status muted" data-mailbox-pagination-status aria-live="polite"></span>
   </div>
+  </div>
+  <section id="mailboxClientsView" class="card mailbox-clients-view" role="tabpanel" aria-labelledby="mailboxClientsTab" hidden>
+    <div class="card-header">
+      <div>
+        <h2>Clientes del periodo</h2>
+        <p>Contactos detectados en los mensajes recibidos y enviados de la selección actual.</p>
+      </div>
+      <span id="mailboxClientCount" class="muted" aria-live="polite">0 clientes</span>
+    </div>
+    <div class="mailbox-client-period-bar">
+      <span id="mailboxClientPeriodMode" class="muted">Clientes alineados con Mensajes</span>
+      <button id="mailboxClientCustomPeriodButton" class="secondary-button" type="button">Cambiar periodo de clientes</button>
+      <button id="mailboxClientResetPeriodButton" class="secondary-button" type="button" hidden>Volver al periodo de Mensajes</button>
+    </div>
+    <form id="mailboxClientRangeForm" class="mailbox-client-range" hidden aria-label="Elegir periodo independiente de clientes">
+      <label class="message-range-control">
+        <span>Buscar por fecha</span>
+        <select id="mailboxClientDateMode">
+          <option value="" selected>—</option>
+          <option value="this-month">Este mes</option>
+          <option value="day">Un día concreto</option>
+          <option value="range">Un periodo</option>
+        </select>
+      </label>
+      <label id="mailboxClientExactDateField" class="message-range-control" hidden>
+        <span>Fecha</span>
+        <input id="mailboxClientExactDate" type="date" />
+      </label>
+      <div id="mailboxClientDateRangeFields" class="message-date-range" hidden>
+        <label class="message-range-control">
+          <span>Desde</span>
+          <input id="mailboxClientDateFrom" type="date" />
+        </label>
+        <label class="message-range-control">
+          <span>Hasta</span>
+          <input id="mailboxClientDateTo" type="date" />
+        </label>
+      </div>
+      <button id="applyMailboxClientRange" type="submit">Aplicar periodo de clientes</button>
+    </form>
+    <div class="mailbox-clients-toolbar">
+      <label>
+        <span class="sr-only">Buscar cliente</span>
+        <input id="mailboxClientSearch" type="search" placeholder="Buscar cliente…" autocomplete="off" />
+      </label>
+      <span id="mailboxClientRangeSummary" class="muted" aria-live="polite">Usa el periodo seleccionado arriba.</span>
+    </div>
+    <p id="mailboxClientStatus" class="mailbox-client-status muted" role="status" aria-live="polite"></p>
+    <div id="mailboxClients" class="mailbox-clients-list" aria-live="polite"></div>
+    <nav id="mailboxClientPagination" class="mailbox-pagination mailbox-client-pagination" aria-label="Paginación de clientes" hidden>
+      <div class="mailbox-pagination-actions">
+        <button class="secondary-button pagination-arrow" type="button" data-mailbox-client-pagination="previous" aria-label="Página anterior" title="Página anterior"><span class="pagination-arrow-icon pagination-arrow-left" aria-hidden="true"></span></button>
+        <span id="mailboxClientPageNumbers" class="mailbox-page-numbers" aria-live="polite"></span>
+        <button class="secondary-button pagination-arrow" type="button" data-mailbox-client-pagination="next" aria-label="Página siguiente" title="Página siguiente"><span class="pagination-arrow-icon pagination-arrow-right" aria-hidden="true"></span></button>
+      </div>
+      <span id="mailboxClientPageStatus" class="mailbox-pagination-status muted" aria-live="polite"></span>
+    </nav>
+  </section>
+  <div id="messageRangeInfoModal" class="message-range-info-modal" hidden role="dialog" aria-modal="true" aria-labelledby="messageRangeInfoTitle" aria-describedby="messageRangeInfoDescription">
+    <div class="message-range-info-dialog">
+      <div class="message-range-info-heading">
+        <img src="/icons/home/question-mark.svg" alt="" aria-hidden="true" />
+        <h2 id="messageRangeInfoTitle">Cómo funciona esta bandeja</h2>
+      </div>
+      <div id="messageRangeInfoDescription">
+        <p>La bandeja no consulta Gmail al entrar. Primero eliges qué periodo quieres revisar y pulsas «Aplicar».</p>
+        <ul>
+          <li><strong>Mostrar:</strong> se cargan 10 mensajes por página.</li>
+          <li><strong>Buscar por fecha:</strong> elige este mes, un día concreto o un periodo.</li>
+          <li><strong>Mensajes y Clientes:</strong> aparecen después de aplicar el periodo y trabajan sobre esa misma selección.</li>
+          <li><strong>Paginación:</strong> solo se carga la página que consultas.</li>
+        </ul>
+        <p class="message-range-info-subtle">Así se evita cargar todo el historial y se reduce el número de consultas a Gmail.</p>
+      </div>
+      <div class="message-range-info-actions">
+        <button id="messageRangeInfoClose" type="button">Entendido</button>
+      </div>
+    </div>
+  </div>
 </section>
 
 <script is:inline src="/scripts/mailbox.js"></script>
@@ -109,8 +193,40 @@
   .mailbox-screen { display: grid; gap: 14px; margin-top: 18px; }
   .mailbox-messages { display: grid; gap: 12px; margin-top: 0; }
   .mailbox-messages .message { margin: 0; }
+  .mailbox-view-switch { display: flex; align-items: stretch; gap: 8px; width: 100%; margin: 18px 0 0; }
+  .mailbox-view-switch[hidden] { display: none; }
+  .mailbox-view-tab { flex: 1 1 50%; min-height: 48px; padding: 11px 15px; border: 1px solid var(--border); border-radius: 12px; color: var(--muted); background: var(--panel); font-size: 13px; font-weight: 400; }
+  .mailbox-view-tab:hover, .mailbox-view-tab:focus-visible, .mailbox-view-tab.is-active { color: var(--orange-dark); background: var(--surface-alt); border-color: var(--orange-light); }
+  .mailbox-view-tab.is-active { font-weight: 400; }
+  .mailbox-clients-view { margin: 0; }
+  .mailbox-client-period-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 16px 0 0; }
+  .mailbox-client-period-bar > span { margin-right: auto; font-size: 12px; }
+  .mailbox-client-period-bar button { min-height: 34px; padding: 7px 11px; color: var(--orange-dark); background: var(--warm); border: 1px solid var(--border); font-size: 12px; font-weight: 500; }
+  .mailbox-client-period-bar button:hover, .mailbox-client-period-bar button:focus-visible { color: var(--ink); background: var(--orange-light); }
+  .mailbox-client-period-bar button[hidden], .mailbox-client-range [hidden] { display: none; }
+  .mailbox-client-range { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin: 12px 0 4px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-ai); }
+  .mailbox-client-range[hidden] { display: none; }
+  .mailbox-client-range .message-range-control select { min-height: 40px; }
+  .mailbox-client-range button { min-height: 36px; padding: 7px 11px; border: 1px solid var(--border); border-radius: 8px; color: #fff; background: var(--orange); font: inherit; font-size: 12px; cursor: pointer; }
+  .mailbox-client-range button:hover, .mailbox-client-range button:focus-visible { background: var(--orange-dark); }
+  .mailbox-clients-toolbar { display: flex; align-items: center; gap: 14px; margin: 18px 0 4px; }
+  .mailbox-clients-toolbar label { flex: 1 1 360px; }
+  .mailbox-clients-toolbar input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; color: var(--ink); background: var(--surface-input); font: inherit; }
+  .mailbox-client-status { min-height: 20px; margin: 10px 0 0; font-size: 12px; }
+  .mailbox-clients-list { display: grid; gap: 0; margin-top: 8px; }
+  .mailbox-client-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 0; border-bottom: 1px solid var(--border); }
+  .mailbox-client-card:last-child { border-bottom: 0; }
+  .mailbox-client-summary { min-width: 0; }
+  .mailbox-client-summary strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+  .mailbox-client-summary small { display: block; margin-top: 4px; color: var(--muted); }
+  .mailbox-client-actions { display: flex; flex: 0 0 auto; gap: 8px; }
+  .mailbox-client-actions button, .mailbox-client-actions a { min-height: 34px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--orange-dark); background: var(--warm); font: inherit; font-size: 12px; text-decoration: none; }
+  .mailbox-client-actions button:hover, .mailbox-client-actions button:focus-visible, .mailbox-client-actions a:hover, .mailbox-client-actions a:focus-visible { color: var(--ink); background: var(--orange-light); }
+  .mailbox-client-pagination { min-height: 64px; margin: 14px 0 0; }
+  .mailbox-client-pagination[hidden] { display: none; }
   .mailbox-header-actions { display: flex; align-items: center; gap: 10px; }
   .mailbox-header-actions > span { display: inline-flex; align-items: center; height: 40px; color: var(--muted); font-size: 12px; line-height: 1; white-space: nowrap; }
+  .mailbox-header-actions > span[hidden], .mailbox-header-actions > button[hidden] { display: none; }
   .mailbox-sync-status { gap: 6px; }
   .mailbox-sync-status::before { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--muted); content: ''; }
   .mailbox-sync-status[data-sync-state='syncing']::before { background: var(--orange); animation: mailbox-sync-pulse 1.2s ease-in-out infinite; }
@@ -122,9 +238,17 @@
   .mailbox-header-actions button { height: 40px; min-height: 40px; padding: 0 12px; font-size: 12px; line-height: 1; }
   .mailbox-header-actions .secondary-button { color: var(--orange-dark); background: var(--warm); border: 1px solid var(--border); }
   .message-tools { display: flex; align-items: center; gap: 12px; margin: 18px 0 4px; }
+  .message-tools[hidden] { display: none; }
   .message-tools input { min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; background: var(--surface-input); color: var(--ink); }
   .message-tools select { min-width: 0; }
   .message-tools input { flex: 1; }
+  .mailbox-heading { min-width: 0; }
+  .mailbox-title-row { display: flex; align-items: center; gap: 10px; }
+  .mailbox-title-row h2 { margin: 0; }
+  .mailbox-heading p { margin: 4px 0 0; }
+  .mailbox-info-button { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; min-height: 28px; padding: 6px; border: 1px solid var(--border); border-radius: 50%; color: var(--muted); background: var(--surface-ai); cursor: pointer; }
+  .mailbox-info-button:hover, .mailbox-info-button:focus-visible { border-color: var(--orange-light); color: var(--orange-dark); background: var(--surface-hover); outline: none; }
+  .mailbox-info-button img { display: block; width: 100%; height: 100%; }
   .message-range { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin: 14px 0 4px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-ai); }
   .message-range [hidden] { display: none; }
   .message-range-control { display: grid; flex: 0 0 auto; align-items: center; grid-template-columns: auto auto auto; gap: 7px; color: var(--muted); font-size: 12px; }
@@ -141,7 +265,20 @@
   .message-range button:hover, .message-range button:focus-visible { background: var(--orange-dark); }
   .message-range button.secondary-button:hover, .message-range button.secondary-button:focus-visible { color: var(--ink); background: var(--orange-light); }
   .message-range button:disabled { cursor: wait; opacity: .65; }
-  .message-range-help { margin: 8px 0 0; font-size: 12px; }
+  .message-period-prompt { margin: 8px 0 0; font-size: 12px; }
+  .message-period-prompt[hidden] { display: none; }
+  .message-range-info-modal { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 24px; background: rgba(35, 31, 32, .42); backdrop-filter: blur(3px); }
+  .message-range-info-modal[hidden] { display: none; }
+  .message-range-info-dialog { width: min(100%, 560px); max-height: min(720px, calc(100vh - 48px)); overflow: auto; padding: 24px; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); box-shadow: 0 24px 70px rgba(35, 31, 32, .24); }
+  .message-range-info-heading { display: flex; align-items: center; gap: 10px; }
+  .message-range-info-heading img { flex: 0 0 26px; width: 26px; height: 26px; }
+  .message-range-info-dialog h2 { margin: 0; font-size: 20px; }
+  .message-range-info-dialog p { margin: 14px 0 0; color: var(--body-copy); }
+  .message-range-info-dialog ul { display: grid; gap: 8px; margin: 16px 0 0; padding-left: 24px; color: var(--body-copy); }
+  .message-range-info-subtle { color: var(--muted) !important; font-size: 12px; }
+  .message-range-info-actions { display: flex; justify-content: flex-end; margin-top: 22px; }
+  .message-range-info-actions button { min-width: 100px; font-size: 13px; font-weight: 500; }
+  html.message-range-info-open { overflow: hidden; }
   #mailboxRefreshButton, #composeMessageButton { font-weight: 500; }
   .quick-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 4px; }
   .filter-chip { padding: 7px 11px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); background: #fff; font-family: var(--font-body); font-size: 12px; font-weight: 400; }
@@ -158,7 +295,8 @@
   .compose-message { display: grid; gap: 10px; margin-top: 18px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-ai); }
   .compose-message[hidden] { display: none; }
   .compose-heading, .compose-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .compose-message label { display: grid; gap: 5px; font-size: 12px; font-weight: 750; }
+  .compose-heading #composeTitle, .compose-heading .secondary-button, .compose-message label, .compose-actions #previewComposeButton { font-weight: 400; }
+  .compose-message label { display: grid; gap: 5px; font-size: 12px; }
   .compose-message input, .compose-message textarea { width: 100%; margin: 0; padding: 10px 11px; border: 1px solid var(--border); border-radius: 9px; color: var(--ink); background: var(--surface-input); font: inherit; }
   .compose-message textarea { min-height: 130px; resize: vertical; }
   .compose-message .secondary-button { color: var(--orange-dark); background: var(--warm); border: 1px solid var(--border); font-size: 12px; }
@@ -211,5 +349,5 @@
   html[data-theme='dark'] .mailbox-pagination button:hover, html[data-theme='dark'] .mailbox-pagination button:focus-visible { color: #171717; background: #fff; border-color: #fff; }
   html[data-theme='dark'] .message-importance { color: var(--orange-light); background: var(--surface-alt); }
   html[data-theme='dark'] .message-bounce { color: var(--danger); background: var(--neutral-bg); }
-  @media (max-width: 640px) { .message-tools { align-items: stretch; flex-direction: column; } .message-tools select, .message-tools input { width: 100%; } .message-range { align-items: stretch; flex-direction: column; } .message-range-control, .message-date-mode-control, .message-date-range .message-range-control { grid-template-columns: minmax(110px, auto) minmax(0, 1fr) auto; } .message-sync-window { grid-column: 1 / -1; white-space: normal; } .message-date-range { flex-direction: column; } .message-range button { width: 100%; } .message-action-bar { align-items: flex-start; flex-wrap: wrap; } .message-actions { margin-left: 0; justify-content: flex-start; } }
+  @media (max-width: 640px) { .message-tools { align-items: stretch; flex-direction: column; } .message-tools select, .message-tools input { width: 100%; } .message-range, .mailbox-client-range { align-items: stretch; flex-direction: column; } .message-range-control, .message-date-mode-control, .message-date-range .message-range-control { grid-template-columns: minmax(110px, auto) minmax(0, 1fr) auto; } .message-sync-window { grid-column: 1 / -1; white-space: normal; } .message-date-range { flex-direction: column; } .message-range button, .mailbox-client-range button { width: 100%; } .message-action-bar { align-items: flex-start; flex-wrap: wrap; } .message-actions { margin-left: 0; justify-content: flex-start; } .mailbox-client-period-bar { align-items: stretch; flex-direction: column; } .mailbox-client-period-bar > span { margin-right: 0; } .mailbox-client-period-bar button { width: 100%; } .mailbox-clients-toolbar { align-items: stretch; flex-direction: column; } .mailbox-client-card { align-items: flex-start; flex-direction: column; gap: 10px; } .mailbox-client-summary strong { white-space: normal; overflow-wrap: anywhere; } .mailbox-client-actions { flex-wrap: wrap; } }
 </style>

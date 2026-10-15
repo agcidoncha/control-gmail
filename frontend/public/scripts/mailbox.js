@@ -2,12 +2,17 @@
   const messagesNode = document.querySelector('#messages');
   const mailboxNode = document.querySelector('#messageMailbox');
   const searchNode = document.querySelector('#messageSearch');
+  const messageToolsNode = document.querySelector('.message-tools');
   const countNode = document.querySelector('#mailboxCount');
   const syncStatusNode = document.querySelector('#mailboxSyncStatus');
   const refreshButton = document.querySelector('#mailboxRefreshButton');
   const paginationStatusNodes = [...document.querySelectorAll('[data-mailbox-pagination-status]')];
   const pageNumberContainers = [...document.querySelectorAll('[data-mailbox-page-numbers]')];
   const rangeForm = document.querySelector('#messageRangeForm');
+  const periodPromptNode = document.querySelector('#messagePeriodPrompt');
+  const rangeInfoButton = document.querySelector('#messageRangeInfoButton');
+  const rangeInfoModal = document.querySelector('#messageRangeInfoModal');
+  const rangeInfoClose = document.querySelector('#messageRangeInfoClose');
   const pageSizeField = document.querySelector('#messagePageSizeField');
   const dateModeNode = document.querySelector('#messageDateMode');
   const exactDateField = document.querySelector('#messageExactDateField');
@@ -24,6 +29,32 @@
   const undoNode = document.querySelector('#mailboxUndo');
   const undoMessageNode = document.querySelector('#mailboxUndoMessage');
   const undoButton = document.querySelector('#mailboxUndoButton');
+  const messagesViewNode = document.querySelector('#mailboxMessagesView');
+  const clientsViewNode = document.querySelector('#mailboxClientsView');
+  const viewSwitchNode = document.querySelector('.mailbox-view-switch');
+  const messagesTab = document.querySelector('#mailboxMessagesTab');
+  const clientsTab = document.querySelector('#mailboxClientsTab');
+  const clientSearchNode = document.querySelector('#mailboxClientSearch');
+  const clientCountNode = document.querySelector('#mailboxClientCount');
+  const clientPeriodModeNode = document.querySelector('#mailboxClientPeriodMode');
+  const clientCustomPeriodButton = document.querySelector('#mailboxClientCustomPeriodButton');
+  const clientResetPeriodButton = document.querySelector('#mailboxClientResetPeriodButton');
+  const clientRangeForm = document.querySelector('#mailboxClientRangeForm');
+  const clientDateModeNode = document.querySelector('#mailboxClientDateMode');
+  const clientExactDateField = document.querySelector('#mailboxClientExactDateField');
+  const clientExactDateNode = document.querySelector('#mailboxClientExactDate');
+  const clientDateRangeFields = document.querySelector('#mailboxClientDateRangeFields');
+  const clientDateFromNode = document.querySelector('#mailboxClientDateFrom');
+  const clientDateToNode = document.querySelector('#mailboxClientDateTo');
+  const applyClientRangeButton = document.querySelector('#applyMailboxClientRange');
+  const clientRangeSummaryNode = document.querySelector('#mailboxClientRangeSummary');
+  const clientStatusNode = document.querySelector('#mailboxClientStatus');
+  const clientsListNode = document.querySelector('#mailboxClients');
+  const clientPaginationNode = document.querySelector('#mailboxClientPagination');
+  const clientPageNumbersNode = document.querySelector('#mailboxClientPageNumbers');
+  const clientPageStatusNode = document.querySelector('#mailboxClientPageStatus');
+  const clientPreviousButton = document.querySelector('[data-mailbox-client-pagination="previous"]');
+  const clientNextButton = document.querySelector('[data-mailbox-client-pagination="next"]');
   const composeButton = document.querySelector('#composeMessageButton');
   const composeForm = document.querySelector('#composeMessageForm');
   const composeTitle = document.querySelector('#composeTitle');
@@ -40,22 +71,40 @@
   const previewBody = document.querySelector('#previewBody');
   const editComposeButton = document.querySelector('#editComposeButton');
   const confirmComposeButton = document.querySelector('#confirmComposeButton');
-  const filterButtons = [...document.querySelectorAll('[data-message-filter]')];
   let messages = [];
-  let followUps = [];
-  let commitments = [];
-  let filter = 'all';
   let nextPageToken = null;
   let pageTokenHistory = [];
   let currentPageIndex = 0;
   let totalPageCount = null;
   let resultsTruncated = false;
   let loadingMessages = false;
+  let hasAppliedRange = false;
   let undoState = null;
   let undoTimer = null;
   let syncing = false;
+  let activeView = new URLSearchParams(window.location.search).get('view') === 'clients' ? 'clients' : 'messages';
+  let clients = [];
+  let clientPage = 1;
+  let clientsLoading = false;
+  let clientsLoadedRangeKey = '';
+  let clientHasCustomRange = false;
+  let clientCustomRange = null;
+  let clientRangeEditing = false;
   let syncTimer = null;
   const syncIntervalMs = 10 * 60 * 1000;
+  const mailboxRangeStorageKey = 'commercial-mailbox-range-v1';
+
+  function saveMailboxRange(dateRange) {
+    try {
+      sessionStorage.setItem(mailboxRangeStorageKey, JSON.stringify({
+        mode: dateModeNode.value,
+        from: dateRange.from || '',
+        to: dateRange.to || '',
+      }));
+    } catch {
+      // La navegación sigue funcionando aunque el almacenamiento de sesión no esté disponible.
+    }
+  }
 
   function formatDateInput(date) {
     const year = date.getFullYear();
@@ -71,6 +120,7 @@
 
   function getDateRange() {
     const mode = dateModeNode.value;
+    if (!mode) throw new Error('Selecciona el periodo que quieres consultar.');
     if (mode === 'this-month') return getPresetDateRange(mode);
     if (mode === 'day') {
       if (!exactDateNode.value) throw new Error('Selecciona el día que quieres consultar.');
@@ -90,13 +140,217 @@
     };
   }
 
+  function getClientDateRange() {
+    const mode = clientDateModeNode.value;
+    if (!mode) throw new Error('Selecciona el periodo de clientes que quieres consultar.');
+    if (mode === 'this-month') return getPresetDateRange(mode);
+    if (mode === 'day') {
+      if (!clientExactDateNode.value) throw new Error('Selecciona el día de clientes que quieres consultar.');
+      const today = formatDateInput(new Date());
+      return clientExactDateNode.value === today
+        ? { from: clientExactDateNode.value }
+        : { from: clientExactDateNode.value, to: clientExactDateNode.value };
+    }
+    if (!clientDateFromNode.value && !clientDateToNode.value) throw new Error('Indica al menos una fecha para buscar los clientes.');
+    if (clientDateFromNode.value && clientDateToNode.value && clientDateFromNode.value > clientDateToNode.value) {
+      throw new Error('La fecha «Desde» de clientes no puede ser posterior a «Hasta».');
+    }
+    const today = formatDateInput(new Date());
+    return {
+      from: clientDateFromNode.value,
+      to: clientDateToNode.value === today ? undefined : clientDateToNode.value,
+    };
+  }
+
+  function updateClientDateFields() {
+    const mode = clientDateModeNode.value;
+    clientExactDateField.hidden = mode !== 'day';
+    clientDateRangeFields.hidden = mode !== 'range';
+    applyClientRangeButton.hidden = !mode;
+  }
+
   function updateDateFields() {
     const mode = dateModeNode.value;
     pageSizeField.hidden = false;
+    if (syncWindowNode) {
+      syncWindowNode.hidden = true;
+      syncWindowNode.textContent = '';
+    }
     exactDateField.hidden = mode !== 'day';
     dateRangeFields.hidden = mode !== 'range';
-    applyRangeButton.hidden = mode !== 'day' && mode !== 'range';
-    clearRangeButton.hidden = mode === 'this-month';
+    applyRangeButton.hidden = !mode;
+    clearRangeButton.hidden = !mode;
+  }
+
+  function formatClientDate(value) {
+    if (!value) return 'Fecha desconocida';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime())
+      ? value
+      : new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
+  }
+
+  function setClientRangeSummary(analysisWindow) {
+    if (!clientRangeSummaryNode || !analysisWindow) return;
+    const from = formatSyncWindowDate(analysisWindow.from);
+    const to = formatSyncWindowDate(analysisWindow.to);
+    const mode = clientHasCustomRange ? clientDateModeNode.value : dateModeNode.value;
+    const prefix = clientHasCustomRange
+      ? 'Periodo propio'
+      : mode === 'this-month' ? 'Este mes' : mode === 'day' ? 'Día concreto' : 'Periodo';
+    clientRangeSummaryNode.textContent = `${prefix}: ${from} – ${to}`;
+  }
+
+  function resetViewTabLabels() {
+    messagesTab.textContent = 'Mensajes';
+    clientsTab.textContent = 'Clientes';
+  }
+
+  function renderClientPagination(filteredClients) {
+    if (!clientPaginationNode || !clientPageNumbersNode || !clientPageStatusNode || !clientPreviousButton || !clientNextButton) return;
+    const pageSize = 10;
+    const totalPages = Math.max(1, Math.ceil(filteredClients.length / pageSize));
+    clientPage = Math.min(clientPage, totalPages);
+    const visibleStart = Math.min(Math.max(clientPage - 2, 1), Math.max(1, totalPages - 4));
+    const visibleEnd = Math.min(totalPages, visibleStart + 4);
+    clientPageNumbersNode.replaceChildren();
+    for (let page = visibleStart; page <= visibleEnd; page += 1) {
+      const button = text('button', String(page), 'mailbox-page-number' + (page === clientPage ? ' is-current' : ''));
+      button.type = 'button';
+      button.dataset.mailboxClientPage = String(page);
+      button.setAttribute('aria-label', 'Ir a la página ' + page);
+      button.setAttribute('aria-current', page === clientPage ? 'page' : 'false');
+      button.disabled = clientsLoading || page === clientPage;
+      clientPageNumbersNode.append(button);
+    }
+    clientPaginationNode.hidden = filteredClients.length <= pageSize;
+    clientPreviousButton.hidden = totalPages <= 1;
+    clientNextButton.hidden = totalPages <= 1;
+    clientPreviousButton.disabled = clientsLoading || clientPage === 1;
+    clientNextButton.disabled = clientsLoading || clientPage === totalPages;
+    clientPageStatusNode.textContent = totalPages > 1 ? `Página ${clientPage} de ${totalPages}` : '';
+  }
+
+  function makeMailboxClientCard(client) {
+    const card = document.createElement('article');
+    card.className = 'mailbox-client-card';
+    const summary = document.createElement('div');
+    summary.className = 'mailbox-client-summary';
+    summary.append(text('strong', client.email));
+    summary.append(text('small', `${client.messages} ${client.messages === 1 ? 'mensaje relacionado' : 'mensajes relacionados'} · Última actividad: ${formatClientDate(client.latestDate)}`));
+    card.append(summary);
+    const actions = document.createElement('div');
+    actions.className = 'mailbox-client-actions';
+    const messagesButton = text('button', 'Ver mensajes');
+    messagesButton.type = 'button';
+    messagesButton.addEventListener('click', () => {
+      searchNode.value = client.email;
+      setActiveView('messages');
+      render();
+      searchNode.focus();
+    });
+    const aiLink = document.createElement('a');
+    aiLink.href = '/consultar-ia?client=' + encodeURIComponent(client.email) + '&prompt=' + encodeURIComponent(`Interpreta las necesidades, preferencias y estado comercial de ${client.email} usando solo sus conversaciones.`);
+    aiLink.textContent = 'Analizar necesidades';
+    actions.append(messagesButton, aiLink);
+    card.append(actions);
+    return card;
+  }
+
+  function renderClients() {
+    if (!clientsListNode || !clientCountNode || !clientSearchNode) return;
+    if (clientPeriodModeNode) clientPeriodModeNode.textContent = clientRangeEditing
+      ? 'Selecciona un periodo personalizado'
+      : clientHasCustomRange ? 'Clientes con periodo personalizado' : 'Clientes alineados con Mensajes';
+    if (clientCustomPeriodButton) clientCustomPeriodButton.hidden = clientHasCustomRange || clientRangeEditing;
+    if (clientResetPeriodButton) clientResetPeriodButton.hidden = !clientHasCustomRange;
+    if (clientRangeForm) clientRangeForm.hidden = !clientRangeEditing;
+    if (!hasAppliedRange && !clientHasCustomRange) {
+      resetViewTabLabels();
+      clientCountNode.textContent = 'Sin periodo seleccionado';
+      clientsListNode.replaceChildren(text('p', 'Elige un periodo arriba y pulsa «Aplicar» para consultar los clientes.', 'muted'));
+      if (clientPaginationNode) clientPaginationNode.hidden = true;
+      return;
+    }
+    const query = clientSearchNode.value.trim().toLowerCase();
+    const filteredClients = clients.filter((client) => client.email.toLowerCase().includes(query));
+    const pageSize = 10;
+    const totalPages = Math.max(1, Math.ceil(filteredClients.length / pageSize));
+    clientPage = Math.min(clientPage, totalPages);
+    const pageClients = filteredClients.slice((clientPage - 1) * pageSize, clientPage * pageSize);
+    clientsTab.textContent = `Clientes (${filteredClients.length})`;
+    clientCountNode.textContent = query ? `${filteredClients.length} de ${clients.length} clientes` : `${clients.length} ${clients.length === 1 ? 'cliente' : 'clientes'}`;
+    clientsListNode.replaceChildren();
+    if (!filteredClients.length) {
+      clientsListNode.append(text('p', query ? 'No hay clientes que coincidan con la búsqueda.' : 'No hay clientes detectados en este periodo.', 'muted'));
+    } else {
+      pageClients.forEach((client) => clientsListNode.append(makeMailboxClientCard(client)));
+    }
+    renderClientPagination(filteredClients);
+  }
+
+  async function loadClients(force = false) {
+    if (!clientsListNode || !clientSearchNode || clientsLoading) return;
+    if (!hasAppliedRange && !clientHasCustomRange) {
+      renderClients();
+      return;
+    }
+    let dateRange;
+    try {
+      dateRange = clientHasCustomRange ? clientCustomRange : getDateRange();
+    } catch (error) {
+      clientStatusNode.textContent = error.message || 'Pulsa «Aplicar» para consultar este periodo.';
+      clients = [];
+      renderClients();
+      return;
+    }
+    const rangeKey = [clientHasCustomRange ? 'custom' : dateModeNode.value, dateRange.from || '', dateRange.to || ''].join('|');
+    if (!force && clientsLoadedRangeKey === rangeKey) {
+      renderClients();
+      return;
+    }
+    clientsLoading = true;
+    clientPage = 1;
+    clientStatusNode.textContent = 'Consultando clientes del periodo…';
+    clientsListNode.replaceChildren(text('p', 'Buscando clientes en Gmail…', 'muted'));
+    renderClientPagination([]);
+    try {
+      const params = new URLSearchParams({ max: '1000' });
+      if (dateRange.from) params.set('from', dateRange.from);
+      if (dateRange.to) params.set('to', dateRange.to);
+      const data = await fetchJson('/gmail/insights?' + params.toString());
+      clients = data.insights?.clients || [];
+      clientsLoadedRangeKey = rangeKey;
+      setClientRangeSummary(data.analysisWindow);
+      clientStatusNode.textContent = clientHasCustomRange
+        ? 'Clientes detectados a partir del periodo personalizado.'
+        : 'Clientes detectados a partir de los mensajes del periodo seleccionado.';
+      renderClients();
+    } catch (error) {
+      clients = [];
+      clientStatusNode.textContent = error.message || 'No se pudieron cargar los clientes.';
+      renderClients();
+      showErrorNotice(error, 'No se pudieron cargar los clientes.', 'No se pudieron cargar los clientes');
+    } finally {
+      clientsLoading = false;
+      renderClients();
+    }
+  }
+
+  function setActiveView(view, options = {}) {
+    activeView = view === 'clients' ? 'clients' : 'messages';
+    const clientsActive = activeView === 'clients';
+    messagesViewNode.hidden = clientsActive;
+    clientsViewNode.hidden = !clientsActive;
+    messagesTab.classList.toggle('is-active', !clientsActive);
+    clientsTab.classList.toggle('is-active', clientsActive);
+    messagesTab.setAttribute('aria-selected', String(!clientsActive));
+    clientsTab.setAttribute('aria-selected', String(clientsActive));
+    const url = new URL(window.location.href);
+    if (clientsActive) url.searchParams.set('view', 'clients');
+    else url.searchParams.delete('view');
+    window.history.replaceState({}, '', url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : ''));
+    if (clientsActive && options.load !== false) loadClients();
   }
 
   function resetMessageView() {
@@ -111,7 +365,7 @@
   }
 
   function showPendingRangeChange() {
-    paginationStatusNodes.forEach((node) => { node.textContent = 'Hay cambios sin aplicar. Pulsa «Aplicar» para actualizar la bandeja.'; });
+    if (periodPromptNode) periodPromptNode.textContent = 'Hay cambios sin aplicar. Pulsa «Aplicar» para actualizar la bandeja.';
   }
 
   async function reloadMessages() {
@@ -123,6 +377,7 @@
     applyRangeButton.textContent = 'Aplicando…';
     try {
       await load();
+      if (activeView === 'clients') await loadClients(true);
     } finally {
       loadingMessages = false;
       applyRangeButton.disabled = false;
@@ -250,6 +505,22 @@
   }
 
   function render() {
+    if (messageToolsNode) messageToolsNode.hidden = !hasAppliedRange;
+    if (viewSwitchNode) viewSwitchNode.hidden = !hasAppliedRange;
+    if (syncStatusNode) syncStatusNode.hidden = !hasAppliedRange;
+    if (refreshButton) {
+      refreshButton.hidden = !hasAppliedRange;
+      refreshButton.disabled = !hasAppliedRange || syncing;
+    }
+    if (!hasAppliedRange && !syncing) setSyncStatus('idle', 'Sin periodo seleccionado');
+    if (messagesViewNode) messagesViewNode.hidden = !hasAppliedRange || activeView === 'clients';
+    if (clientsViewNode) clientsViewNode.hidden = !hasAppliedRange || activeView !== 'clients';
+    if (periodPromptNode) {
+      periodPromptNode.hidden = hasAppliedRange;
+      periodPromptNode.textContent = dateModeNode.value
+        ? 'Hay cambios sin aplicar. Pulsa «Aplicar» para actualizar la bandeja.'
+        : 'Elige un periodo arriba y pulsa «Aplicar» para consultar los mensajes.';
+    }
     if (archivedNoticeNode) {
       if (mailboxNode.value === 'archived') {
         archivedNoticeNode.textContent = 'Esta vista incluye cualquier correo archivado en Gmail, también si se archivó desde otra aplicación. Puedes usar «Desarchivar» para devolverlo a Recibidos.';
@@ -264,27 +535,33 @@
         archivedNoticeNode.hidden = true;
       }
     }
+    if (!hasAppliedRange) {
+      resetViewTabLabels();
+      countNode.textContent = 'Sin periodo seleccionado';
+      countNode.removeAttribute('aria-label');
+      messagesNode.removeAttribute('aria-hidden');
+      messagesNode.removeAttribute('aria-busy');
+      messagesNode.removeAttribute('aria-label');
+      messagesNode.replaceChildren();
+      paginationStatusNodes.forEach((node) => { node.textContent = ''; });
+      previousPageButtons.forEach((button) => { button.hidden = true; });
+      nextPageButtons.forEach((button) => { button.hidden = true; });
+      pageNumberContainers.forEach((container) => { container.replaceChildren(); });
+      return;
+    }
     messagesNode.removeAttribute('aria-hidden');
     messagesNode.removeAttribute('aria-busy');
     messagesNode.removeAttribute('aria-label');
     countNode.removeAttribute('aria-label');
     const query = searchNode.value.trim().toLowerCase();
-    const followUpThreads = new Set(followUps.map((item) => item.threadId));
-    const commitmentThreads = new Set(commitments.map((item) => item.threadId));
     const filtered = messages.filter((message) => {
       const textToSearch = [message.subject, message.from, message.snippet].join(' ').toLowerCase();
       const matchesQuery = !query || textToSearch.includes(query);
-      const matchesFilter = filter === 'all'
-        || (filter === 'follow-ups' && followUpThreads.has(message.threadId))
-        || (filter === 'commitments' && commitmentThreads.has(message.threadId))
-        || (filter === 'important' && message.important === true)
-        || (filter === 'bounced' && message.bounced === true)
-        || (filter === 'attention' && (followUpThreads.has(message.threadId) || commitmentThreads.has(message.threadId)));
-      return matchesQuery && matchesFilter;
+      return matchesQuery;
     });
 
-    const hasDateFilter = true;
     const currentPage = currentPageIndex + 1;
+    messagesTab.textContent = loadingMessages ? 'Mensajes' : `Mensajes (${filtered.length})`;
     countNode.textContent = filtered.length + ' mensajes mostrados · página ' + currentPage;
     const knownPageCount = Math.max(
       currentPage,
@@ -310,7 +587,7 @@
     });
     const paginationMessage = nextPageToken
       ? 'Hay más mensajes disponibles en este periodo.'
-      : resultsTruncated
+      : resultsTruncated && filtered.length > 0
         ? 'Hay demasiados resultados. Acota el periodo para verlos todos.'
         : '';
     paginationStatusNodes.forEach((node) => { node.textContent = paginationMessage; });
@@ -383,44 +660,32 @@
     });
   }
 
-  async function load(forceFetch = false) {
+  async function load() {
     try {
       const dateRange = getDateRange();
-      const hasDateFilter = Boolean(dateRange.from || dateRange.to);
+      if (dateModeNode.value === 'this-month') {
+        setSyncWindow(dateRange.from, dateRange.to || formatDateInput(new Date()));
+      }
+      saveMailboxRange(dateRange);
       const maxResults = 10;
       const pageToken = pageTokenHistory[currentPageIndex] || null;
-      const shared = !forceFetch && currentPageIndex === 0 && !hasDateFilter && maxResults === 10 && mailboxNode.value === 'inbox' && window.__commercialNavDataPromise
-        ? await window.__commercialNavDataPromise
-        : null;
       const messageParams = new URLSearchParams({ max: String(maxResults), mailbox: mailboxNode.value });
       if (pageToken) messageParams.set('pageToken', pageToken);
       if (mailboxNode.value === 'sent' || mailboxNode.value === 'trash') messageParams.set('refresh', '1');
       if (dateRange.from) messageParams.set('from', dateRange.from);
       if (dateRange.to) messageParams.set('to', dateRange.to);
-      const messageResult = shared?.messages?.messages
-        ? shared.messages
-        : await fetchJson('/gmail/messages?' + messageParams.toString());
-      const followUpResult = shared?.followUps;
-      const commitmentResult = shared?.commitments;
-      if (!messageResult) {
-        throw new Error(shared?.errors?.messages || 'No se pudieron cargar los mensajes de la bandeja.');
-      }
+      const messageResult = await fetchJson('/gmail/messages?' + messageParams.toString());
       messages = messageResult.messages || [];
       nextPageToken = messageResult.nextPageToken || null;
       if (Array.isArray(messageResult.pageTokens)) pageTokenHistory = messageResult.pageTokens;
       else pageTokenHistory[currentPageIndex + 1] = nextPageToken;
       totalPageCount = Number.isInteger(messageResult.pageCount) ? messageResult.pageCount : null;
       resultsTruncated = Boolean(messageResult.truncated);
-      if (followUpResult) followUps = followUpResult.followUps || [];
-      if (commitmentResult) commitments = commitmentResult.commitments || [];
       const navMessageCount = document.querySelector('#navMessageCount');
       if (navMessageCount) { navMessageCount.textContent = String(messages.length); navMessageCount.hidden = false; }
-      const navFollowUpCount = document.querySelector('#navFollowUpCount');
-      if (navFollowUpCount && followUpResult) { navFollowUpCount.textContent = String(followUps.length); navFollowUpCount.hidden = false; }
-      const navCommitmentCount = document.querySelector('#navCommitmentCount');
-      if (navCommitmentCount && commitmentResult) { navCommitmentCount.textContent = String(commitments.length); navCommitmentCount.hidden = false; }
       if (!syncing) setSyncStatus('success', 'Bandeja cargada');
       render();
+      if (activeView === 'clients') await loadClients();
       if (requestedReply && !replyOpened) {
         const replyMessage = messages.find((message) => message.id === requestedReply);
         if (replyMessage) {
@@ -465,6 +730,7 @@
     syncWindowNode.textContent = start && end
       ? `Este mes: ${start} – ${end}`
       : 'Este mes: no disponible';
+    syncWindowNode.hidden = false;
   }
 
   function setSyncStatus(state, message, syncedAt = null) {
@@ -474,7 +740,7 @@
   }
 
   async function syncMailbox(showErrors = true) {
-    if (syncing) return;
+    if (syncing || !hasAppliedRange) return;
     syncing = true;
     refreshButton.disabled = true;
     refreshButton.textContent = 'Actualizando…';
@@ -484,7 +750,7 @@
       messages = [];
       nextPageToken = null;
       render();
-      await load(true);
+      await load();
       setSyncWindow(result.from, result.to);
       setSyncStatus('success', 'Actualizado el ' + formatSyncDate(result.syncedAt), result.syncedAt);
     } catch (error) {
@@ -640,29 +906,99 @@
   });
 
   searchNode.addEventListener('input', render);
-  filterButtons.forEach((button) => button.addEventListener('click', () => {
-    filter = button.dataset.messageFilter || 'all';
-    filterButtons.forEach((item) => item.classList.toggle('active', item === button));
-    render();
-  }));
+  clientSearchNode.addEventListener('input', () => {
+    clientPage = 1;
+    renderClients();
+  });
+  clientCustomPeriodButton.addEventListener('click', () => {
+    clientRangeEditing = true;
+    clientDateModeNode.value = '';
+    clientExactDateNode.value = '';
+    clientDateFromNode.value = '';
+    clientDateToNode.value = '';
+    updateClientDateFields();
+    clientStatusNode.textContent = 'Elige un periodo propio y pulsa «Aplicar periodo de clientes».';
+    renderClients();
+  });
+  clientResetPeriodButton.addEventListener('click', async () => {
+    clientHasCustomRange = false;
+    clientCustomRange = null;
+    clientRangeEditing = false;
+    clientDateModeNode.value = '';
+    clientExactDateNode.value = '';
+    clientDateFromNode.value = '';
+    clientDateToNode.value = '';
+    clientsLoadedRangeKey = '';
+    clients = [];
+    updateClientDateFields();
+    clientRangeSummaryNode.textContent = 'Usa el periodo seleccionado arriba.';
+    renderClients();
+    if (hasAppliedRange && activeView === 'clients') await loadClients(true);
+  });
+  clientDateModeNode.addEventListener('change', updateClientDateFields);
+  clientRangeForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      clientCustomRange = getClientDateRange();
+      clientHasCustomRange = true;
+      clientRangeEditing = false;
+      clientsLoadedRangeKey = '';
+      clientPage = 1;
+      await loadClients(true);
+    } catch (error) {
+      clientStatusNode.textContent = error.message || 'Revisa el periodo de clientes seleccionado.';
+      showErrorNotice(error, 'Revisa las fechas de clientes.', 'No se puede aplicar el periodo de clientes');
+    }
+  });
+  messagesTab.addEventListener('click', () => setActiveView('messages'));
+  clientsTab.addEventListener('click', () => setActiveView('clients'));
+  clientPageNumbersNode.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-mailbox-client-page]');
+    if (!button || clientsLoading) return;
+    clientPage = Number(button.dataset.mailboxClientPage);
+    renderClients();
+  });
+  clientPreviousButton.addEventListener('click', () => {
+    if (clientsLoading || clientPage <= 1) return;
+    clientPage -= 1;
+    renderClients();
+  });
+  clientNextButton.addEventListener('click', () => {
+    const totalPages = Math.max(1, Math.ceil(clients.filter((client) => client.email.toLowerCase().includes(clientSearchNode.value.trim().toLowerCase())).length / 10));
+    if (clientsLoading || clientPage >= totalPages) return;
+    clientPage += 1;
+    renderClients();
+  });
   dateModeNode.addEventListener('change', async () => {
     updateDateFields();
-    if (dateModeNode.value === 'this-month') {
-      exactDateNode.value = '';
-      dateFromNode.value = '';
-      dateToNode.value = '';
-      await reloadMessages();
+    hasAppliedRange = false;
+    clientsLoadedRangeKey = '';
+    clients = [];
+    if (!dateModeNode.value) {
+      resetMessageView();
+      renderClients();
       return;
     }
+    resetMessageView();
+    renderClients();
     showPendingRangeChange();
   });
   [exactDateNode, dateFromNode, dateToNode].forEach((node) => node.addEventListener('change', () => {
-    if (dateModeNode.value === 'day' || dateModeNode.value === 'range') showPendingRangeChange();
+    if (dateModeNode.value === 'day' || dateModeNode.value === 'range') {
+      hasAppliedRange = false;
+      clientsLoadedRangeKey = '';
+      clients = [];
+      resetMessageView();
+      renderClients();
+      showPendingRangeChange();
+    }
   }));
   rangeForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     try {
-      getDateRange();
+      const dateRange = getDateRange();
+      hasAppliedRange = true;
+      saveMailboxRange(dateRange);
       await reloadMessages();
     } catch (error) {
       paginationStatusNodes.forEach((node) => { node.textContent = error.message || 'Revisa las fechas seleccionadas.'; });
@@ -670,12 +1006,32 @@
     }
   });
   clearRangeButton.addEventListener('click', async () => {
-    dateModeNode.value = 'this-month';
+    dateModeNode.value = '';
     exactDateNode.value = '';
     dateFromNode.value = '';
     dateToNode.value = '';
+    hasAppliedRange = false;
+    clientsLoadedRangeKey = '';
+    clients = [];
     updateDateFields();
-    await reloadMessages();
+    resetMessageView();
+    renderClients();
+  });
+  function closeRangeInfo() {
+    rangeInfoModal.hidden = true;
+    document.documentElement.classList.remove('message-range-info-open');
+  }
+  rangeInfoButton.addEventListener('click', () => {
+    rangeInfoModal.hidden = false;
+    document.documentElement.classList.add('message-range-info-open');
+    rangeInfoClose.focus();
+  });
+  rangeInfoClose.addEventListener('click', closeRangeInfo);
+  rangeInfoModal.addEventListener('click', (event) => {
+    if (event.target === rangeInfoModal) closeRangeInfo();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !rangeInfoModal.hidden) closeRangeInfo();
   });
   composeButton.addEventListener('click', () => openCompose());
   cancelComposeButton.addEventListener('click', closeCompose);
@@ -714,8 +1070,16 @@
   });
   editComposeButton.addEventListener('click', () => { composePreview.hidden = true; composeStatus.textContent = ''; composeBody.focus(); });
   confirmComposeButton.addEventListener('click', sendComposeMessage);
-  mailboxNode.addEventListener('change', reloadMessages);
+  mailboxNode.addEventListener('change', () => {
+    if (hasAppliedRange) reloadMessages();
+    else resetMessageView();
+  });
+  setActiveView(activeView, { load: false });
   updateDateFields();
-  load();
-  syncTimer = window.setInterval(() => syncMailbox(false), syncIntervalMs);
+  updateClientDateFields();
+  resetMessageView();
+  renderClients();
+  syncTimer = window.setInterval(() => {
+    if (hasAppliedRange) syncMailbox(false);
+  }, syncIntervalMs);
 })();

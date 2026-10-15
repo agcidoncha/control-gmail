@@ -12,18 +12,38 @@
       <span>Buscar cliente</span>
       <input id="clientSearch" type="search" placeholder="correo@empresa.com" autocomplete="off" />
     </label>
-    <label class="clients-page-size">
-      <span>Mostrar</span>
-      <select id="clientPageSize">
-        <option value="10">10</option>
-        <option value="25" selected>25</option>
-        <option value="50">50</option>
-        <option value="100">100</option>
-        <option value="all">Todos</option>
-      </select>
-      <span>por página</span>
-    </label>
   </div>
+  <form id="clientRangeForm" class="clients-range" aria-label="Elegir clientes y fechas">
+    <div id="clientPageSizeField" class="clients-range-control clients-page-size-fixed">
+      <span>Mostrar</span>
+      <span>10 mensajes por página</span>
+    </div>
+    <label class="clients-range-control clients-date-mode-control">
+      <span>Buscar por fecha</span>
+      <select id="clientDateMode">
+        <option value="this-month" selected>Este mes</option>
+        <option value="day">Un día concreto</option>
+        <option value="range">Un periodo</option>
+      </select>
+      <small id="clientRangeSummary" class="clients-range-summary muted">Este mes: consultando…</small>
+    </label>
+    <label id="clientExactDateField" class="clients-range-control" hidden>
+      <span>Fecha</span>
+      <input id="clientExactDate" type="date" />
+    </label>
+    <div id="clientDateRangeFields" class="clients-date-range" hidden>
+      <label class="clients-range-control">
+        <span>Desde</span>
+        <input id="clientDateFrom" type="date" />
+      </label>
+      <label class="clients-range-control">
+        <span>Hasta</span>
+        <input id="clientDateTo" type="date" />
+      </label>
+    </div>
+    <button id="applyClientRange" type="submit">Aplicar</button>
+    <button id="resetClientRange" class="secondary-button" type="button" hidden>Limpiar fechas</button>
+  </form>
   <div id="clients" class="clients-list skeleton-list" aria-live="polite" aria-busy="true" aria-label="Cargando clientes" aria-hidden="true">
     <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line short"></span></div>
     <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line short"></span></div>
@@ -40,14 +60,28 @@
 <style is:global>
   .clients-screen { margin-top: 18px; }
   .clients-note { margin: 16px 0 4px; color: var(--muted); font-size: 13px; }
-  .clients-toolbar { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-top: 18px; padding: 12px 0; border-top: 1px solid var(--border); }
-  .clients-search, .clients-page-size { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+  .clients-range { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin: 14px 0 4px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-ai); }
+  .clients-range [hidden] { display: none; }
+  .clients-range-control { display: grid; flex: 0 0 auto; align-items: center; grid-template-columns: auto auto auto; gap: 7px; color: var(--muted); font-size: 12px; }
+  .clients-page-size-fixed { grid-template-columns: auto auto; }
+  .clients-range-control > span:first-child { color: var(--ink); font-weight: 700; }
+  .clients-range-control select { min-height: 44px; min-width: 0; }
+  .clients-range-control input { min-height: 36px; min-width: 0; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; color: var(--ink); background: var(--surface-input); font: inherit; }
+  .clients-date-mode-control { min-width: 0; grid-template-columns: auto minmax(190px, auto) auto; }
+  .clients-range-summary { font-size: 11px; white-space: nowrap; }
+  .clients-date-range { display: flex; flex-wrap: wrap; gap: 10px; }
+  .clients-date-range .clients-range-control { grid-template-columns: auto minmax(140px, 1fr); }
+  .clients-range button { min-height: 36px; padding: 7px 11px; border: 1px solid var(--border); border-radius: 8px; color: #fff; background: var(--orange); font: inherit; font-size: 12px; cursor: pointer; }
+  .clients-range button.secondary-button { color: var(--orange-dark); background: var(--warm); }
+  .clients-range button:hover, .clients-range button:focus-visible { background: var(--orange-dark); }
+  .clients-range button.secondary-button:hover, .clients-range button.secondary-button:focus-visible { color: var(--ink); background: var(--orange-light); }
+  .clients-range button:disabled { cursor: wait; opacity: .65; }
+  .clients-toolbar { display: flex; align-items: center; gap: 12px; margin: 18px 0 4px; }
+  .clients-search { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
   .clients-search { flex: 1 1 320px; }
-  .clients-search span, .clients-page-size span:first-child { color: var(--ink); font-weight: 700; }
+  .clients-search span { color: var(--ink); font-weight: 700; }
   .clients-search input { width: min(100%, 360px); min-height: 44px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-input); color: var(--ink); font: inherit; }
-  .clients-page-size select { min-height: 44px; }
-  .clients-page-size select { min-width: 100px; }
-  .clients-search input:focus-visible, .clients-page-size select:focus-visible, .clients-pagination button:focus-visible { outline: 3px solid var(--orange-light); outline-offset: 2px; }
+  .clients-search input:focus-visible, .clients-range-control select:focus-visible, .clients-range-control input:focus-visible, .clients-pagination button:focus-visible { outline: 3px solid var(--orange-light); outline-offset: 2px; }
   .clients-list { display: grid; gap: 0; margin-top: 16px; }
   .client-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 13px 0; border-bottom: 1px solid var(--border); }
   .client-card:last-child { border-bottom: 0; }
@@ -78,6 +112,10 @@
     .client-actions { justify-content: flex-start; }
     .clients-toolbar { align-items: stretch; flex-direction: column; gap: 10px; }
     .clients-search input { flex: 1; width: auto; }
-    .clients-page-size { flex-wrap: wrap; }
+    .clients-range { align-items: stretch; flex-direction: column; }
+    .clients-range-control, .clients-date-range { align-items: stretch; grid-template-columns: minmax(110px, auto) minmax(0, 1fr) auto; }
+    .clients-date-range .clients-range-control { grid-template-columns: minmax(110px, auto) minmax(0, 1fr); }
+    .clients-range-summary { white-space: normal; }
+    .clients-range-control select, .clients-range-control input { width: 100%; }
   }
 </style>

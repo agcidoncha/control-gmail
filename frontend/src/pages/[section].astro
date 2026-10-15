@@ -4,8 +4,10 @@ import Assistant from '../components/Assistant.astro';
 import Mailbox from '../components/Mailbox.astro';
 import FollowUps from '../components/FollowUps.astro';
 import Commitments from '../components/Commitments.astro';
-import Clients from '../components/Clients.astro';
 import Reports from '../components/Reports.astro';
+
+const section = Astro.params.section ?? 'mailbox';
+if (section === 'clients') return Astro.redirect('/mailbox?view=clients');
 
 const screens = {
   mailbox: { title: 'Bandeja comercial', description: 'Filtra por bandeja, asunto, remitente o contenido.', body: 'Aquí se conectará la bandeja de Gmail de la cuenta activa.' },
@@ -16,7 +18,6 @@ const screens = {
   'consultar-ia': { title: 'Consultar a la IA', description: 'Pregunta sobre la actividad de tu cuenta.', body: 'Aquí se conectará el asistente comercial con los datos autorizados.' },
 };
 const screen = screens[Astro.params.section as keyof typeof screens] ?? screens.mailbox;
-const section = Astro.params.section ?? 'mailbox';
 ---
 
 <AppShell>
@@ -26,8 +27,6 @@ const section = Astro.params.section ?? 'mailbox';
       <FollowUps />
     ) : section === 'commitments' ? (
       <Commitments />
-    ) : section === 'clients' ? (
-      <Clients />
     ) : section === 'reports' ? (
       <Reports />
     ) : section === 'consultar-ia' ? (

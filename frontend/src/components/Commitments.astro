@@ -5,8 +5,42 @@
         <h2>Compromisos detectados</h2>
         <p>Posibles tareas identificadas en conversaciones; siempre requieren revisión.</p>
       </div>
-      <span id="commitmentCount" class="muted" aria-label="Cargando cantidad de compromisos"><span class="skeleton skeleton-inline" aria-hidden="true"></span></span>
+      <span id="commitmentCount" class="muted">Sin periodo seleccionado</span>
     </div>
+
+    <form id="commitmentRangeForm" class="commitment-range" aria-label="Elegir periodo para compromisos">
+      <div class="commitment-range-control commitment-page-size-fixed">
+        <span>Mostrar</span>
+        <span>10 compromisos</span>
+      </div>
+      <label class="commitment-range-control commitment-date-mode-control">
+        <span>Buscar por fecha</span>
+        <select id="commitmentDateMode">
+          <option value="" selected>Selecciona un periodo</option>
+          <option value="this-month">Este mes</option>
+          <option value="day">Un día concreto</option>
+          <option value="range">Un periodo</option>
+        </select>
+        <small id="commitmentRangeSummary" class="commitment-range-summary muted">Sin periodo seleccionado</small>
+      </label>
+      <label id="commitmentExactDateField" class="commitment-range-control" hidden>
+        <span>Fecha</span>
+        <input id="commitmentExactDate" type="date" />
+      </label>
+      <div id="commitmentDateRangeFields" class="commitment-date-range" hidden>
+        <label class="commitment-range-control">
+          <span>Desde</span>
+          <input id="commitmentDateFrom" type="date" />
+        </label>
+        <label class="commitment-range-control">
+          <span>Hasta</span>
+          <input id="commitmentDateTo" type="date" />
+        </label>
+      </div>
+      <button id="applyCommitmentRange" type="submit">Aplicar</button>
+      <button id="clearCommitmentRange" class="secondary-button" type="button" hidden>Limpiar fechas</button>
+    </form>
+    <p class="commitment-range-help muted">Elige un periodo y pulsa «Aplicar» para consultar los compromisos. Solo se carga lo que pidas.</p>
 
     <div class="commitment-tools">
       <input id="commitmentSearch" type="search" placeholder="Buscar asunto, responsable o compromiso…" aria-label="Buscar compromisos" />
@@ -18,9 +52,8 @@
     </div>
   </div>
 
-  <div id="commitments" class="commitments-list" aria-live="polite" aria-busy="true" aria-label="Cargando compromisos" aria-hidden="true">
-    <div class="card skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line short"></span></div>
-    <div class="card skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line short"></span></div>
+  <div id="commitments" class="commitments-list" aria-live="polite">
+    <p class="muted">Elige un periodo arriba y pulsa «Aplicar» para consultar los compromisos.</p>
   </div>
 </section>
 
@@ -28,6 +61,23 @@
 
 <style is:global>
   .commitments-screen { display: grid; gap: 14px; margin-top: 18px; }
+  .commitment-range { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin: 14px 0 4px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-ai); }
+  .commitment-range [hidden] { display: none; }
+  .commitment-range-control { display: grid; flex: 0 0 auto; align-items: center; grid-template-columns: auto auto auto; gap: 7px; color: var(--muted); font-size: 12px; }
+  .commitment-page-size-fixed { grid-template-columns: auto auto; }
+  .commitment-range-control > span:first-child { color: var(--ink); font-weight: 700; }
+  .commitment-range-control select { min-height: 44px; min-width: 0; }
+  .commitment-range-control input { min-height: 36px; min-width: 0; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; color: var(--ink); background: var(--surface-input); font: inherit; }
+  .commitment-date-mode-control { min-width: 0; grid-template-columns: auto minmax(190px, auto) auto; }
+  .commitment-range-summary { font-size: 11px; white-space: nowrap; }
+  .commitment-date-range { display: flex; flex-wrap: wrap; gap: 10px; }
+  .commitment-date-range .commitment-range-control { grid-template-columns: auto minmax(140px, 1fr); }
+  .commitment-range button { min-height: 36px; padding: 7px 11px; border: 1px solid var(--border); border-radius: 8px; color: #fff; background: var(--orange); font: inherit; font-size: 12px; cursor: pointer; }
+  .commitment-range button.secondary-button { color: var(--orange-dark); background: var(--warm); }
+  .commitment-range button:hover, .commitment-range button:focus-visible { background: var(--orange-dark); }
+  .commitment-range button.secondary-button:hover, .commitment-range button.secondary-button:focus-visible { color: var(--ink); background: var(--orange-light); }
+  .commitment-range button:disabled { cursor: wait; opacity: .65; }
+  .commitment-range-help { margin: 8px 0 0; font-size: 12px; }
   .commitment-tools { display: flex; gap: 12px; margin: 18px 0 4px; }
   .commitment-tools input { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; background: var(--surface-input); color: var(--ink); }
   .commitment-tools select { width: 100%; min-width: 0; }
@@ -47,5 +97,5 @@
   .commitment-thread .thread-message strong, .commitment-thread .thread-message small, .commitment-thread .thread-message p { display: block; }
   .commitment-thread .thread-message small { margin-top: 3px; color: var(--muted); }
   .commitment-thread .thread-message p { margin: 7px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-  @media (max-width: 640px) { .commitment { grid-template-columns: 1fr; gap: 10px; } .commitment-side { align-items: flex-start; flex-direction: row; flex-wrap: wrap; } .commitment-status { align-self: center; } }
+  @media (max-width: 640px) { .commitment-range { align-items: stretch; flex-direction: column; } .commitment-range-control, .commitment-date-mode-control, .commitment-date-range .commitment-range-control { grid-template-columns: minmax(110px, auto) minmax(0, 1fr) auto; } .commitment-range-summary { grid-column: 1 / -1; white-space: normal; } .commitment-date-range { flex-direction: column; } .commitment-range button { width: 100%; } .commitment { grid-template-columns: 1fr; gap: 10px; } .commitment-side { align-items: flex-start; flex-direction: row; flex-wrap: wrap; } .commitment-status { align-self: center; } }
 </style>

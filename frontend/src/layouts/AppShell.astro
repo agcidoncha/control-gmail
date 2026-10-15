@@ -10,7 +10,6 @@ const navItems = [
   { href: '/commitments', label: 'Compromisos', icon: '/icons/home/compromiso.svg', key: '/commitments' },
   { href: '/activity', label: 'Actividad', icon: '/icons/home/reportes.svg', key: '/activity' },
   { href: '/mailbox?mailbox=trash', label: 'Papelera', icon: '/icons/home/trash.svg', key: '/mailbox-trash' },
-  { href: '/clients', label: 'Clientes', icon: '/icons/home/clientes.svg', key: '/clients' },
   { href: '/reports', label: 'Informes', icon: '/icons/home/reportes.svg', key: '/reports' },
   { href: '/consultar-ia', label: 'Consultar a la IA', icon: '/icons/home/consultar-ai.svg', key: '/consultar-ia' },
   { href: '/settings/ai', label: 'Configuración IA', icon: '/icons/home/settings-ai.svg', key: '/settings/ai' },
@@ -29,7 +28,6 @@ const pageTitle = currentPath === '/settings/ai' ? 'Configuración de IA' : acti
     <meta name="viewport" content="width=device-width" />
     <title>Asistente Comercial · Gmail</title>
     <link rel="stylesheet" href="/fonts/fonts.css" />
-    <script is:inline src="/scripts/nav-counts.js"></script>
     <script is:inline src="/scripts/email-text.js"></script>
     <script is:inline>
       (() => {

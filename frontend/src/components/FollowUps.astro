@@ -5,7 +5,7 @@
         <h2>Seguimientos pendientes</h2>
         <p>Mensajes enviados sin una respuesta posterior, agrupados por hilo.</p>
       </div>
-      <span id="followUpCount" class="muted" aria-label="Cargando cantidad de seguimientos"><span class="skeleton skeleton-inline" aria-hidden="true"></span></span>
+      <span id="followUpCount" class="muted">Sin periodo seleccionado</span>
     </div>
 
     <form id="followUpRangeForm" class="follow-up-range" aria-label="Elegir mensajes y fechas">
@@ -16,11 +16,12 @@
       <label class="follow-up-range-control follow-up-date-mode-control">
         <span>Buscar por fecha</span>
         <select id="followUpDateMode">
-          <option value="this-month" selected>Este mes</option>
+          <option value="" selected>Selecciona un periodo</option>
+          <option value="this-month">Este mes</option>
           <option value="day">Un día concreto</option>
           <option value="range">Un periodo</option>
         </select>
-        <small id="followUpRangeSummary" class="follow-up-range-summary muted">Este mes: consultando…</small>
+        <small id="followUpRangeSummary" class="follow-up-range-summary muted">Sin periodo seleccionado</small>
       </label>
       <label id="followUpExactDateField" class="follow-up-range-control" hidden>
         <span>Fecha</span>
@@ -69,9 +70,8 @@
     <span class="follow-up-pagination-status muted" data-follow-up-pagination-status aria-live="polite"></span>
   </div>
 
-  <div id="followUps" class="skeleton-list follow-ups-list" aria-live="polite" aria-busy="true" aria-label="Cargando seguimientos" aria-hidden="true">
-    <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line short"></span></div>
-    <div class="skeleton-list-item"><span class="skeleton skeleton-line title"></span><span class="skeleton skeleton-line meta"></span><span class="skeleton skeleton-line short"></span></div>
+  <div id="followUps" class="skeleton-list follow-ups-list" aria-live="polite">
+    <p class="muted">Elige un periodo arriba y pulsa «Aplicar» para consultar los seguimientos.</p>
   </div>
 
   <div class="follow-up-pagination" data-follow-up-pagination-container>

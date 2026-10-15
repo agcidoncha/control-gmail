@@ -29,6 +29,7 @@
   let pageCount = 1;
   let summary = { total: 0 };
   let loading = false;
+  let hasAppliedRange = false;
 
   const text = (tag, value, className = '') => {
     const node = document.createElement(tag);
@@ -70,6 +71,7 @@
   }
 
   function getDateRange() {
+    if (!dateModeNode.value) throw new Error('Selecciona un periodo antes de aplicar la búsqueda.');
     if (dateModeNode.value === 'this-month') return getPresetDateRange();
     if (dateModeNode.value === 'day') {
       if (!exactDateNode.value) throw new Error('Selecciona el día que quieres consultar.');
@@ -84,10 +86,17 @@
 
   function updateDateFields() {
     const mode = dateModeNode.value;
+    if (!mode) {
+      exactDateField.hidden = true;
+      dateRangeFields.hidden = true;
+      applyRangeButton.hidden = true;
+      clearRangeButton.hidden = true;
+      return;
+    }
     exactDateField.hidden = mode !== 'day';
     dateRangeFields.hidden = mode !== 'range';
-    applyRangeButton.hidden = mode !== 'day' && mode !== 'range';
-    clearRangeButton.hidden = mode === 'this-month';
+    applyRangeButton.hidden = false;
+    clearRangeButton.hidden = false;
   }
 
   function setRangeSummary(analysisWindow) {
@@ -103,6 +112,24 @@
     listNode.setAttribute('aria-busy', 'true');
     listNode.setAttribute('aria-label', 'Consultando seguimientos');
     listNode.replaceChildren(text('p', 'Consultando los seguimientos…', 'muted'));
+  }
+
+  function renderPendingState() {
+    loading = false;
+    items = [];
+    total = 0;
+    currentPage = 1;
+    pageCount = 1;
+    summary = { total: 0 };
+    countNode.textContent = 'Sin periodo seleccionado';
+    countNode.removeAttribute('aria-label');
+    rangeSummaryNode.textContent = 'Sin periodo seleccionado';
+    listNode.removeAttribute('aria-hidden');
+    listNode.removeAttribute('aria-busy');
+    listNode.removeAttribute('aria-label');
+    listNode.replaceChildren(text('p', 'Elige un periodo arriba y pulsa «Aplicar» para consultar los seguimientos.', 'muted'));
+    paginationContainers.forEach((container) => { container.hidden = true; });
+    paginationStatusNodes.forEach((node) => { node.textContent = ''; });
   }
 
   function renderPagination() {
@@ -225,6 +252,10 @@
   }
 
   async function load({ resetPage = false } = {}) {
+    if (!hasAppliedRange) {
+      renderPendingState();
+      return;
+    }
     if (loading) return;
     if (resetPage) currentPage = 1;
     loading = true;
@@ -354,7 +385,9 @@
   });
 
   searchNode.addEventListener('input', render);
-  categoryNode.addEventListener('change', () => load({ resetPage: true }));
+  categoryNode.addEventListener('change', () => {
+    if (hasAppliedRange) load({ resetPage: true });
+  });
   if (categoryInfoButton && categoryInfoModal && categoryInfoClose) {
     let lastFocusedElement = null;
     const closeCategoryInfo = () => {
@@ -376,39 +409,40 @@
       if (!categoryInfoModal.hidden && event.key === 'Escape') closeCategoryInfo();
     });
   }
-  dateModeNode.addEventListener('change', async () => {
+  dateModeNode.addEventListener('change', () => {
     updateDateFields();
-    if (dateModeNode.value === 'this-month') {
-      exactDateNode.value = '';
-      dateFromNode.value = '';
-      dateToNode.value = '';
-      await load({ resetPage: true });
-      return;
-    }
-    rangeSummaryNode.textContent = 'Pendiente de aplicar';
+    hasAppliedRange = false;
+    exactDateNode.value = '';
+    dateFromNode.value = '';
+    dateToNode.value = '';
+    renderPendingState();
   });
   [exactDateNode, dateFromNode, dateToNode].forEach((node) => node.addEventListener('change', () => {
     if (dateModeNode.value === 'day' || dateModeNode.value === 'range') {
+      hasAppliedRange = false;
       rangeSummaryNode.textContent = 'Pendiente de aplicar';
+      renderPendingState();
     }
   }));
   rangeForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     try {
       getDateRange();
+      hasAppliedRange = true;
       await load({ resetPage: true });
     } catch (error) {
       paginationStatusNodes.forEach((node) => { node.textContent = error.message || 'Revisa las fechas seleccionadas.'; });
       showErrorNotice(error, 'Revisa las fechas seleccionadas.', 'No se puede aplicar el periodo');
     }
   });
-  clearRangeButton.addEventListener('click', async () => {
-    dateModeNode.value = 'this-month';
+  clearRangeButton.addEventListener('click', () => {
+    dateModeNode.value = '';
     exactDateNode.value = '';
     dateFromNode.value = '';
     dateToNode.value = '';
+    hasAppliedRange = false;
     updateDateFields();
-    await load({ resetPage: true });
+    renderPendingState();
   });
   previousPageButtons.forEach((button) => button.addEventListener('click', () => {
     if (loading || currentPage <= 1) return;
@@ -429,5 +463,5 @@
     load();
   }));
   updateDateFields();
-  load();
+  renderPendingState();
 })();
