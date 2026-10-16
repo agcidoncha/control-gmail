@@ -2,6 +2,8 @@
   const messagesNode = document.querySelector('#messages');
   const mailboxNode = document.querySelector('#messageMailbox');
   const searchNode = document.querySelector('#messageSearch');
+  const mailboxTitleNode = document.querySelector('#mailboxTitle');
+  const mailboxSubtitleNode = document.querySelector('#mailboxSubtitle');
   const messageToolsNode = document.querySelector('.message-tools');
   const countNode = document.querySelector('#mailboxCount');
   const syncStatusNode = document.querySelector('#mailboxSyncStatus');
@@ -13,6 +15,9 @@
   const rangeInfoButton = document.querySelector('#messageRangeInfoButton');
   const rangeInfoModal = document.querySelector('#messageRangeInfoModal');
   const rangeInfoClose = document.querySelector('#messageRangeInfoClose');
+  const rangeInfoIntroNode = document.querySelector('#messageRangeInfoDescription > p');
+  const rangeInfoViewsNode = document.querySelector('#messageRangeInfoViews');
+  const rangeInfoClientPeriodNode = document.querySelector('#messageRangeInfoClientPeriod');
   const pageSizeField = document.querySelector('#messagePageSizeField');
   const dateModeNode = document.querySelector('#messageDateMode');
   const exactDateField = document.querySelector('#messageExactDateField');
@@ -78,6 +83,9 @@
   let totalPageCount = null;
   let resultsTruncated = false;
   let loadingMessages = false;
+  let messageRequestId = 0;
+  let messagesError = '';
+  let messageSearchTimer = null;
   let hasAppliedRange = false;
   let undoState = null;
   let undoTimer = null;
@@ -86,7 +94,12 @@
   let clients = [];
   let clientPage = 1;
   let clientsLoading = false;
+  let clientRequestId = 0;
+  let clientsPendingRangeKey = '';
+  let clientsError = '';
   let clientsLoadedRangeKey = '';
+  let clientsAnalysisWindow = null;
+  let serverSearchQuery = '';
   let clientHasCustomRange = false;
   let clientCustomRange = null;
   let clientRangeEditing = false;
@@ -129,7 +142,7 @@
         ? { from: exactDateNode.value }
         : { from: exactDateNode.value, to: exactDateNode.value };
     }
-    if (!dateFromNode.value && !dateToNode.value) throw new Error('Indica al menos una fecha para buscar el periodo.');
+    if (!dateFromNode.value || !dateToNode.value) throw new Error('Indica las fechas «Desde» y «Hasta» para buscar el periodo.');
     if (dateFromNode.value && dateToNode.value && dateFromNode.value > dateToNode.value) {
       throw new Error('La fecha «Desde» no puede ser posterior a «Hasta».');
     }
@@ -151,7 +164,7 @@
         ? { from: clientExactDateNode.value }
         : { from: clientExactDateNode.value, to: clientExactDateNode.value };
     }
-    if (!clientDateFromNode.value && !clientDateToNode.value) throw new Error('Indica al menos una fecha para buscar los clientes.');
+    if (!clientDateFromNode.value || !clientDateToNode.value) throw new Error('Indica las fechas «Desde» y «Hasta» para buscar los clientes.');
     if (clientDateFromNode.value && clientDateToNode.value && clientDateFromNode.value > clientDateToNode.value) {
       throw new Error('La fecha «Desde» de clientes no puede ser posterior a «Hasta».');
     }
@@ -192,6 +205,7 @@
 
   function setClientRangeSummary(analysisWindow) {
     if (!clientRangeSummaryNode || !analysisWindow) return;
+    clientsAnalysisWindow = analysisWindow;
     const from = formatSyncWindowDate(analysisWindow.from);
     const to = formatSyncWindowDate(analysisWindow.to);
     const mode = clientHasCustomRange ? clientDateModeNode.value : dateModeNode.value;
@@ -243,14 +257,32 @@
     actions.className = 'mailbox-client-actions';
     const messagesButton = text('button', 'Ver mensajes');
     messagesButton.type = 'button';
-    messagesButton.addEventListener('click', () => {
+    messagesButton.addEventListener('click', async () => {
+      if (clientHasCustomRange && clientsAnalysisWindow) {
+        const from = clientsAnalysisWindow.from.replaceAll('/', '-');
+        const to = clientsAnalysisWindow.to.replaceAll('/', '-');
+        dateModeNode.value = from === to ? 'day' : 'range';
+        exactDateNode.value = from;
+        dateFromNode.value = from;
+        dateToNode.value = to;
+        updateDateFields();
+      }
+      mailboxNode.value = 'all';
       searchNode.value = client.email;
-      setActiveView('messages');
-      render();
+      serverSearchQuery = `{from:${client.email} to:${client.email}}`;
+      currentPageIndex = 0;
+      pageTokenHistory = [];
+      setActiveView('messages', { load: false });
+      await reloadMessages();
       searchNode.focus();
     });
     const aiLink = document.createElement('a');
-    aiLink.href = '/consultar-ia?client=' + encodeURIComponent(client.email) + '&prompt=' + encodeURIComponent(`Interpreta las necesidades, preferencias y estado comercial de ${client.email} usando solo sus conversaciones.`);
+    const analysisParams = new URLSearchParams({ client: client.email, prompt: `Interpreta las necesidades, preferencias y estado comercial de ${client.email} usando solo sus conversaciones.` });
+    if (clientsAnalysisWindow) {
+      analysisParams.set('from', clientsAnalysisWindow.from.replaceAll('/', '-'));
+      analysisParams.set('to', clientsAnalysisWindow.to.replaceAll('/', '-'));
+    }
+    aiLink.href = '/consultar-ia?' + analysisParams.toString();
     aiLink.textContent = 'Analizar necesidades';
     actions.append(messagesButton, aiLink);
     card.append(actions);
@@ -272,6 +304,13 @@
       if (clientPaginationNode) clientPaginationNode.hidden = true;
       return;
     }
+    if (clientsLoading || clientsError) {
+      clientCountNode.textContent = clientsLoading ? 'Consultando…' : 'No disponible';
+      clientsTab.textContent = 'Clientes';
+      clientsListNode.replaceChildren(text('p', clientsLoading ? 'Buscando clientes en Gmail…' : clientsError, 'muted'));
+      clientPaginationNode.hidden = true;
+      return;
+    }
     const query = clientSearchNode.value.trim().toLowerCase();
     const filteredClients = clients.filter((client) => client.email.toLowerCase().includes(query));
     const pageSize = 10;
@@ -290,7 +329,7 @@
   }
 
   async function loadClients(force = false) {
-    if (!clientsListNode || !clientSearchNode || clientsLoading) return;
+    if (!clientsListNode || !clientSearchNode) return;
     if (!hasAppliedRange && !clientHasCustomRange) {
       renderClients();
       return;
@@ -305,40 +344,50 @@
       return;
     }
     const rangeKey = [clientHasCustomRange ? 'custom' : dateModeNode.value, dateRange.from || '', dateRange.to || ''].join('|');
+    if (clientsLoading && clientsPendingRangeKey === rangeKey) return;
     if (!force && clientsLoadedRangeKey === rangeKey) {
       renderClients();
       return;
     }
+    const requestId = ++clientRequestId;
+    clientsPendingRangeKey = rangeKey;
     clientsLoading = true;
+    clientsError = '';
     clientPage = 1;
     clientStatusNode.textContent = 'Consultando clientes del periodo…';
-    clientsListNode.replaceChildren(text('p', 'Buscando clientes en Gmail…', 'muted'));
-    renderClientPagination([]);
+    renderClients();
     try {
       const params = new URLSearchParams({ max: '1000' });
       if (dateRange.from) params.set('from', dateRange.from);
       if (dateRange.to) params.set('to', dateRange.to);
       const data = await fetchJson('/gmail/insights?' + params.toString());
+      if (requestId !== clientRequestId) return;
       clients = data.insights?.clients || [];
       clientsLoadedRangeKey = rangeKey;
       setClientRangeSummary(data.analysisWindow);
       clientStatusNode.textContent = clientHasCustomRange
         ? 'Clientes detectados a partir del periodo personalizado.'
         : 'Clientes detectados a partir de los mensajes del periodo seleccionado.';
+      if (data.insights?.truncated) clientStatusNode.textContent += ' Resultado parcial: la consulta está limitada. Acota el periodo para revisar más contactos.';
       renderClients();
     } catch (error) {
+      if (requestId !== clientRequestId) return;
       clients = [];
+      clientsError = error.message || 'No se pudieron cargar los clientes.';
       clientStatusNode.textContent = error.message || 'No se pudieron cargar los clientes.';
       renderClients();
       showErrorNotice(error, 'No se pudieron cargar los clientes.', 'No se pudieron cargar los clientes');
     } finally {
-      clientsLoading = false;
-      renderClients();
+      if (requestId === clientRequestId) {
+        clientsLoading = false;
+        clientsPendingRangeKey = '';
+        renderClients();
+      }
     }
   }
 
   function setActiveView(view, options = {}) {
-    activeView = view === 'clients' ? 'clients' : 'messages';
+    activeView = view === 'clients' && mailboxNode.value !== 'trash' ? 'clients' : 'messages';
     const clientsActive = activeView === 'clients';
     messagesViewNode.hidden = clientsActive;
     clientsViewNode.hidden = !clientsActive;
@@ -353,7 +402,32 @@
     if (clientsActive && options.load !== false) loadClients();
   }
 
+  function updateMailboxModeUi() {
+    const isTrashMailbox = mailboxNode.value === 'trash';
+    if (mailboxTitleNode) mailboxTitleNode.textContent = isTrashMailbox ? 'Papelera' : 'Mensajes de la bandeja';
+    if (mailboxSubtitleNode) mailboxSubtitleNode.textContent = isTrashMailbox
+      ? 'Revisa y recupera los correos eliminados de Gmail.'
+      : 'Busca, revisa y gestiona tus correos de Gmail.';
+    if (searchNode) searchNode.placeholder = mailboxNode.value === 'appArchived'
+      ? 'Buscar en esta página…'
+      : isTrashMailbox ? 'Buscar asunto, remitente o contenido…' : 'Buscar cliente, empresa o asunto…';
+    if (composeButton) composeButton.hidden = isTrashMailbox;
+    if (rangeInfoIntroNode) rangeInfoIntroNode.textContent = isTrashMailbox
+      ? 'La papelera no consulta Gmail al entrar. Primero eliges qué periodo quieres revisar y pulsas «Aplicar».'
+      : 'La bandeja no consulta Gmail al entrar. Primero eliges qué periodo quieres revisar y pulsas «Aplicar».';
+    if (rangeInfoViewsNode) rangeInfoViewsNode.hidden = isTrashMailbox;
+    if (rangeInfoClientPeriodNode) rangeInfoClientPeriodNode.hidden = isTrashMailbox;
+  }
+
   function resetMessageView() {
+    window.clearTimeout(messageSearchTimer);
+    messageRequestId += 1;
+    loadingMessages = false;
+    messagesError = '';
+    clientRequestId += 1;
+    clientsLoading = false;
+    clientsPendingRangeKey = '';
+    clientsError = '';
     messages = [];
     nextPageToken = null;
     pageTokenHistory = [];
@@ -369,21 +443,8 @@
   }
 
   async function reloadMessages() {
-    loadingMessages = true;
     resetMessageView();
-    paginationStatusNodes.forEach((node) => { node.textContent = 'Buscando mensajes en Gmail…'; });
-    render();
-    applyRangeButton.disabled = true;
-    applyRangeButton.textContent = 'Aplicando…';
-    try {
-      await load();
-      if (activeView === 'clients') await loadClients(true);
-    } finally {
-      loadingMessages = false;
-      applyRangeButton.disabled = false;
-      applyRangeButton.textContent = 'Aplicar';
-      render();
-    }
+    await load();
   }
 
   const queryParams = new URLSearchParams(window.location.search);
@@ -412,6 +473,11 @@
   }
 
   function openCompose(message = null) {
+    // Responder desde Seguimientos puede llegar sin un periodo aplicado en la
+    // bandeja. En ese caso el contenedor de Mensajes permanece oculto para no
+    // consultar Gmail, pero el formulario de respuesta debe seguir siendo visible.
+    if (messagesViewNode) messagesViewNode.hidden = false;
+    if (clientsViewNode) clientsViewNode.hidden = true;
     composeForm.hidden = false;
     composeTitle.textContent = message ? 'Responder al correo' : 'Nuevo correo';
     const replyTarget = message?.labelIds?.includes('SENT') ? message.to : message?.from;
@@ -505,16 +571,20 @@
   }
 
   function render() {
+    applyRangeButton.disabled = loadingMessages || syncing;
+    applyRangeButton.textContent = loadingMessages || syncing ? 'Aplicando…' : 'Aplicar';
+    updateMailboxModeUi();
+    const isTrashMailbox = mailboxNode.value === 'trash';
     if (messageToolsNode) messageToolsNode.hidden = !hasAppliedRange;
-    if (viewSwitchNode) viewSwitchNode.hidden = !hasAppliedRange;
+    if (viewSwitchNode) viewSwitchNode.hidden = isTrashMailbox || !hasAppliedRange;
     if (syncStatusNode) syncStatusNode.hidden = !hasAppliedRange;
     if (refreshButton) {
       refreshButton.hidden = !hasAppliedRange;
       refreshButton.disabled = !hasAppliedRange || syncing;
     }
     if (!hasAppliedRange && !syncing) setSyncStatus('idle', 'Sin periodo seleccionado');
-    if (messagesViewNode) messagesViewNode.hidden = !hasAppliedRange || activeView === 'clients';
-    if (clientsViewNode) clientsViewNode.hidden = !hasAppliedRange || activeView !== 'clients';
+    if (messagesViewNode) messagesViewNode.hidden = !hasAppliedRange || (!isTrashMailbox && activeView === 'clients');
+    if (clientsViewNode) clientsViewNode.hidden = isTrashMailbox || !hasAppliedRange || activeView !== 'clients';
     if (periodPromptNode) {
       periodPromptNode.hidden = hasAppliedRange;
       periodPromptNode.textContent = dateModeNode.value
@@ -523,7 +593,7 @@
     }
     if (archivedNoticeNode) {
       if (mailboxNode.value === 'archived') {
-        archivedNoticeNode.textContent = 'Esta vista incluye cualquier correo archivado en Gmail, también si se archivó desde otra aplicación. Puedes usar «Desarchivar» para devolverlo a Recibidos.';
+        archivedNoticeNode.textContent = 'Esta vista incluye los correos que ya no están en Recibidos, también si se archivaron desde otra aplicación. Puedes usar «Desarchivar» para devolverlos a Recibidos.';
         archivedNoticeNode.hidden = false;
       } else if (mailboxNode.value === 'appArchived') {
         archivedNoticeNode.textContent = 'Esta vista solo incluye correos archivados desde Asistente Comercial. No guarda el contenido del mensaje, solo la acción realizada.';
@@ -555,8 +625,8 @@
     countNode.removeAttribute('aria-label');
     const query = searchNode.value.trim().toLowerCase();
     const filtered = messages.filter((message) => {
-      const textToSearch = [message.subject, message.from, message.snippet].join(' ').toLowerCase();
-      const matchesQuery = !query || textToSearch.includes(query);
+      const textToSearch = [message.subject, message.from, message.to, message.snippet].join(' ').toLowerCase();
+      const matchesQuery = Boolean(serverSearchQuery) || !query || textToSearch.includes(query);
       return matchesQuery;
     });
 
@@ -600,6 +670,11 @@
       button.disabled = loadingMessages;
     });
     messagesNode.replaceChildren();
+    if (messagesError) {
+      countNode.textContent = 'No disponible';
+      messagesNode.append(text('p', messagesError, 'muted'));
+      return;
+    }
     if (!filtered.length) {
       messagesNode.append(text('p', loadingMessages ? 'Buscando mensajes en Gmail…' : query ? 'No hay mensajes que coincidan.' : 'No hay mensajes en la bandeja.', 'muted'));
       return;
@@ -622,11 +697,6 @@
       actionBar.className = 'message-action-bar';
       const actions = document.createElement('div');
       actions.className = 'message-actions';
-      const readButton = text('button', message.labelIds?.includes('UNREAD') ? 'Marcar leído' : 'Marcar no leído');
-      readButton.className = 'message-action-unread';
-      readButton.type = 'button';
-      readButton.dataset.messageAction = message.labelIds?.includes('UNREAD') ? 'markRead' : 'markUnread';
-      readButton.dataset.messageId = message.id;
       const isArchivedMailbox = mailboxNode.value === 'archived' || mailboxNode.value === 'appArchived';
       const isTrashMailbox = mailboxNode.value === 'trash';
       const archiveButton = text('button', isTrashMailbox ? 'Restaurar' : isArchivedMailbox ? 'Desarchivar' : 'Archivar');
@@ -637,7 +707,7 @@
       const replyButton = text('button', 'Responder');
       replyButton.type = 'button';
       replyButton.dataset.replyMessageId = message.id;
-      actions.append(readButton, archiveButton);
+      actions.append(archiveButton);
       if (!isTrashMailbox) {
         const trashButton = text('button', 'Papelera', 'danger message-action-trash');
         trashButton.type = 'button';
@@ -661,11 +731,15 @@
   }
 
   async function load() {
+    const requestId = ++messageRequestId;
+    loadingMessages = true;
+    messagesError = '';
+    applyRangeButton.disabled = true;
+    applyRangeButton.textContent = 'Aplicando…';
+    render();
     try {
       const dateRange = getDateRange();
-      if (dateModeNode.value === 'this-month') {
-        setSyncWindow(dateRange.from, dateRange.to || formatDateInput(new Date()));
-      }
+      setSyncWindow(dateRange.from, dateRange.to || formatDateInput(new Date()));
       saveMailboxRange(dateRange);
       const maxResults = 10;
       const pageToken = pageTokenHistory[currentPageIndex] || null;
@@ -674,7 +748,9 @@
       if (mailboxNode.value === 'sent' || mailboxNode.value === 'trash') messageParams.set('refresh', '1');
       if (dateRange.from) messageParams.set('from', dateRange.from);
       if (dateRange.to) messageParams.set('to', dateRange.to);
+      if (serverSearchQuery) messageParams.set('search', serverSearchQuery);
       const messageResult = await fetchJson('/gmail/messages?' + messageParams.toString());
+      if (requestId !== messageRequestId) return;
       messages = messageResult.messages || [];
       nextPageToken = messageResult.nextPageToken || null;
       if (Array.isArray(messageResult.pageTokens)) pageTokenHistory = messageResult.pageTokens;
@@ -686,15 +762,12 @@
       if (!syncing) setSyncStatus('success', 'Bandeja cargada');
       render();
       if (activeView === 'clients') await loadClients();
-      if (requestedReply && !replyOpened) {
-        const replyMessage = messages.find((message) => message.id === requestedReply);
-        if (replyMessage) {
-          replyOpened = true;
-          openCompose(replyMessage);
-          window.history.replaceState({}, '', '/mailbox');
-        }
-      }
+      await openRequestedReply();
+      return true;
     } catch (error) {
+      if (requestId !== messageRequestId) return;
+      messagesError = error.message || 'No se pudieron cargar los mensajes.';
+      setSyncStatus('error', 'No se pudo cargar la bandeja');
       messagesNode.removeAttribute('aria-hidden');
       messagesNode.removeAttribute('aria-busy');
       messagesNode.removeAttribute('aria-label');
@@ -704,10 +777,25 @@
       showErrorNotice(error, 'No se pudieron cargar los mensajes.', 'No se pudo cargar la bandeja');
     } finally {
       // A failed or interrupted request must never leave pagination locked.
-      if (!syncing) {
+      if (requestId === messageRequestId && !syncing) {
         loadingMessages = false;
+        applyRangeButton.disabled = false;
+        applyRangeButton.textContent = 'Aplicar';
         render();
       }
+    }
+  }
+
+  async function openRequestedReply() {
+    if (!requestedReply || replyOpened) return;
+    try {
+      const result = await fetchJson('/gmail/messages/' + encodeURIComponent(requestedReply));
+      if (!result.message) throw new Error('No se encontró el mensaje al que quieres responder.');
+      replyOpened = true;
+      openCompose(result.message);
+      window.history.replaceState({}, '', '/mailbox');
+    } catch (error) {
+      showErrorNotice(error, 'No se pudo cargar el mensaje para responder.', 'No se pudo abrir la respuesta');
     }
   }
 
@@ -728,8 +816,8 @@
     const start = formatSyncWindowDate(from);
     const end = formatSyncWindowDate(to);
     syncWindowNode.textContent = start && end
-      ? `Este mes: ${start} – ${end}`
-      : 'Este mes: no disponible';
+      ? `${dateModeNode.value === 'this-month' ? 'Este mes' : dateModeNode.value === 'day' ? 'Día concreto' : 'Periodo'}: ${start} – ${end}`
+      : '';
     syncWindowNode.hidden = false;
   }
 
@@ -741,17 +829,18 @@
 
   async function syncMailbox(showErrors = true) {
     if (syncing || !hasAppliedRange) return;
+    const requestId = messageRequestId;
     syncing = true;
     refreshButton.disabled = true;
     refreshButton.textContent = 'Actualizando…';
     setSyncStatus('syncing', 'Actualizando Gmail…');
     try {
       const result = await fetchJson('/gmail/sync', { method: 'POST' });
+      if (requestId !== messageRequestId || !hasAppliedRange) return;
       messages = [];
       nextPageToken = null;
       render();
-      await load();
-      setSyncWindow(result.from, result.to);
+      if (!await load()) return;
       setSyncStatus('success', 'Actualizado el ' + formatSyncDate(result.syncedAt), result.syncedAt);
     } catch (error) {
       setSyncStatus('error', showErrors ? (error.message || 'No se pudo actualizar Gmail.') : 'No se pudo actualizar Gmail. Pulsa «Actualizar Gmail».');
@@ -905,7 +994,21 @@
     }
   });
 
-  searchNode.addEventListener('input', render);
+  function messageSearchQuery() {
+    if (mailboxNode.value === 'appArchived') return '';
+    const query = searchNode.value.trim();
+    return /^[\w.+-]+@[\w.-]+\.[a-z]{2,}$/i.test(query) ? `{from:${query} to:${query}}` : query;
+  }
+  searchNode.addEventListener('input', () => {
+    window.clearTimeout(messageSearchTimer);
+    if (!hasAppliedRange) return;
+    if (mailboxNode.value === 'appArchived') { serverSearchQuery = ''; render(); return; }
+    messageSearchTimer = window.setTimeout(() => {
+      if (!hasAppliedRange) return;
+      serverSearchQuery = messageSearchQuery();
+      reloadMessages();
+    }, 400);
+  });
   clientSearchNode.addEventListener('input', () => {
     clientPage = 1;
     renderClients();
@@ -998,6 +1101,7 @@
     try {
       const dateRange = getDateRange();
       hasAppliedRange = true;
+      serverSearchQuery = messageSearchQuery();
       saveMailboxRange(dateRange);
       await reloadMessages();
     } catch (error) {
@@ -1011,6 +1115,9 @@
     dateFromNode.value = '';
     dateToNode.value = '';
     hasAppliedRange = false;
+    serverSearchQuery = '';
+    searchNode.value = '';
+    window.clearTimeout(messageSearchTimer);
     clientsLoadedRangeKey = '';
     clients = [];
     updateDateFields();
@@ -1071,6 +1178,8 @@
   editComposeButton.addEventListener('click', () => { composePreview.hidden = true; composeStatus.textContent = ''; composeBody.focus(); });
   confirmComposeButton.addEventListener('click', sendComposeMessage);
   mailboxNode.addEventListener('change', () => {
+    serverSearchQuery = messageSearchQuery();
+    if (mailboxNode.value === 'trash' && activeView !== 'messages') setActiveView('messages', { load: false });
     if (hasAppliedRange) reloadMessages();
     else resetMessageView();
   });
@@ -1079,6 +1188,7 @@
   updateClientDateFields();
   resetMessageView();
   renderClients();
+  if (requestedReply) openRequestedReply();
   syncTimer = window.setInterval(() => {
     if (hasAppliedRange) syncMailbox(false);
   }, syncIntervalMs);

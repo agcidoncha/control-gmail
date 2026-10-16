@@ -1,6 +1,31 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseCommercialAnalysis } from '../src/claude.js';
+import { parseCommercialAnalysis, validateAnalysisSources } from '../src/claude.js';
+import { normalizeCommitmentDecision } from '../src/commitment-classifier.js';
+
+test('un análisis sin fuentes verificables conserva el texto pero exige revisión', () => {
+  const result = validateAnalysisSources(parseCommercialAnalysis('{"respuesta":"Hay un pendiente","requiere_revision":false,"fuentes":[]}'), [{ id: 'real', subject: 'Entrega' }]);
+  assert.equal(result.requiere_revision, true);
+  assert.match(result.respuesta, /no ha aportado referencias verificables/);
+});
+
+test('descarta referencias inventadas y conserva el asunto real de las válidas', () => {
+  const analysis = parseCommercialAnalysis(JSON.stringify({ respuesta: 'Revisar', requiere_revision: false, fuentes: [
+    { mensaje_id: 'real', asunto: 'Asunto inventado', motivo: 'Entrega pendiente' },
+    { mensaje_id: 'inventado', asunto: 'Otro', motivo: 'No existe' },
+  ] }));
+  const result = validateAnalysisSources(analysis, [{ id: 'real', subject: 'Entrega' }]);
+  assert.equal(result.requiere_revision, true);
+  assert.deepEqual(result.fuentes, [{ mensaje_id: 'real', asunto: 'Entrega', motivo: 'Entrega pendiente' }]);
+});
+
+test('las fuentes válidas no fuerzan revisión por sí solas', () => {
+  const analysis = parseCommercialAnalysis(JSON.stringify({ respuesta: 'Revisar', requiere_revision: false, fuentes: [
+    { mensaje_id: 'real', asunto: 'Entrega', motivo: 'Entrega pendiente' },
+  ] }));
+  const result = validateAnalysisSources(analysis, [{ id: 'real', subject: 'Entrega' }]);
+  assert.equal(result.requiere_revision, false);
+});
 
 test('conserva una respuesta de IA en texto plano sin romper el formato de la aplicación', () => {
   const analysis = parseCommercialAnalysis('PERSONAL OK');
@@ -80,4 +105,56 @@ test('conserva la respuesta si el proveedor corta el JSON', () => {
   assert.equal(analysis.respuesta, 'La respuesta principal sigue siendo útil.');
   assert.deepEqual(analysis.hechos, []);
   assert.equal(analysis.requiere_revision, true);
+});
+
+test('una señal explícita con confianza baja sigue requiriendo revisión humana', () => {
+  const decision = normalizeCommitmentDecision(JSON.stringify({
+    is_commitment: true,
+    confidence: 0.4,
+    reason: 'Se solicita una confirmación.',
+  }), 'Quedo a la espera de que me confirmes los detalles.');
+
+  assert.equal(decision.isCommitment, true);
+  assert.equal(decision.requiresReview, true);
+  assert.equal(decision.source, 'ai');
+});
+
+test('una respuesta incompleta del modelo no valida compromisos por palabras clave', () => {
+  const decision = normalizeCommitmentDecision('{"confidence":0.95}', 'Te enviaré la propuesta mañana.');
+  assert.equal(decision.source, 'unavailable');
+  assert.equal(decision.requiresReview, true);
+});
+
+test('conserva candidatos ambiguos sin palabras clave para revisión humana', () => {
+  const decision = normalizeCommitmentDecision(JSON.stringify({
+    is_commitment: false, confidence: 0.3, reason: 'El plazo no queda claro en el hilo.',
+  }), 'Lo tendré listo el viernes.');
+  assert.equal(decision.isCommitment, true);
+  assert.equal(decision.requiresReview, true);
+});
+
+test('descarta una negación clara que la IA rechaza con confianza', () => {
+  const decision = normalizeCommitmentDecision(JSON.stringify({
+    is_commitment: false, confidence: 0.95, reason: 'El remitente indica que no debe realizarse la acción.',
+  }), 'No hace falta enviar nada más.');
+  assert.equal(decision.isCommitment, false);
+});
+
+test('conserva una señal explícita aunque la IA discrepe y la marca para revisión', () => {
+  const decision = normalizeCommitmentDecision(JSON.stringify({
+    is_commitment: false,
+    confidence: 0.9,
+    reason: 'Parece una solicitud de información.',
+  }), 'Quedo a la espera de que me confirmes los detalles.');
+
+  assert.equal(decision.isCommitment, true);
+  assert.equal(decision.requiresReview, true);
+  assert.equal(decision.source, 'ai');
+});
+
+test('distingue una validación de IA no disponible', () => {
+  const decision = normalizeCommitmentDecision('respuesta no válida');
+
+  assert.equal(decision.source, 'unavailable');
+  assert.equal(decision.requiresReview, true);
 });

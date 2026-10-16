@@ -33,10 +33,24 @@
       : 'OpenAI';
   const allClientsValue = '__all__';
   let detectedClients = [];
+  let clientRequestId = 0;
+  let clientReloadTimer = null;
+  let requestedClientApplied = false;
+  const clientDetail = (client) => Number.isInteger(client.messages)
+    ? `${client.messages} ${client.messages === 1 ? 'mensaje' : 'mensajes'}`
+    : 'Contacto seleccionado; recuento pendiente';
   const selectedClient = () => clientNode.value && clientNode.value !== allClientsValue ? clientNode.value : undefined;
   let canAsk = false;
   let confirmedSubmission = false;
-  const requestedClient = new URLSearchParams(window.location.search).get('client')?.trim().toLowerCase() || '';
+  const queryParams = new URLSearchParams(window.location.search);
+  const requestedClient = queryParams.get('client')?.trim().toLowerCase() || '';
+  const requestedFrom = queryParams.get('from') || '';
+  const requestedTo = queryParams.get('to') || '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(requestedFrom) && /^\d{4}-\d{2}-\d{2}$/.test(requestedTo) && requestedFrom <= requestedTo) {
+    analysisRangeNode.value = 'custom';
+    analysisFromNode.value = requestedFrom;
+    analysisToNode.value = requestedTo;
+  }
 
   function showMessage(value, type = '') {
     if (type === 'error' && typeof window.showAppNotice === 'function') {
@@ -117,7 +131,7 @@
       analysisCostNotice.textContent = `Se analizarán aproximadamente ${days} días.${scopeWarning} Esto puede enviar más contexto al modelo y aumentar el consumo y el coste de IA.`;
       analysisCostNotice.className = 'analysis-cost-notice warning';
     } else {
-      analysisCostNotice.textContent = 'Por defecto se analizan los últimos 30 días para controlar el consumo de IA.';
+      analysisCostNotice.textContent = `Se analizará el periodo seleccionado: ${days} ${days === 1 ? 'día' : 'días'}.`;
       analysisCostNotice.className = 'analysis-cost-notice';
     }
   }
@@ -392,7 +406,7 @@
     analysisScopeNode.value = 'mailbox';
     analysisFromNode.value = '';
     analysisToNode.value = '';
-    updateAnalysisWindow();
+    updateClientWindow();
     messageNode.textContent = '';
     messageNode.className = 'form-message';
     answerNode.replaceChildren();
@@ -405,10 +419,17 @@
     questionNode.focus();
   });
 
-  analysisRangeNode.addEventListener('change', updateAnalysisWindow);
-  analysisScopeNode.addEventListener('change', updateAnalysisWindow);
-  analysisFromNode.addEventListener('change', updateAnalysisWindow);
-  analysisToNode.addEventListener('change', updateAnalysisWindow);
+  function updateClientWindow() {
+    updateAnalysisWindow();
+    window.clearTimeout(clientReloadTimer);
+    clientRequestId += 1;
+    if (analysisRangeNode.value === 'custom' && !customRangeDays()) return;
+    clientReloadTimer = window.setTimeout(loadClients, 350);
+  }
+  analysisRangeNode.addEventListener('change', updateClientWindow);
+  analysisScopeNode.addEventListener('change', updateClientWindow);
+  analysisFromNode.addEventListener('change', updateClientWindow);
+  analysisToNode.addEventListener('change', updateClientWindow);
   clientNode.addEventListener('change', () => {
     if (selectedClient()) {
       clientStatusNode.textContent = `La próxima consulta se limitará a ${selectedClient()}.`;
@@ -438,7 +459,7 @@
     matchingClients.forEach((client) => {
       const option = document.createElement('option');
       option.value = client.email;
-      option.textContent = `${client.email} (${client.messages} ${client.messages === 1 ? 'mensaje' : 'mensajes'})`;
+      option.textContent = `${client.email} (${clientDetail(client)})`;
       clientNode.append(option);
     });
 
@@ -473,7 +494,7 @@
       clientResultsNode.append(empty);
     } else {
       const visibleClients = matchingClients.slice(0, 20);
-      visibleClients.forEach((client) => addClientResult(client.email, client.email, `${client.messages} ${client.messages === 1 ? 'mensaje' : 'mensajes'}`, selectedValue === client.email));
+      visibleClients.forEach((client) => addClientResult(client.email, client.email, clientDetail(client), selectedValue === client.email));
       if (matchingClients.length > visibleClients.length) {
         const more = document.createElement('p');
         more.className = 'assistant-client-result-empty';
@@ -487,7 +508,7 @@
     } else {
       clientNode.value = '';
     }
-    clientSearchNode.setAttribute('aria-label', `${matchingClients.length} clientes coinciden con la búsqueda`);
+    clientSearchNode.setAttribute('aria-label', `Buscar cliente: ${matchingClients.length} ${matchingClients.length === 1 ? 'coincidencia' : 'coincidencias'}`);
   }
 
   clientSearchNode.addEventListener('input', () => {
@@ -499,18 +520,32 @@
   loadConnection();
 
   async function loadClients() {
+    const requestId = ++clientRequestId;
+    const preferredClient = selectedClient() || (!requestedClientApplied ? requestedClient : '');
+    clientStatusNode.textContent = 'Consultando contactos del periodo seleccionado…';
     try {
-      const response = await fetch('/gmail/insights?max=1000&refresh=1');
+      const params = new URLSearchParams({ max: '1000' });
+      const range = analysisPayload();
+      if (range.analysisFrom) params.set('from', range.analysisFrom);
+      if (range.analysisTo) params.set('to', range.analysisTo);
+      if (range.analysisDays) params.set('days', String(range.analysisDays));
+      params.set('scope', range.analysisScope);
+      const response = await fetch('/gmail/insights?' + params.toString());
       const data = await response.json();
+      if (requestId !== clientRequestId) return;
       if (!response.ok) throw new Error(data.error || 'No se pudieron cargar los clientes.');
       detectedClients = (data.insights?.clients || []).sort((left, right) => left.email.localeCompare(right.email));
+      if (preferredClient && /^[\w.+-]+@[\w.-]+\.[a-z]{2,}$/i.test(preferredClient) && !detectedClients.some((client) => client.email === preferredClient)) {
+        detectedClients.push({ email: preferredClient, messages: null });
+      }
       renderClientOptions();
       const clients = detectedClients;
-      if (requestedClient && clients.some((client) => client.email.toLowerCase() === requestedClient)) {
-        clientNode.value = requestedClient;
-        clientSearchNode.value = requestedClient;
-        renderClientOptions(requestedClient);
+      if (preferredClient && clients.some((client) => client.email.toLowerCase() === preferredClient)) {
+        clientNode.value = preferredClient;
+        clientSearchNode.value = preferredClient;
+        renderClientOptions(preferredClient);
       }
+      requestedClientApplied = true;
       clientStatusNode.textContent = clients.length
         ? clientNode.value
           ? selectedClient()
@@ -518,7 +553,9 @@
             : 'Selecciona un cliente para limitar el análisis o elige el análisis general.'
           : `${clients.length} clientes detectados. Puedes escribir en el selector para localizar uno.`
         : 'No hay clientes detectados en el periodo revisado.';
+      if (data.insights?.truncated) clientStatusNode.textContent += ' La lista de contactos es parcial: acota el periodo si no encuentras el que buscas.';
     } catch (error) {
+      if (requestId !== clientRequestId) return;
       clientStatusNode.textContent = error.message || 'No se pudieron cargar los clientes.';
     }
   }

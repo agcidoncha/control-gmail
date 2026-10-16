@@ -3,6 +3,11 @@
   const countNode = document.querySelector('#followUpCount');
   const searchNode = document.querySelector('#followUpSearch');
   const categoryNode = document.querySelector('#followUpCategory');
+  const toolsNode = document.querySelector('#followUpTools');
+  const periodPromptNode = document.querySelector('#followUpPeriodPrompt');
+  const infoButton = document.querySelector('#followUpInfoButton');
+  const infoModal = document.querySelector('#followUpInfoModal');
+  const infoClose = document.querySelector('#followUpInfoClose');
   const categoryInfoButton = document.querySelector('#followUpCategoryInfoButton');
   const categoryInfoModal = document.querySelector('#followUpCategoryInfoModal');
   const categoryInfoClose = document.querySelector('#followUpCategoryInfoClose');
@@ -21,7 +26,7 @@
   const pageNumberContainers = [...document.querySelectorAll('[data-follow-up-page-numbers]')];
   const previousPageButtons = [...document.querySelectorAll('[data-follow-up-pagination="previous"]')];
   const nextPageButtons = [...document.querySelectorAll('[data-follow-up-pagination="next"]')];
-  if (!listNode || !countNode || !searchNode || !categoryNode || !rangeForm || !dateModeNode || !exactDateField || !exactDateNode || !dateRangeFields || !dateFromNode || !dateToNode || !rangeSummaryNode || !applyRangeButton || !clearRangeButton) return;
+  if (!listNode || !countNode || !searchNode || !categoryNode || !toolsNode || !periodPromptNode || !rangeForm || !dateModeNode || !exactDateField || !exactDateNode || !dateRangeFields || !dateFromNode || !dateToNode || !rangeSummaryNode || !applyRangeButton || !clearRangeButton) return;
 
   let items = [];
   let total = 0;
@@ -30,6 +35,8 @@
   let summary = { total: 0 };
   let loading = false;
   let hasAppliedRange = false;
+  let resultsTruncated = false;
+  let searchTimer = null;
 
   const text = (tag, value, className = '') => {
     const node = document.createElement(tag);
@@ -77,7 +84,7 @@
       if (!exactDateNode.value) throw new Error('Selecciona el día que quieres consultar.');
       return { from: exactDateNode.value, to: exactDateNode.value };
     }
-    if (!dateFromNode.value && !dateToNode.value) throw new Error('Indica al menos una fecha para buscar el periodo.');
+    if (!dateFromNode.value || !dateToNode.value) throw new Error('Indica las fechas «Desde» y «Hasta» para buscar el periodo.');
     if (dateFromNode.value && dateToNode.value && dateFromNode.value > dateToNode.value) {
       throw new Error('La fecha «Desde» no puede ser posterior a «Hasta».');
     }
@@ -115,19 +122,23 @@
   }
 
   function renderPendingState() {
+    window.clearTimeout(searchTimer);
     loading = false;
     items = [];
     total = 0;
     currentPage = 1;
     pageCount = 1;
     summary = { total: 0 };
+    resultsTruncated = false;
     countNode.textContent = 'Sin periodo seleccionado';
     countNode.removeAttribute('aria-label');
     rangeSummaryNode.textContent = 'Sin periodo seleccionado';
+    periodPromptNode.hidden = false;
+    toolsNode.hidden = true;
     listNode.removeAttribute('aria-hidden');
     listNode.removeAttribute('aria-busy');
     listNode.removeAttribute('aria-label');
-    listNode.replaceChildren(text('p', 'Elige un periodo arriba y pulsa «Aplicar» para consultar los seguimientos.', 'muted'));
+    listNode.replaceChildren();
     paginationContainers.forEach((container) => { container.hidden = true; });
     paginationStatusNodes.forEach((node) => { node.textContent = ''; });
   }
@@ -157,8 +168,10 @@
       button.hidden = currentPage >= pageCount;
       button.disabled = loading;
     });
-    const paginationMessage = pageCount > 1 ? `Página ${currentPage} de ${pageCount} · ${total} seguimientos en el periodo.` : '';
-    paginationStatusNodes.forEach((node, index) => { node.textContent = index === 0 ? paginationMessage : ''; });
+    const paginationMessages = [];
+    if (pageCount > 1) paginationMessages.push(`Página ${currentPage} de ${pageCount} · ${total} seguimientos en el periodo.`);
+    if (resultsTruncated) paginationMessages.push('Hay demasiados resultados. Acota el periodo para revisarlos todos.');
+    paginationStatusNodes.forEach((node, index) => { node.textContent = index === 0 ? paginationMessages.join(' ') : ''; });
   }
 
   function urgencyFor(ageDays) {
@@ -181,7 +194,7 @@
     });
 
     countNode.textContent = query
-      ? visible.length + (visible.length === 1 ? ' coincidencia' : ' coincidencias') + ' · página ' + currentPage
+      ? total + (total === 1 ? ' coincidencia' : ' coincidencias') + ' · página ' + currentPage
       : total + (total === 1 ? ' pendiente' : ' pendientes') + ' · página ' + currentPage;
     renderPagination();
     listNode.replaceChildren();
@@ -216,16 +229,6 @@
       const actions = document.createElement('div');
       actions.className = 'follow-up-actions';
       const messageId = item.messageId || '';
-      const readButton = text('button', 'Marcar leído');
-      readButton.type = 'button';
-      readButton.className = 'follow-up-action-read';
-      readButton.dataset.followUpAction = 'markRead';
-      readButton.dataset.messageId = messageId;
-      const archiveButton = text('button', 'Archivar');
-      archiveButton.type = 'button';
-      archiveButton.className = 'follow-up-action-archive';
-      archiveButton.dataset.followUpAction = 'archive';
-      archiveButton.dataset.messageId = messageId;
       const trashButton = text('button', 'Papelera', 'follow-up-action-trash');
       trashButton.type = 'button';
       trashButton.dataset.followUpAction = 'trash';
@@ -234,7 +237,7 @@
       replyButton.type = 'button';
       replyButton.className = 'follow-up-action-reply';
       replyButton.dataset.followUpReply = messageId;
-      actions.append(readButton, archiveButton, trashButton, replyButton);
+      actions.append(trashButton, replyButton);
       actionBar.append(threadButton, text('span', '|', 'follow-up-action-divider'), actions);
       article.append(actionBar);
 
@@ -256,12 +259,15 @@
       renderPendingState();
       return;
     }
+    periodPromptNode.hidden = true;
+    toolsNode.hidden = false;
     if (loading) return;
     if (resetPage) currentPage = 1;
     loading = true;
     items = [];
     total = 0;
     summary = { total: 0 };
+      resultsTruncated = false;
     countNode.textContent = 'Consultando…';
     renderLoadingState();
     rangeSummaryNode.textContent = 'Consultando…';
@@ -280,6 +286,7 @@
         to: dateRange.to || '',
         age: 'all',
         category: categoryNode.value,
+        search: searchNode.value.trim(),
       });
       const response = await fetch('/gmail/follow-ups?' + params.toString());
       const result = await response.json();
@@ -289,6 +296,7 @@
       currentPage = Number(result.page ?? currentPage);
       pageCount = Math.max(1, Number(result.pageCount ?? 1));
       summary = result.summary || { total };
+      resultsTruncated = Boolean(result.truncated);
       setRangeSummary(result.analysisWindow);
       const navCount = document.querySelector('#navFollowUpCount');
       if (navCount) { navCount.textContent = String(summary.total); navCount.hidden = false; }
@@ -343,6 +351,15 @@
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'No se pudo aplicar la acción.');
+        if (action === 'trash') {
+          // Recalcula la página para retirar la ficha y actualizar el total.
+          // El mensaje seguirá recuperable desde Bandeja comercial > Papelera.
+          await load({ resetPage: false });
+          if (typeof window.showAppNotice === 'function') {
+            window.showAppNotice('El correo se ha enviado a la papelera. Puedes recuperarlo desde Bandeja comercial > Papelera usando «Restaurar».', { title: 'Seguimiento enviado a la papelera' });
+          }
+          return;
+        }
         status.textContent = action === 'trash' ? 'Correo enviado a la papelera.' : action === 'archive' ? 'Correo archivado.' : 'Correo marcado como leído.';
         buttons.forEach((button) => { button.disabled = false; });
       } catch (error) {
@@ -384,7 +401,10 @@
     }
   });
 
-  searchNode.addEventListener('input', render);
+  searchNode.addEventListener('input', () => {
+    window.clearTimeout(searchTimer);
+    if (hasAppliedRange) searchTimer = window.setTimeout(() => load({ resetPage: true }), 350);
+  });
   categoryNode.addEventListener('change', () => {
     if (hasAppliedRange) load({ resetPage: true });
   });
@@ -407,6 +427,27 @@
     });
     document.addEventListener('keydown', (event) => {
       if (!categoryInfoModal.hidden && event.key === 'Escape') closeCategoryInfo();
+    });
+  }
+  if (infoButton && infoModal && infoClose) {
+    let lastFocusedElement = null;
+    const closeInfo = () => {
+      infoModal.hidden = true;
+      document.documentElement.classList.remove('follow-up-info-open');
+      if (lastFocusedElement && typeof lastFocusedElement.focus === 'function') lastFocusedElement.focus();
+    };
+    infoButton.addEventListener('click', () => {
+      lastFocusedElement = document.activeElement;
+      infoModal.hidden = false;
+      document.documentElement.classList.add('follow-up-info-open');
+      infoClose.focus();
+    });
+    infoClose.addEventListener('click', closeInfo);
+    infoModal.addEventListener('click', (event) => {
+      if (event.target === infoModal) closeInfo();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (!infoModal.hidden && event.key === 'Escape') closeInfo();
     });
   }
   dateModeNode.addEventListener('change', () => {

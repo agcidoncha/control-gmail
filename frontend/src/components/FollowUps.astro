@@ -2,7 +2,12 @@
   <div class="card follow-ups-overview">
     <div class="card-header">
       <div>
-        <h2>Seguimientos pendientes</h2>
+        <div class="follow-up-title-row">
+          <h2>Seguimientos pendientes</h2>
+          <button id="followUpInfoButton" class="follow-up-info-button" type="button" aria-label="Cómo funcionan los seguimientos" aria-haspopup="dialog">
+            <img src="/icons/home/question-mark.svg" alt="" aria-hidden="true" />
+          </button>
+        </div>
         <p>Mensajes enviados sin una respuesta posterior, agrupados por hilo.</p>
       </div>
       <span id="followUpCount" class="muted">Sin periodo seleccionado</span>
@@ -40,9 +45,9 @@
       <button id="applyFollowUpRange" type="submit">Aplicar</button>
       <button id="clearFollowUpRange" class="secondary-button" type="button" hidden>Limpiar fechas</button>
     </form>
-    <p class="follow-up-range-help muted">Se muestran 10 seguimientos por página.</p>
+    <p id="followUpPeriodPrompt" class="follow-up-period-prompt muted">Elige un periodo arriba y pulsa «Aplicar» para consultar los seguimientos.</p>
 
-    <div class="follow-up-tools">
+    <div id="followUpTools" class="follow-up-tools" hidden>
       <input id="followUpSearch" type="search" placeholder="Buscar cliente o asunto…" aria-label="Buscar seguimientos" />
       <div class="follow-up-category-filter">
         <select id="followUpCategory" aria-label="Filtrar por tipo de seguimiento">
@@ -71,7 +76,6 @@
   </div>
 
   <div id="followUps" class="skeleton-list follow-ups-list" aria-live="polite">
-    <p class="muted">Elige un periodo arriba y pulsa «Aplicar» para consultar los seguimientos.</p>
   </div>
 
   <div class="follow-up-pagination" data-follow-up-pagination-container>
@@ -106,6 +110,38 @@
       </div>
     </div>
   </div>
+
+  <div id="followUpInfoModal" class="follow-up-info-modal" hidden role="dialog" aria-modal="true" aria-labelledby="followUpInfoTitle" aria-describedby="followUpInfoDescription">
+    <div class="follow-up-info-dialog">
+      <div class="follow-up-info-heading">
+        <img src="/icons/home/question-mark.svg" alt="" aria-hidden="true" />
+        <h2 id="followUpInfoTitle">Cómo funcionan los seguimientos</h2>
+      </div>
+      <div id="followUpInfoDescription">
+        <p>Esta sección localiza conversaciones que podrían necesitar una respuesta posterior. El periodo sirve para buscar los hilos candidatos; después se comprueba su estado actual.</p>
+        <ul>
+          <li>Solo se consulta Gmail cuando eliges un periodo y pulsas «Aplicar».</li>
+          <li>Se agrupan los mensajes del mismo hilo para mostrar un único seguimiento.</li>
+          <li>Se revisa el hilo completo actualizado. Solo se propone un seguimiento si el último mensaje lo envió la cuenta conectada y no existe una respuesta posterior.</li>
+          <li>Si el cliente respondió después, aunque su respuesta esté fuera del periodo elegido, el hilo deja de aparecer como pendiente.</li>
+          <li>Si la última actividad del hilo queda fuera del periodo, no se muestra en ese resultado histórico.</li>
+          <li>La antigüedad se calcula desde ese último mensaje enviado hasta hoy.</li>
+          <li>La interfaz muestra 10 seguimientos por página y solo presenta la página que consultas; el cálculo revisa los candidatos del periodo para poder ofrecer el total y la paginación.</li>
+        </ul>
+        <h3>Cómo interpretar la prioridad</h3>
+        <ul>
+          <li><span class="follow-up-info-priority attention">Atención</span> han pasado entre 5 y 9 días sin respuesta.</li>
+          <li><span class="follow-up-info-priority priority">Prioritario</span> han pasado entre 10 y 14 días sin respuesta.</li>
+          <li><span class="follow-up-info-priority urgent">Urgente</span> han pasado 15 días o más sin respuesta.</li>
+        </ul>
+        <p class="follow-up-info-subtle">Los colores y niveles son avisos automáticos basados en la antigüedad. No son etiquetas de Gmail, no los decide la IA y no confirman por sí solos una urgencia comercial.</p>
+        <p class="follow-up-info-subtle">Es una sugerencia basada en los mensajes, no una tarea confirmada. Si Gmail limita la consulta, la pantalla lo avisa para que acotes el periodo. Abre siempre el hilo completo antes de actuar.</p>
+      </div>
+      <div class="follow-up-info-actions">
+        <button id="followUpInfoClose" class="button-link" type="button">Entendido</button>
+      </div>
+    </div>
+  </div>
 </section>
 
 <script is:inline src="/scripts/follow-ups.js"></script>
@@ -128,13 +164,16 @@
   .follow-up-range button:hover, .follow-up-range button:focus-visible { background: var(--orange-dark); }
   .follow-up-range button.secondary-button:hover, .follow-up-range button.secondary-button:focus-visible { color: var(--ink); background: var(--orange-light); }
   .follow-up-range button:disabled { cursor: wait; opacity: .65; }
-  .follow-up-range-help { margin: 8px 0 0; font-size: 12px; }
+  .follow-up-period-prompt { margin: 8px 0 0; font-size: 12px; }
   .follow-up-tools { display: flex; gap: 12px; margin: 18px 0 4px; }
+  .follow-up-tools[hidden] { display: none; }
   .follow-up-tools input { min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; background: var(--surface-input); color: var(--ink); }
   .follow-up-tools select { min-width: 0; }
   .follow-up-tools select[hidden] { display: none; }
   .follow-up-tools input { flex: 1; }
   .follow-up-category-filter { display: flex; align-items: center; gap: 8px; }
+  .follow-up-title-row { display: flex; align-items: center; gap: 10px; }
+  .follow-up-title-row h2 { margin: 0; }
   .follow-up-info-button { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; padding: 6px; border: 1px solid var(--border); border-radius: 50%; color: var(--muted); background: var(--surface-ai); cursor: pointer; }
   .follow-up-info-button:hover, .follow-up-info-button:focus-visible { border-color: var(--orange-light); color: var(--orange-dark); background: var(--surface-hover); outline: none; }
   .follow-up-info-button img { display: block; width: 100%; height: 100%; }
@@ -151,11 +190,7 @@
   .follow-up-thread-button { background: var(--panel-dark); color: #fff; }
   .follow-up-actions button { color: var(--ink); background: var(--warm); }
   .follow-up-actions button:hover, .follow-up-actions button:focus-visible { color: var(--ink); background: var(--orange-light); }
-  .follow-up-actions .follow-up-action-read { color: var(--action-unread-fg); background: var(--action-unread-bg); border-color: var(--action-unread-border); }
-  .follow-up-actions .follow-up-action-archive { color: var(--action-archive-fg); background: var(--action-archive-bg); border-color: var(--action-archive-border); }
   .follow-up-actions .follow-up-action-trash { color: var(--action-trash-fg); background: var(--action-trash-bg); border-color: var(--action-trash-border); }
-  .follow-up-actions .follow-up-action-read:hover, .follow-up-actions .follow-up-action-read:focus-visible { color: var(--action-unread-fg); background: var(--action-unread-hover); }
-  .follow-up-actions .follow-up-action-archive:hover, .follow-up-actions .follow-up-action-archive:focus-visible { color: var(--action-archive-fg); background: var(--action-archive-hover); }
   .follow-up-actions .follow-up-action-trash:hover, .follow-up-actions .follow-up-action-trash:focus-visible { color: var(--action-trash-fg); background: var(--action-trash-hover); }
   .follow-up-action-status { grid-column: 1 / -1; margin: 0; font-size: 12px; }
   .follow-up-urgency { align-self: flex-end; padding: 5px 9px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; }
@@ -163,7 +198,11 @@
   .follow-up-urgency.attention { color: var(--orange-dark); background: #FFF1E2; }
   .follow-up-urgency.priority { color: #8A4B0A; background: #F7D49F; }
   .follow-up-urgency.urgent { color: #FFFFFF; background: #A33C28; }
-  .follow-up-category { display: inline-flex; align-self: flex-end; padding: 5px 9px; border-radius: 999px; color: var(--muted); background: var(--neutral-bg); font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .follow-up-info-priority { display: inline-flex; align-items: center; margin-right: 4px; padding: 4px 8px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .follow-up-info-priority.attention { color: var(--orange-dark); background: #FFF1E2; }
+  .follow-up-info-priority.priority { color: #8A4B0A; background: #F7D49F; }
+  .follow-up-info-priority.urgent { color: #FFFFFF; background: #A33C28; }
+  .follow-up-category { display: inline-flex; align-self: flex-end; padding: 5px 9px; border: 1px solid var(--danger); border-radius: 999px; color: #FFFFFF; background: var(--danger); font-size: 12px; font-weight: 400; white-space: nowrap; }
   .follow-up-age { align-self: flex-end; padding: 5px 9px; border-radius: 999px; color: var(--orange-dark); background: #FFF1E2; font-size: 12px; font-weight: 500; white-space: nowrap; }
   .follow-up-thread-button { padding: 0 10px; background: var(--panel-dark); font-size: 12px; font-weight: 400; }
   .follow-up-thread { grid-column: 1 / -1; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--warm); }
@@ -190,10 +229,11 @@
   .follow-up-pagination button:disabled { cursor: default; opacity: .7; }
   .follow-up-info-modal { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 24px; background: rgba(35, 31, 32, .42); backdrop-filter: blur(3px); }
   .follow-up-info-modal[hidden] { display: none; }
-  .follow-up-info-dialog { width: min(100%, 560px); max-height: min(720px, calc(100vh - 48px)); overflow: auto; padding: 24px; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); box-shadow: 0 24px 70px rgba(35, 31, 32, .24); }
+  .follow-up-info-dialog { width: min(100%, 780px); max-height: none; overflow: visible; padding: 28px; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); box-shadow: 0 24px 70px rgba(35, 31, 32, .24); }
   .follow-up-info-heading { display: flex; align-items: center; gap: 10px; }
   .follow-up-info-heading img { flex: 0 0 26px; width: 26px; height: 26px; }
   .follow-up-info-dialog h2 { margin: 0; font-size: 20px; }
+  .follow-up-info-dialog h3 { margin: 22px 0 0; font-size: 15px; }
   .follow-up-info-dialog p { margin: 14px 0 0; color: var(--body-copy); }
   .follow-up-info-dialog ul { display: grid; gap: 8px; margin: 16px 0 0; padding-left: 24px; color: var(--body-copy); }
   .follow-up-info-subtle { color: var(--muted) !important; font-size: 12px; }
@@ -204,8 +244,13 @@
   html[data-theme='dark'] .follow-up-page-number.is-current { color: #171717; background: #fff; border-color: #fff; }
   html[data-theme='dark'] .follow-up-pagination button:hover, html[data-theme='dark'] .follow-up-pagination button:focus-visible { color: #171717; background: #fff; border-color: #fff; }
   html[data-theme='dark'] .follow-up-urgency.normal { color: var(--muted); background: var(--neutral-bg); } html[data-theme='dark'] .follow-up-urgency.attention { color: var(--orange-light); background: var(--surface-alt); } html[data-theme='dark'] .follow-up-urgency.priority { color: #FFD18C; background: #5A3B23; } html[data-theme='dark'] .follow-up-urgency.urgent { color: #FFFFFF; background: #A33C28; }
-  html[data-theme='dark'] .follow-up-category { color: var(--muted); background: var(--neutral-bg); }
+  html[data-theme='dark'] .follow-up-category { color: #FFFFFF; background: var(--danger); border-color: var(--danger); }
   html[data-theme='dark'] .follow-up-thread-button { color: #fff; background: var(--panel-dark); }
   @media (prefers-reduced-motion: reduce) { .follow-up-info-modal { transition: none; } }
-  @media (max-width: 640px) { .follow-up-range { align-items: stretch; flex-direction: column; } .follow-up-range-control, .follow-up-date-mode-control, .follow-up-date-range .follow-up-range-control { grid-template-columns: minmax(110px, auto) minmax(0, 1fr) auto; } .follow-up-range-summary { grid-column: 1 / -1; white-space: normal; } .follow-up-date-range { flex-direction: column; } .follow-up-range button { width: 100%; } .follow-up-tools { flex-direction: column; } .follow-up-tools input, .follow-up-tools select { width: 100%; } .follow-up-category-filter { width: 100%; } .follow-up-category-filter select { flex: 1; } .follow-up-info-modal { padding: 14px; } .follow-up-info-dialog { padding: 20px; max-height: calc(100vh - 28px); } .follow-up { grid-template-columns: 1fr; gap: 10px; } .follow-up-side { align-items: flex-start; flex-direction: row; flex-wrap: wrap; } .follow-up-age, .follow-up-urgency { align-self: center; } .follow-up-action-divider { display: none; } .follow-up-actions { width: 100%; } }
+  @media (max-width: 640px) { .follow-up-range { align-items: stretch; flex-direction: column; } .follow-up-range-control, .follow-up-date-mode-control, .follow-up-date-range .follow-up-range-control { grid-template-columns: minmax(110px, auto) minmax(0, 1fr) auto; } .follow-up-range-summary { grid-column: 1 / -1; white-space: normal; } .follow-up-date-range { flex-direction: column; } .follow-up-range button { width: 100%; } .follow-up-tools { flex-direction: column; } .follow-up-tools input, .follow-up-tools select { width: 100%; } .follow-up-category-filter { width: 100%; } .follow-up-category-filter select { flex: 1; } .follow-up-info-modal { align-items: start; padding: 14px; overflow-y: auto; } .follow-up-info-dialog { width: 100%; max-height: none; overflow: visible; padding: 20px; } .follow-up-info-dialog ul { gap: 6px; margin-top: 12px; padding-left: 20px; } .follow-up-info-dialog p { margin-top: 10px; } .follow-up { grid-template-columns: 1fr; gap: 10px; } .follow-up-side { align-items: flex-start; flex-direction: row; flex-wrap: wrap; } .follow-up-age, .follow-up-urgency { align-self: center; } .follow-up-action-divider { display: none; } .follow-up-actions { width: 100%; } }
+  @media (max-width: 420px) {
+    .follow-up-range-control, .follow-up-date-mode-control, .follow-up-date-range .follow-up-range-control { grid-template-columns: minmax(0, 1fr); }
+    .follow-up-range-control input, .follow-up-range-control select { width: 100%; }
+    .follow-up-page-size-fixed { display: flex; flex-wrap: wrap; }
+  }
 </style>

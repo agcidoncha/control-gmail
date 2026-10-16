@@ -37,7 +37,7 @@ export function classifyFollowUpByRules(thread: GmailThreadMessage[]): FollowUpC
  */
 export async function classifyFollowUpWithAi(email: string, thread: GmailThreadMessage[]): Promise<FollowUpCategory> {
   const connection = await resolveOptionalConnection(email);
-  if (!connection) return 'Seguimiento general';
+  if (!connection) return 'Revisión humana';
 
   const model = classifierModel(connection.provider);
   const lastMessage = thread.at(-1);
@@ -51,7 +51,7 @@ export async function classifyFollowUpWithAi(email: string, thread: GmailThreadM
   classificationRequests.set(cacheKey, request);
   try {
     const result = await request;
-    classificationCache.set(cacheKey, { expiresAt: Date.now() + classificationCacheTtlMs, value: result });
+    if (result.confidence > 0) classificationCache.set(cacheKey, { expiresAt: Date.now() + classificationCacheTtlMs, value: result });
     return result.category;
   } finally {
     classificationRequests.delete(cacheKey);
@@ -98,11 +98,26 @@ async function requestClassification(provider: AiProvider, apiKey: string, model
 async function requestOpenAi(provider: AiProvider, apiKey: string, model: string, instructions: string, prompt: string) {
   const client = new OpenAI({
     apiKey,
+    timeout: 20_000,
+    maxRetries: 0,
     ...(provider === 'deepseek' ? { baseURL: 'https://api.deepseek.com' } : {}),
   });
+  if (provider === 'deepseek') {
+    const response = await client.chat.completions.create({
+      model,
+      max_tokens: 180,
+      response_format: { type: 'json_object' },
+      thinking: { type: 'disabled' },
+      messages: [
+        { role: 'system', content: instructions },
+        { role: 'user', content: prompt },
+      ],
+    } as never);
+    return response.choices[0]?.message?.content ?? '';
+  }
   const response = await client.responses.create({
     model,
-    max_output_tokens: 120,
+    max_output_tokens: 600,
     instructions,
     input: prompt,
     text: {
@@ -128,6 +143,7 @@ async function requestOpenAi(provider: AiProvider, apiKey: string, model: string
 async function requestClaude(apiKey: string, model: string, instructions: string, prompt: string) {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
+    signal: AbortSignal.timeout(20_000),
     headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({ model, max_tokens: 120, system: instructions, messages: [{ role: 'user', content: prompt }] }),
   });

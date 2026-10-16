@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import OpenAI from 'openai';
 import { getAnalysisWindow, listClientAnalysisContext, listRecentMailboxContext, type AnalysisWindow } from './google-oauth.js';
 import { resolveAiConnection } from './ai-connections.js';
-import { askClaude, parseCommercialAnalysis, type CommercialAnalysis } from './claude.js';
+import { askClaude, parseCommercialAnalysis, validateAnalysisSources, type CommercialAnalysis } from './claude.js';
 
 const rulesPath = resolve('docs/reglas-seguridad-trabajo-con-ia.md');
 const agentSpecPath = resolve('docs/agente-asistente-comercial-openai.md');
@@ -64,11 +64,18 @@ export async function askCommercialAssistant(email: string, question: string, or
   ]);
   const messages = compactMailboxContext(rawMessages);
   const exactMessageCount = messages.reduce((total, thread) => total + thread.threadMessages.length, 0);
+  const sourceMessages = messages.flatMap((thread) => thread.threadMessages);
   const instructions = `
 Eres Asistente Comercial. Trabajas exclusivamente con la cuenta Gmail autorizada de la sesión actual.
 No envíes, borres, archives, etiquetes ni modifiques mensajes. Solo analiza y propone.
 No inventes datos. Distingue hechos, inferencias y recomendaciones. Si falta información, indícalo.
+La única cuenta cuya identidad está confirmada es ${email}. No deduzcas que otra dirección pertenece
+a la misma persona por compartir un nombre, apellido o dominio. Si el texto no lo confirma, esa
+posibilidad solo puede aparecer como inferencia, nunca como hecho ni como motivo para descartar trabajo.
 Cuando cites una fuente, conserva el mensaje_id y el asunto exacto en el campo fuentes del JSON.
+Para conclusiones sobre acuerdos o pendientes, incluye fuentes con el id real del mensaje de origen
+y explica brevemente qué respalda cada una. No inventes identificadores ni dejes sin respaldo esas
+conclusiones. Si el contexto no permite fundamentarlas, dilo expresamente.
 No muestres identificadores técnicos, message_id, nombres de variables ni detalles de implementación
 en respuesta, hechos, inferencias o acciones_propuestas. Si detectas mensajes de prueba o internos,
 descríbelos de forma comprensible como mensajes internos o mensajes de prueba.
@@ -79,7 +86,9 @@ Sé conciso: prioriza lo importante y evita repetir el contenido de los mensajes
 Devuelve texto limpio dentro del JSON, sin Markdown, asteriscos ni barras invertidas innecesarias.
 El campo mensajes_analizados debe ser exactamente ${exactMessageCount}. No escribas ninguna otra cifra
 de recuento de mensajes en la respuesta.
-Devuelve siempre el resultado con el esquema JSON solicitado.
+Devuelve exclusivamente un objeto JSON válido, no texto libre ni bloques Markdown. Este esquema es
+obligatorio aunque los documentos siguientes describan la salida como recomendada:
+${JSON.stringify(analysisSchema)}
 
 REGLAS OBLIGATORIAS DEL PROYECTO:
 ${rules}
@@ -103,7 +112,7 @@ Alcance del buzón aplicado: ${analysisWindow.scope === 'all' ? 'todos los mensa
 `;
 
   if (connection.provider === 'claude') {
-    const result = validateMessageCount(sanitizeCommercialAnalysis(await askClaude({ apiKey: connection.apiKey, model: connection.model, instructions, prompt })), exactMessageCount);
+    const result = validateAnalysisSources(validateMessageCount(sanitizeCommercialAnalysis(await askClaude({ apiKey: connection.apiKey, model: connection.model, instructions, prompt })), exactMessageCount), sourceMessages);
     analysisResultCache.set(cacheKey, { expiresAt: Date.now() + analysisResultCacheTtlMs, value: result, messageCount: exactMessageCount });
     return { analysis: result, messageCount: exactMessageCount };
   }
@@ -128,7 +137,7 @@ Alcance del buzón aplicado: ${analysisWindow.scope === 'all' ? 'todos los mensa
     },
   });
 
-  const result = validateMessageCount(sanitizeCommercialAnalysis(parseCommercialAnalysis(response.output_text)), exactMessageCount);
+  const result = validateAnalysisSources(validateMessageCount(sanitizeCommercialAnalysis(parseCommercialAnalysis(response.output_text)), exactMessageCount), sourceMessages);
   analysisResultCache.set(cacheKey, { expiresAt: Date.now() + analysisResultCacheTtlMs, value: result, messageCount: exactMessageCount });
   return { analysis: result, messageCount: exactMessageCount };
 }

@@ -160,7 +160,9 @@
   .secondary-button:disabled { opacity: .55; cursor: not-allowed; }
   .admin-ai-controls { display: grid; gap: 14px; margin-top: 16px; }
   .admin-ai-controls[hidden] { display: none; }
-  .admin-ai-global-panel { display: grid; gap: 20px; padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-ai); }
+  .admin-ai-controls, .admin-ai-controls section, .shared-ai-users, .shared-ai-user-group, .shared-ai-user-group-rows, .shared-ai-user, .shared-ai-user-field { min-width: 0; }
+  .shared-ai-user-email { overflow-wrap: anywhere; }
+  .admin-ai-global-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-ai); }
   .admin-ai-global-panel > .card-header { min-width: 0; }
   .admin-ai-global-panel > .card-header > div { flex: 1 1 auto; min-width: 0; }
   .ai-assignment-info-modal { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 24px; background: rgba(35, 31, 32, .42); backdrop-filter: blur(3px); }

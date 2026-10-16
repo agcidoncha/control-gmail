@@ -4,7 +4,6 @@ import { loadGoogleTokens, saveGoogleTokens } from './token-store.js';
 import {
   findStoredGmailMessages,
   getGmailSyncState,
-  getStoredGmailThread,
   listAllStoredGmailMessages,
   listStoredGmailMessages,
   saveGmailSyncSnapshot,
@@ -14,6 +13,8 @@ import {
 } from './gmail-store.js';
 import { listGmailActions } from './gmail-action-store.js';
 import { classifyFollowUpByRules, classifyFollowUpWithAi } from './follow-up-classifier.js';
+import { classifyCommitmentWithAi } from './commitment-classifier.js';
+import { resolveAiConnection } from './ai-connections.js';
 
 const gmailModifyScope = 'https://www.googleapis.com/auth/gmail.modify';
 const gmailSendScope = 'https://www.googleapis.com/auth/gmail.send';
@@ -22,6 +23,7 @@ const gmailCacheTtlMs = 2 * 60_000;
 const defaultAnalysisDays = 30;
 const maxAnalysisDays = 3650;
 const applicationTimeZone = process.env.APP_TIME_ZONE ?? 'Europe/Madrid';
+const gmailDateQueryVersion = 2;
 
 export type GmailListMessage = {
   id: string;
@@ -34,9 +36,10 @@ export type GmailListMessage = {
   labelIds: string[];
   important: boolean;
   bounced: boolean;
+  internalDate?: number | null;
 };
 
-export type GmailMailbox = 'inbox' | 'sent' | 'archived' | 'appArchived' | 'spam' | 'trash';
+export type GmailMailbox = 'all' | 'inbox' | 'sent' | 'archived' | 'appArchived' | 'spam' | 'trash';
 
 export type GmailMessageAction = 'markRead' | 'markUnread' | 'archive' | 'unarchive' | 'trash' | 'restore';
 
@@ -58,6 +61,7 @@ export type GmailThreadMessage = {
   internalDate: number | null;
   body: string;
   dateHints: string[];
+  labelIds?: string[];
 };
 
 type PendingFollowUp = {
@@ -113,6 +117,7 @@ export type AccountInsights = {
   reviewedMessages: number;
   clients: AccountClient[];
   latestDate: string | null;
+  truncated: boolean;
 };
 
 export type AnalysisWindow = {
@@ -153,12 +158,10 @@ function getMailboxDateQuery(fromValue?: string, toValue?: string) {
   if (from && to && from > to) throw new Error('La fecha inicial no puede ser posterior a la fecha final.');
   const clauses: string[] = [];
   if (from) {
-    from.setUTCDate(from.getUTCDate() - 1);
-    clauses.push(`after:${formatGmailDate(from)}`);
+    clauses.push(`after:${Math.floor(getApplicationDayTimestamp(fromValue!) / 1000)}`);
   }
   if (to) {
-    to.setUTCDate(to.getUTCDate() + 1);
-    clauses.push(`before:${formatGmailDate(to)}`);
+    clauses.push(`before:${Math.floor(getApplicationDayTimestamp(toValue!, 1) / 1000)}`);
   }
   return clauses.join(' ');
 }
@@ -170,6 +173,26 @@ function parseDateInput(value: string, field: string) {
     throw new Error(`${field} no es una fecha válida.`);
   }
   return date;
+}
+
+/** Medianoche del calendario de la aplicación, también en cambios de horario. */
+export function getApplicationDayTimestamp(value: string, dayOffset = 0) {
+  const date = parseDateInput(value.replaceAll('/', '-'), 'La fecha');
+  date.setUTCDate(date.getUTCDate() + dayOffset);
+  const target = date.getTime();
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: applicationTimeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  });
+  let timestamp = target;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const parts = Object.fromEntries(formatter.formatToParts(new Date(timestamp)).map((part) => [part.type, part.value]));
+    const localTimestamp = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), Number(parts.minute), Number(parts.second));
+    const next = target - (localTimestamp - timestamp);
+    if (next === timestamp) break;
+    timestamp = next;
+  }
+  return timestamp;
 }
 
 export function getApplicationDateInput(date = new Date()) {
@@ -198,12 +221,11 @@ export function getAnalysisWindow(input: AnalysisWindowInput = {}): AnalysisWind
   const days = Math.floor((to.getTime() - from.getTime()) / 86_400_000) + 1;
   if (days > maxAnalysisDays) throw new Error(`El rango máximo de análisis es de ${maxAnalysisDays} días.`);
 
-  const exclusiveTo = new Date(to.getTime() + 86_400_000);
   return {
     from: formatGmailDate(from),
     to: formatGmailDate(to),
     days,
-    query: `after:${formatGmailDate(new Date(from.getTime() - 86_400_000))} before:${formatGmailDate(exclusiveTo)}`,
+    query: `after:${Math.floor(getApplicationDayTimestamp(formatGmailDate(from)) / 1000)} before:${Math.floor(getApplicationDayTimestamp(formatGmailDate(to), 1) / 1000)}`,
     scope: input.scope === 'all' || input.scope === 'spam' ? input.scope : 'mailbox',
   };
 }
@@ -220,6 +242,15 @@ function clearAccountCaches(email: string) {
 
 function analysisCacheKey(email: string, analysisWindow: AnalysisWindow) {
   return `${email.toLowerCase()}:${analysisWindow.scope}:${analysisWindow.query}`;
+}
+
+async function aiCacheIdentity(email: string) {
+  try {
+    const connection = await resolveAiConnection(email);
+    return `${connection.provider}:${connection.model}`;
+  } catch {
+    return 'unavailable';
+  }
 }
 
 function mailboxContextCacheKey(email: string, maxPerFolder: number, analysisWindow: AnalysisWindow, includeBodies: boolean, ensureSnapshot: boolean) {
@@ -264,10 +295,19 @@ async function ensureGmailSnapshot(email: string, force = false, requestedWindow
   const state = await getGmailSyncState(normalizedEmail);
   const lastSyncedAt = state ? Date.parse(state.lastSyncedAt) : 0;
   const coversWindow = state ? syncStateCoversWindow(state, requestedWindow) : false;
-  if (!force && state && coversWindow && Number.isFinite(lastSyncedAt) && Date.now() - lastSyncedAt < getSyncIntervalMs()) return;
+  const sameWindow = state?.from === requestedWindow.from && state?.to === requestedWindow.to;
+  if (!force && state?.queryVersion === gmailDateQueryVersion && coversWindow && (!state.truncated || sameWindow) && Number.isFinite(lastSyncedAt) && Date.now() - lastSyncedAt < getSyncIntervalMs()) return;
 
   const existingRequest = syncRequests.get(normalizedEmail);
-  if (existingRequest) return existingRequest;
+  if (existingRequest) {
+    await existingRequest;
+    const refreshedState = await getGmailSyncState(normalizedEmail);
+    const sameRefreshedWindow = refreshedState?.from === requestedWindow.from && refreshedState?.to === requestedWindow.to;
+    if (refreshedState?.queryVersion === gmailDateQueryVersion && syncStateCoversWindow(refreshedState, requestedWindow) && (!refreshedState.truncated || sameRefreshedWindow)) return;
+    // Compartir una sincronización solo es válido si cubre también las
+    // fechas del segundo consumidor (Clientes, Seguimientos o Informes).
+    return ensureGmailSnapshot(normalizedEmail, false, requestedWindow);
+  }
 
   const request = syncGmailAccount(normalizedEmail, requestedWindow);
   syncRequests.set(normalizedEmail, request);
@@ -281,7 +321,8 @@ async function ensureGmailSnapshot(email: string, force = false, requestedWindow
 export async function syncGmailAccount(email: string, analysisWindow = getAnalysisWindow()) {
   const normalizedEmail = email.toLowerCase();
   const existingState = await getGmailSyncState(normalizedEmail);
-  if (existingState?.historyId && syncStateCoversWindow(existingState, analysisWindow)) {
+  const sameWindow = existingState?.from === analysisWindow.from && existingState?.to === analysisWindow.to;
+  if (existingState?.queryVersion === gmailDateQueryVersion && existingState.historyId && syncStateCoversWindow(existingState, analysisWindow) && (!existingState.truncated || sameWindow)) {
     try {
       await syncGmailChanges(normalizedEmail, existingState, analysisWindow);
       return;
@@ -300,6 +341,15 @@ export async function syncGmailAccount(email: string, analysisWindow = getAnalys
     ...inbox.map((message) => toStoredMessage(normalizedEmail, 'inbox', message)),
     ...sent.map((message) => toStoredMessage(normalizedEmail, 'sent', message)),
   ];
+  const truncated = inbox.length >= limit || sent.length >= limit;
+  const currentIds = new Set(messages.map((message) => message.id));
+  const stored = truncated ? [] : (await Promise.all([
+    listAllStoredGmailMessages(normalizedEmail, 'inbox'),
+    listAllStoredGmailMessages(normalizedEmail, 'sent'),
+  ])).flat();
+  const fromTimestamp = getApplicationDayTimestamp(analysisWindow.from);
+  const toTimestamp = getApplicationDayTimestamp(analysisWindow.to, 1);
+  const removedMessageIds = stored.filter((message) => message.sortTimestamp >= fromTimestamp && message.sortTimestamp < toTimestamp && !currentIds.has(message.id)).map((message) => message.id);
   const threads: StoredThreadMessage[][] = [];
   const { data: profile } = await gmail.users.getProfile({ userId: 'me' });
 
@@ -307,14 +357,16 @@ export async function syncGmailAccount(email: string, analysisWindow = getAnalys
     email: normalizedEmail,
     messages,
     threads,
+    removedMessageIds,
     syncState: {
+      queryVersion: gmailDateQueryVersion,
       accountEmail: normalizedEmail,
       from: analysisWindow.from,
       to: analysisWindow.to,
       lastSyncedAt: new Date().toISOString(),
       messageCount: messages.length,
       threadCount: threads.length,
-      truncated: inbox.length >= limit || sent.length >= limit,
+      truncated,
       historyId: profile.historyId ?? undefined,
     },
   });
@@ -364,8 +416,8 @@ async function syncGmailChanges(email: string, state: NonNullable<Awaited<Return
       return;
     }
     const timestamp = messageTimestamp(message);
-    const inWindow = timestamp >= Date.parse(`${analysisWindow.from.replaceAll('/', '-')}T00:00:00.000Z`)
-      && timestamp <= Date.parse(`${analysisWindow.to.replaceAll('/', '-')}T23:59:59.999Z`);
+    const inWindow = timestamp >= getApplicationDayTimestamp(analysisWindow.from)
+      && timestamp < getApplicationDayTimestamp(analysisWindow.to, 1);
     const mailbox = message.labelIds.includes('INBOX') ? 'inbox' : message.labelIds.includes('SENT') ? 'sent' : null;
     if (!mailbox || !inWindow) {
       removedMessageIds.add(message.id);
@@ -443,6 +495,7 @@ async function getGmailMessageMetadata(gmail: ReturnType<typeof google.gmail>, i
     labelIds: data.labelIds ?? [],
     important: (data.labelIds ?? []).includes('IMPORTANT'),
     bounced: (data.labelIds ?? []).includes('INBOX') && looksLikeBounce(subject, data.snippet ?? ''),
+    internalDate: Number(data.internalDate) || null,
   };
 }
 
@@ -478,6 +531,7 @@ function fromStoredMessage(message: StoredGmailMessage): GmailListMessage {
     labelIds: message.labelIds,
     important: message.important,
     bounced: message.bounced,
+    internalDate: message.sortTimestamp,
   };
 }
 
@@ -597,7 +651,9 @@ export async function completeAuthorization(code: string, state: string) {
   };
 }
 
-const archivedMailboxQuery = '-in:inbox -in:sent -in:spam -in:trash -in:drafts';
+// En Gmail, archivar quita INBOX pero no necesariamente elimina SENT de un
+// hilo. No excluimos SENT para que la vista pueda recuperar también esos hilos.
+const archivedMailboxQuery = '-in:inbox -in:spam -in:trash -in:drafts';
 
 export async function listRecentMessages(email: string, maxResults = 10, mailbox: GmailMailbox = 'inbox', query = '', organizationId = process.env.DEFAULT_ORGANIZATION_ID ?? 'org_publicidad_segmentada_tv') {
   if (mailbox === 'appArchived') {
@@ -633,6 +689,11 @@ export async function listRecentMessages(email: string, maxResults = 10, mailbox
     }
   }
 
+  if (mailbox === 'all') {
+    const gmail = await getGmailClient(email);
+    return listMessagesForLabel(gmail, undefined, maxResults, undefined, query);
+  }
+
   await ensureGmailSnapshot(email);
   const stored = await listStoredGmailMessages(email, mailbox, maxResults);
   return stored.messages.map(fromStoredMessage).filter((message) => !query || `${message.subject} ${message.from} ${message.to} ${message.snippet}`.toLowerCase().includes(query.toLowerCase()));
@@ -648,6 +709,7 @@ export async function listRecentMessagesPage(
   dateFrom?: string,
   dateTo?: string,
   fetchAll = false,
+  searchQuery = '',
 ) {
   const dateQuery = getMailboxDateQuery(dateFrom, dateTo);
   if (mailbox === 'appArchived') {
@@ -679,9 +741,9 @@ export async function listRecentMessagesPage(
       nextPageTokenCache.delete(cacheKey);
     }
     if (fetchAll && dateQuery && !pageToken) {
-      return listAllMessagesForLabelCached(email, mailbox, mailbox === 'spam' ? 'SPAM' : mailbox === 'trash' ? 'TRASH' : undefined, [mailbox === 'archived' ? archivedMailboxQuery : '', dateQuery].filter(Boolean).join(' '));
+      return listAllMessagesForLabelCached(email, mailbox, mailbox === 'spam' ? 'SPAM' : mailbox === 'trash' ? 'TRASH' : undefined, [mailbox === 'archived' ? archivedMailboxQuery : '', dateQuery, searchQuery].filter(Boolean).join(' '));
     }
-    if (!pageToken) {
+    if (!pageToken && !searchQuery) {
       const messages = await listRecentMessages(email, maxResults, mailbox, dateQuery);
       return {
         messages,
@@ -692,17 +754,23 @@ export async function listRecentMessagesPage(
 
     const gmail = await getGmailClient(email);
     const label = mailbox === 'spam' ? 'SPAM' : mailbox === 'trash' ? 'TRASH' : undefined;
-    const query = [mailbox === 'archived' ? archivedMailboxQuery : '', dateQuery].filter(Boolean).join(' ');
+    const query = [mailbox === 'archived' ? archivedMailboxQuery : '', dateQuery, searchQuery].filter(Boolean).join(' ');
     if (fetchAll && dateQuery) return listAllMessagesForLabel(gmail, label, query);
     return listMessagesForLabel(gmail, label, maxResults, pageToken, query);
   }
 
+  if (mailbox === 'all') {
+    const gmail = await getGmailClient(email);
+    const query = ['{in:inbox in:sent}', dateQuery, searchQuery].filter(Boolean).join(' ');
+    return listMessagesForLabel(gmail, undefined, maxResults, pageToken, query);
+  }
+
   if (dateQuery) {
     const label = mailbox === 'sent' ? 'SENT' : 'INBOX';
-    const storedResult = await listStoredMessagesForDateRangePage(email, mailbox === 'sent' ? 'sent' : 'inbox', maxResults, pageToken, dateFrom, dateTo);
+    const storedResult = searchQuery ? null : await listStoredMessagesForDateRangePage(email, mailbox === 'sent' ? 'sent' : 'inbox', maxResults, pageToken, dateFrom, dateTo);
     if (storedResult) return storedResult;
     const gmail = await getGmailClient(email);
-    return listMessagesForLabel(gmail, label, maxResults, pageToken, dateQuery);
+    return listMessagesForLabel(gmail, label, maxResults, pageToken, [dateQuery, searchQuery].filter(Boolean).join(' '));
   }
 
   await ensureGmailSnapshot(email, forceRefresh);
@@ -730,10 +798,10 @@ async function listStoredMessagesForDateRangePage(
   // A truncated local snapshot cannot prove that this date range is complete.
   // Fall back to Gmail's paginated query so an incomplete snapshot cannot
   // produce an empty page together with a misleading "too many results" warning.
-  if (!state || state.truncated || !syncStateCoversWindow(state, requestedWindow)) return null;
+  if (!state || state.queryVersion !== gmailDateQueryVersion || state.truncated || !syncStateCoversWindow(state, requestedWindow)) return null;
 
-  const fromTimestamp = Date.parse(`${requestedWindow.from.replaceAll('/', '-')}T00:00:00.000Z`);
-  const toTimestamp = Date.parse(`${requestedWindow.to.replaceAll('/', '-')}T23:59:59.999Z`);
+  const fromTimestamp = getApplicationDayTimestamp(requestedWindow.from);
+  const toTimestamp = getApplicationDayTimestamp(requestedWindow.to, 1) - 1;
   const filteredMessages = (await listAllStoredGmailMessages(email, mailbox))
     .filter((message) => message.sortTimestamp >= fromTimestamp && message.sortTimestamp <= toTimestamp)
     .map(fromStoredMessage);
@@ -827,10 +895,10 @@ async function listAppArchivedMessages(email: string, organizationId: string, ma
       throw error;
     }
   });
+  const fromTimestamp = dateFrom ? getApplicationDayTimestamp(dateFrom) : Number.NEGATIVE_INFINITY;
+  const toTimestamp = dateTo ? getApplicationDayTimestamp(dateTo, 1) - 1 : Number.POSITIVE_INFINITY;
   const archived = currentMessages.filter((message): message is GmailListMessage => {
     if (!message) return false;
-    const fromTimestamp = dateFrom ? parseDateInput(dateFrom, 'La fecha inicial').getTime() : Number.NEGATIVE_INFINITY;
-    const toTimestamp = dateTo ? parseDateInput(dateTo, 'La fecha final').getTime() + 86_400_000 - 1 : Number.POSITIVE_INFINITY;
     const timestamp = messageTimestamp(message);
     return timestamp >= fromTimestamp
       && timestamp <= toTimestamp
@@ -848,11 +916,12 @@ async function listAppArchivedMessages(email: string, organizationId: string, ma
 
 async function listAnalysisMessages(email: string, mailbox: 'inbox' | 'sent', analysisWindow: AnalysisWindow, maxMessages = getAnalysisMessageLimit(), ensureSnapshot = true) {
   if (ensureSnapshot) await ensureGmailSnapshot(email, false, analysisWindow);
-  const stored = await listStoredGmailMessages(email, mailbox, maxMessages);
-  const fromTimestamp = Date.parse(`${analysisWindow.from.replaceAll('/', '-')}T00:00:00.000Z`);
-  const toTimestamp = Date.parse(`${analysisWindow.to.replaceAll('/', '-')}T23:59:59.999Z`);
-  return stored.messages
+  const stored = await listAllStoredGmailMessages(email, mailbox);
+  const fromTimestamp = getApplicationDayTimestamp(analysisWindow.from);
+  const toTimestamp = getApplicationDayTimestamp(analysisWindow.to, 1) - 1;
+  return stored
     .filter((message) => message.sortTimestamp >= fromTimestamp && message.sortTimestamp <= toTimestamp)
+    .slice(0, maxMessages)
     .map(fromStoredMessage);
 }
 
@@ -884,14 +953,18 @@ async function listAnalysisMessagesWithClient(
 
 export async function listAccountInsights(email: string, maxResults = 25, analysisWindow = getAnalysisWindow()): Promise<AccountInsights> {
   const normalizedEmail = email.toLowerCase();
-  const cacheKey = analysisCacheKey(email, analysisWindow);
+  const messageLimit = Math.max(Math.min(Math.max(Math.floor(maxResults) || 25, 1), 1000), getAnalysisMessageLimit());
+  const cacheKey = `${analysisCacheKey(email, analysisWindow)}:insights:${messageLimit}`;
   const cached = insightsCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
-  const [inbox, sent] = await Promise.all([
-    listAnalysisMessages(email, 'inbox', analysisWindow, Math.max(maxResults, getAnalysisMessageLimit())),
-    listAnalysisMessages(email, 'sent', analysisWindow, Math.max(maxResults, getAnalysisMessageLimit())),
-  ]);
+  const scopedMessages = analysisWindow.scope === 'mailbox' ? null : await listAnalysisMessagesForScope(email, analysisWindow, messageLimit);
+  const [inbox, sent] = scopedMessages
+    ? [scopedMessages.filter((message) => !isMessageFromAccount(message.from, email)), scopedMessages.filter((message) => isMessageFromAccount(message.from, email))]
+    : await Promise.all([
+        listAnalysisMessages(email, 'inbox', analysisWindow, messageLimit),
+        listAnalysisMessages(email, 'sent', analysisWindow, messageLimit),
+      ]);
   const clients = new Map<string, AccountClient>();
   const dates = [...inbox, ...sent].map((message) => message.date).filter(Boolean) as string[];
 
@@ -915,13 +988,16 @@ export async function listAccountInsights(email: string, maxResults = 25, analys
     reviewedMessages: inbox.length + sent.length,
     clients: [...clients.values()].sort((left, right) => right.messages - left.messages || left.email.localeCompare(right.email)),
     latestDate: dates.sort((left, right) => messageTimestamp({ date: right }) - messageTimestamp({ date: left }))[0] ?? null,
+    truncated: analysisWindow.scope === 'mailbox'
+      ? Boolean((await getGmailSyncState(email))?.truncated)
+      : inbox.length + sent.length >= messageLimit,
   };
   insightsCache.set(cacheKey, { expiresAt: Date.now() + gmailCacheTtlMs, value: insights });
   return insights;
 }
 
-export async function listPendingFollowUps(email: string, maxResults = 10, analysisWindow = getAnalysisWindow(), ensureSnapshot = true, contextMaxPerFolder = 10) {
-  const cacheKey = `${analysisCacheKey(email, analysisWindow)}:followups:${contextMaxPerFolder}`;
+export async function listPendingFollowUps(email: string, maxResults = 10, analysisWindow = getAnalysisWindow(), ensureSnapshot = true, contextMaxPerFolder = getSyncMessageLimit()) {
+  const cacheKey = `${analysisCacheKey(email, analysisWindow)}:followups:${contextMaxPerFolder}:${await aiCacheIdentity(email)}`;
   const cached = followUpCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value.slice(0, maxResults);
 
@@ -933,16 +1009,46 @@ export async function listPendingFollowUps(email: string, maxResults = 10, analy
     // pagina los resultados, pero aquí necesitamos calcular el total y los
     // avisos de antigüedad del periodo seleccionado.
     const context = await listRecentMailboxContext(email, contextMaxPerFolder, analysisWindow, false, ensureSnapshot);
+    const storedThreads = new Map<string, GmailThreadMessage[]>();
+    context.forEach((candidate) => {
+      if (!candidate.threadId) return;
+      const current = storedThreads.get(candidate.threadId) ?? [];
+      current.push(...candidate.threadMessages);
+      storedThreads.set(candidate.threadId, current);
+    });
+    // Solo necesitan refrescarse los hilos cuya última actividad visible es
+    // un envío nuestro. Si el último mensaje visible ya es del cliente, ese
+    // hilo no puede ser un seguimiento pendiente en este momento. Así se evita
+    // consultar Gmail para cada hilo del periodo.
+    const threadIds = [...storedThreads.entries()]
+      .filter(([, thread]) => {
+        const lastMessage = [...thread]
+          .sort((left, right) => messageTimestamp(left) - messageTimestamp(right))
+          .at(-1);
+        return Boolean(lastMessage && isMessageFromAccount(lastMessage.from, email));
+      })
+      .map(([threadId]) => threadId);
+    const freshThreads = await getFreshThreadMessagesForFollowUps(email, threadIds);
     const threads = new Map<string, GmailThreadMessage[]>();
     context.forEach((candidate) => {
       if (!candidate.threadId) return;
-      const current = threads.get(candidate.threadId) ?? candidate.threadMessages;
+      const current = threads.get(candidate.threadId) ?? freshThreads.get(candidate.threadId) ?? candidate.threadMessages;
       threads.set(candidate.threadId, current);
     });
+    const periodEnd = getApplicationDayTimestamp(analysisWindow.to, 1) - 1;
     const pending = (await mapWithConcurrency([...threads.values()], 3, async (thread) => {
       const ordered = [...thread].sort((left, right) => messageTimestamp(left) - messageTimestamp(right));
       const lastMessage = ordered.at(-1);
-      if (!lastMessage || !isMessageFromAccount(lastMessage.from, email)) return [];
+      const lastTimestamp = lastMessage ? messageTimestamp(lastMessage) : 0;
+      // El periodo localiza los hilos, pero el estado se comprueba con el hilo
+      // completo y hasta hoy. Así una respuesta posterior al rango elimina el
+      // falso seguimiento. Si la última actividad queda fuera del periodo, el
+      // hilo tampoco pertenece a los resultados de ese periodo.
+      // Si el último mensaje enviado se ha movido a la papelera (o a spam),
+      // ya no debe seguir apareciendo como respuesta pendiente.
+      if (!lastMessage || !lastTimestamp || lastTimestamp > periodEnd || !isMessageFromAccount(lastMessage.from, email) || (lastMessage.labelIds ?? []).includes('TRASH') || (lastMessage.labelIds ?? []).includes('SPAM')) return [];
+      const recipients = extractEmailAddresses(lastMessage.to);
+      if (recipients.length && recipients.every((recipient) => recipient === email.toLowerCase())) return [];
 
       const timestamp = messageTimestamp(lastMessage);
       if (!timestamp) return [];
@@ -985,6 +1091,39 @@ export async function listPendingFollowUps(email: string, maxResults = 10, analy
   }
 }
 
+async function getFreshThreadMessagesForFollowUps(email: string, threadIds: string[]) {
+  if (!threadIds.length) return new Map<string, GmailThreadMessage[]>();
+  const gmail = await getGmailClient(email);
+  const entries = await mapWithConcurrency(threadIds, 2, async (threadId) => {
+    const cacheKey = `${email.toLowerCase()}:${threadId}`;
+    const request = threadRequests.get(cacheKey) ?? getThreadMessagesFromGmailWithRetry(gmail, threadId);
+    threadRequests.set(cacheKey, request);
+    try {
+      const messages = await request;
+      threadCache.set(cacheKey, { expiresAt: Date.now() + gmailCacheTtlMs, value: messages });
+      return [threadId, messages] as const;
+    } finally {
+      if (threadRequests.get(cacheKey) === request) threadRequests.delete(cacheKey);
+    }
+  });
+  return new Map(entries);
+}
+
+async function getThreadMessagesFromGmailWithRetry(gmail: ReturnType<typeof google.gmail>, threadId: string, attempt = 0): Promise<GmailThreadMessage[]> {
+  try {
+    return await getThreadMessagesFromGmail(gmail, threadId);
+  } catch (error) {
+    if (!isGmailRateLimitError(error) || attempt >= 2) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
+    return getThreadMessagesFromGmailWithRetry(gmail, threadId, attempt + 1);
+  }
+}
+
+function isGmailRateLimitError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return /quota exceeded|user.?rate.?limit|rate.?limit|too many requests|resource.?exhausted/i.test(message);
+}
+
 export async function listPendingFollowUpsPage(
   email: string,
   maxResults = 10,
@@ -992,10 +1131,13 @@ export async function listPendingFollowUpsPage(
   analysisWindow = getAnalysisWindow(),
   ageFilter = 'all',
   category = 'all',
+  search = '',
 ) {
-  const allFollowUps = await listPendingFollowUps(email, getSyncMessageLimit(), analysisWindow, true, getSyncMessageLimit());
+  const allFollowUps = await listPendingFollowUps(email, 2 * Math.max(getSyncMessageLimit(), getAnalysisMessageLimit()), analysisWindow, true, getSyncMessageLimit());
+  const syncState = analysisWindow.scope === 'mailbox' ? await getGmailSyncState(email) : null;
   const normalizedPageSize = Math.min(Math.max(Number(maxResults) || 10, 1), 50);
   const normalizedPage = Math.max(Number(page) || 1, 1);
+  const query = search.trim().toLowerCase();
   const filtered = allFollowUps.filter((item) => {
     const ageMatches = ageFilter === '5-9'
       ? item.ageDays >= 5 && item.ageDays < 10
@@ -1004,7 +1146,8 @@ export async function listPendingFollowUpsPage(
         : ageFilter === '15+'
           ? item.ageDays >= 15
           : true;
-    return ageMatches && (category === 'all' || item.category === category);
+    return ageMatches && (category === 'all' || item.category === category)
+      && (!query || [item.client, item.subject, item.reason].join(' ').toLowerCase().includes(query));
   });
   const pageCount = Math.max(1, Math.ceil(filtered.length / normalizedPageSize));
   const currentPage = Math.min(normalizedPage, pageCount);
@@ -1014,6 +1157,7 @@ export async function listPendingFollowUpsPage(
     total: filtered.length,
     page: currentPage,
     pageCount,
+    truncated: Boolean(syncState?.truncated),
     summary: {
       total: allFollowUps.length,
       from5To9Days: allFollowUps.filter((item) => item.ageDays >= 5 && item.ageDays < 10).length,
@@ -1024,7 +1168,7 @@ export async function listPendingFollowUpsPage(
 }
 
 export async function listDetectedCommitments(email: string, maxResults = 10, analysisWindow = getAnalysisWindow(), ensureSnapshot = true) {
-  const cacheKey = analysisCacheKey(email, analysisWindow);
+  const cacheKey = `${analysisCacheKey(email, analysisWindow)}:commitments:${await aiCacheIdentity(email)}`;
   const cached = commitmentCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value.slice(0, maxResults);
 
@@ -1032,14 +1176,32 @@ export async function listDetectedCommitments(email: string, maxResults = 10, an
   if (existingRequest) return (await existingRequest).slice(0, maxResults);
 
   const request = (async (): Promise<DetectedCommitment[]> => {
-    const context = await listRecentMailboxContext(email, 10, analysisWindow, false, ensureSnapshot);
+    const context = await listRecentMailboxContext(email, getSyncMessageLimit(), analysisWindow, false, ensureSnapshot);
+    // El snippet de Gmail puede terminar antes de una promesa o una fecha.
+    // Cada hilo se consulta una sola vez; se extraen señales de los mensajes
+    // del periodo y se validan con el contexto completo, incluidas respuestas
+    // posteriores al rango.
+    const threadIds = [...new Set(context.map((candidate) => candidate.threadId).filter((id): id is string => Boolean(id)))];
+    const threads = await getFreshThreadMessagesForFollowUps(email, threadIds);
+    const fromTimestamp = getApplicationDayTimestamp(analysisWindow.from);
+    const toTimestamp = getApplicationDayTimestamp(analysisWindow.to, 1) - 1;
     const seen = new Set<string>();
-    const commitments = context.flatMap((candidate) => candidate.threadMessages.flatMap((message) => {
+    const candidates = [...threads.values()].flatMap((threadMessages) => threadMessages.flatMap((message) => {
+      const timestamp = messageTimestamp(message);
+      if (timestamp < fromTimestamp || timestamp > toTimestamp || (message.labelIds ?? []).some((label) => label === 'TRASH' || label === 'SPAM')) return [];
+      const commitments = extractCommitmentSentences(message.body);
+      if (!commitments.length) return [];
       const owner = isMessageFromAccount(message.from, email) ? 'Tú' : message.from;
-      const laterMessages = candidate.threadMessages.filter((item) => messageTimestamp(item) > messageTimestamp(message));
+      const laterMessages = threadMessages.filter((item) => messageTimestamp(item) > messageTimestamp(message));
       const hasLaterReply = laterMessages.some((item) => isMessageFromAccount(item.from, email) !== (owner === 'Tú'));
+      return [{ threadMessages, message, owner, hasLaterReply, commitments }];
+    }));
+
+    const evaluated = await mapWithConcurrency(candidates, 3, async ({ threadMessages, message, owner, hasLaterReply, commitments }) => {
+      const decision = await classifyCommitmentWithAi(email, threadMessages, commitments.join(' '));
+      if (!decision.isCommitment) return [];
       const overdue = message.dateHints.some((hint) => isPastExplicitDate(hint));
-      return extractCommitmentSentences(message.body).map((commitment) => {
+      return commitments.map((commitment) => {
         const key = `${message.threadId}:${commitment.toLowerCase()}`;
         if (seen.has(key)) return null;
         seen.add(key);
@@ -1049,19 +1211,26 @@ export async function listDetectedCommitments(email: string, maxResults = 10, an
           subject: message.subject,
           date: message.date,
           commitment,
-          status: overdue
-            ? 'Posible incumplido'
-            : hasLaterReply
-              ? 'Pendiente de revisión'
-              : owner === 'Tú'
-                ? 'Pendiente de respuesta del cliente'
-                : 'Pendiente de respuesta del comercial',
-          reason: message.dateHints.length
-            ? `Frase de solicitud, confirmación, envío o plazo detectada. Fechas/plazos: ${message.dateHints.join(', ')}.`
-            : 'Frase de solicitud, confirmación, envío o plazo detectada en el hilo.',
+          status: decision.source === 'unavailable'
+            ? 'Validación IA no disponible'
+            : decision.requiresReview
+              ? 'Revisión humana'
+            : overdue
+              ? 'Posible incumplido'
+              : hasLaterReply
+                ? 'Pendiente de revisión'
+              : 'Posible acción pendiente',
+          reason: `${decision.source === 'unavailable'
+            ? 'No se pudo validar este candidato con el modelo activo. Revisa el hilo completo antes de actuar.'
+            : decision.requiresReview
+              ? 'El modelo actual no tiene suficiente confianza para confirmarlo. Si necesitas una valoración más precisa, prueba con un modelo superior al configurado y revisa el hilo completo antes de actuar.'
+              : `La IA ha detectado una posible tarea, promesa o respuesta pendiente. ${decision.reason} Comprueba en el hilo quién debe actuar.`} ${message.dateHints.length
+              ? `Fechas/plazos: ${message.dateHints.join(', ')}.`
+              : ''}`.trim(),
         };
       }).filter((item): item is NonNullable<typeof item> => item !== null);
-    }));
+    });
+    const commitments = evaluated.flat();
 
     const dedupeCommitmentSeen = new Set<string>();
     return commitments
@@ -1120,6 +1289,7 @@ async function loadRecentMailboxContext(email: string, maxPerFolder: number, ana
       internalDate: message.date ? messageTimestamp(message) : null,
       body: message.snippet,
       dateHints: extractDateHints(message.snippet),
+      labelIds: message.labelIds ?? [],
     });
     storedThreadEntries.set(message.threadId, entries);
   });
@@ -1129,8 +1299,8 @@ async function loadRecentMailboxContext(email: string, maxPerFolder: number, ana
     const threadEntries = await mapWithConcurrency(threadIds, 3, async (threadId) => [threadId, await getCachedThreadMessages(email, gmail, threadId)] as const);
     threadsById = new Map(threadEntries);
   }
-  const fromTimestamp = Date.parse(`${analysisWindow.from.replaceAll('/', '-')}T00:00:00.000Z`);
-  const toTimestamp = Date.parse(`${analysisWindow.to.replaceAll('/', '-')}T23:59:59.999Z`);
+  const fromTimestamp = getApplicationDayTimestamp(analysisWindow.from);
+  const toTimestamp = getApplicationDayTimestamp(analysisWindow.to, 1) - 1;
 
   return candidates.map((message) => ({
     ...message,
@@ -1168,6 +1338,12 @@ export async function listRecentMailboxContext(email: string, maxPerFolder = 5, 
 export async function getThreadMessages(email: string, threadId: string) {
   const gmail = await getGmailClient(email);
   return getCachedThreadMessages(email, gmail, threadId);
+}
+
+export async function getMessageMetadata(email: string, messageId: string) {
+  if (!messageId || !/^[\w-]+$/.test(messageId)) throw new Error('Identificador de mensaje no válido.');
+  const gmail = await getGmailClient(email);
+  return getGmailMessageMetadata(gmail, messageId);
 }
 
 export async function listClientHistory(email: string, clientEmail: string, maxResults = 50) {
@@ -1222,8 +1398,8 @@ export async function listClientAnalysisContext(email: string, clientEmail: stri
   const selectedIds = new Set(listedMessages.map((message) => message.id));
   const threadIds = [...new Set(listedMessages.map((message) => message.threadId).filter(Boolean))] as string[];
   const threads = await Promise.all(threadIds.map((threadId) => getCachedThreadMessages(email, gmail, threadId)));
-  const fromTimestamp = Date.parse(`${analysisWindow.from.replaceAll('/', '-')}T00:00:00.000Z`);
-  const toTimestamp = Date.parse(`${analysisWindow.to.replaceAll('/', '-')}T23:59:59.999Z`);
+  const fromTimestamp = getApplicationDayTimestamp(analysisWindow.from);
+  const toTimestamp = getApplicationDayTimestamp(analysisWindow.to, 1) - 1;
   const messages = threads
     .flat()
     .filter((message) => {
@@ -1261,12 +1437,8 @@ async function getCachedThreadMessages(email: string, gmail: ReturnType<typeof g
   const cached = threadCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
-  const stored = await getStoredGmailThread(email, threadId);
-  if (stored) {
-    threadCache.set(cacheKey, { expiresAt: Date.now() + gmailCacheTtlMs, value: stored });
-    return stored;
-  }
-
+  // Un hilo persistido puede ser anterior a una respuesta nueva. Solo se
+  // reutiliza la caché corta de esta sesión; al caducar se consulta Gmail.
   const existingRequest = threadRequests.get(cacheKey);
   if (existingRequest) return existingRequest;
 
@@ -1302,6 +1474,7 @@ async function getThreadMessagesFromGmail(gmail: ReturnType<typeof google.gmail>
       internalDate: message.internalDate ? Number(message.internalDate) : null,
       body,
       dateHints: extractDateHints(body),
+      labelIds: message.labelIds ?? [],
     };
   });
 }
@@ -1320,7 +1493,7 @@ function messageTimestamp(message: { internalDate?: number | null; date?: string
 }
 
 function extractCommitmentSentences(body: string) {
-  const commitmentPattern = /\b(?:te\s+enviar(?:é|e|emos)|enviar(?:é|e|emos)|quedo\s+a\s+la\s+espera|confirm(?:ar|ación|ame|es)|necesit(?:o|amos)\s+que|puedes\s+confirmar|avis(?:a|ar|en)|borr(?:ar|e|emos)|revoc(?:ar|ación)|rotar|termin(?:en|ar)|please\s+confirm|will\s+send|waiting\s+for|let\s+me\s+know|need\s+you\s+to|deadline)\b/i;
+  const commitmentPattern = /\b(?:te\s+enviar(?:é|e|emos)|enviar(?:é|e|emos)|quedo\s+a\s+la\s+espera|confirm(?:ar|ación|ame|es)|necesit(?:o|amos)\s+que|puedes\s+confirmar|avis(?:a|ar|en)|borr(?:ar|e|emos)|revoc(?:ar|ación)|rotar|termin(?:en|ar)|please\s+confirm|will\s+send|waiting\s+for|let\s+me\s+know|need\s+you\s+to|deadline)(?![\p{L}\p{N}_])/iu;
   return body
     .split(/\n+|(?<=[.!?])\s+/)
     .map((sentence) => sentence.replace(/\s+/g, ' ').trim())
@@ -1527,22 +1700,22 @@ async function listMessagesForLabel(
   pageToken?: string,
   query = '',
 ) {
-  const listed = await gmail.users.messages.list({
+  const listed = await withGmailRateLimitRetry(() => gmail.users.messages.list({
     userId: 'me',
     ...(label ? { labelIds: [label] } : {}),
     maxResults: Math.min(Math.max(maxResults, 1), 50),
     pageToken,
     q: query || undefined,
-  });
+  }));
 
-  const messages = await mapWithConcurrency(listed.data.messages ?? [], 3, async ({ id }) => {
+  const messages = await mapWithConcurrency(listed.data.messages ?? [], 2, async ({ id }) => {
       if (!id) return null;
-      const { data } = await gmail.users.messages.get({
+      const { data } = await withGmailRateLimitRetry(() => gmail.users.messages.get({
         userId: 'me',
         id,
         format: 'metadata',
         metadataHeaders: ['Subject', 'From', 'To', 'Date'],
-      });
+      }));
       const headers = Object.fromEntries(
         (data.payload?.headers ?? []).map((header) => [header.name ?? '', header.value ?? '']),
       );
@@ -1570,6 +1743,16 @@ async function listMessagesForLabel(
     resultSizeEstimate: listed.data.resultSizeEstimate ?? null,
     truncated: false,
   };
+}
+
+async function withGmailRateLimitRetry<T>(operation: () => Promise<T>, attempt = 0): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (!isGmailRateLimitError(error) || attempt >= 2) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
+    return withGmailRateLimitRetry(operation, attempt + 1);
+  }
 }
 
 async function mapWithConcurrency<T, R>(items: T[], concurrency: number, mapper: (item: T) => Promise<R>) {

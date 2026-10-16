@@ -1,4 +1,4 @@
-# Seis reglas de seguridad para trabajar con IA
+# Siete reglas de seguridad para trabajar con IA
 
 Estas reglas forman un marco sencillo y memorable para trabajar con inteligencia artificial sin dejar que la inferencia, la sobreoptimización, la prisa o el código externo nos metan por caminos que no queremos.
 
@@ -175,6 +175,35 @@ Hay que explicar qué se ha descubierto, por qué cambia la situación y qué ha
 
 Hace falta detectar primero el problema: la regla no sustituye a estar atento. También exige la valentía de reconocerlo delante de los demás. Un fallo declarado a tiempo suele ser barato de corregir; uno oculto se vuelve más caro cuando ya se ha construido trabajo encima.
 
+## 7. Regla de Doce hombres sin piedad
+
+### Idea
+Un problema detectado por la IA no es necesariamente un problema real.
+
+### Regla
+Antes de declarar que existe un error, la IA debe aportar evidencias verificables.
+
+Debe distinguir entre:
+- **Error confirmado:** existe una prueba reproducible o evidencia objetiva suficiente.
+- **Riesgo potencial:** hay indicios razonables, pero no está demostrado.
+- **Sugerencia de mejora:** no se ha demostrado ningún fallo; se propone una alternativa.
+
+No se debe corregir un supuesto error sin verificarlo previamente y sin autorización.
+
+Si no puede comprobarse, debe declararse la incertidumbre, nunca presentar una sospecha como un hecho.
+
+### Frase corta
+**Sin pruebas, no hay condena.**
+
+### Qué evita
+- falsos positivos en auditorías de QA;
+- refactorizaciones innecesarias;
+- modificaciones de código que funciona;
+- introducir errores al corregir problemas inexistentes;
+- confundir opiniones técnicas con defectos reales.
+
+---
+
 ## Resumen
 
 **Jurassic Park** → No inventes lo que falta.
@@ -189,11 +218,13 @@ Hace falta detectar primero el problema: la regla no sustituye a estar atento. T
 
 **Tiburón (Jaws)** → Si el plan ya no alcanza, dilo y cambia de barco.
 
+**Doce hombres sin piedad** → Sin pruebas, no hay condena.
+
 ---
 
 ## Principio común
 
-Las seis reglas buscan lo mismo:
+Las siete reglas buscan lo mismo:
 
 > **Reducir el espacio de error antes de ejecutar.**
 

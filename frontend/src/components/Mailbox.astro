@@ -3,12 +3,12 @@
   <div class="card-header">
     <div class="mailbox-heading">
       <div class="mailbox-title-row">
-        <h2>Mensajes de la bandeja</h2>
+        <h2 id="mailboxTitle">Mensajes de la bandeja</h2>
         <button id="messageRangeInfoButton" class="mailbox-info-button" type="button" aria-label="Cómo funciona esta bandeja" aria-haspopup="dialog">
           <img src="/icons/home/question-mark.svg" alt="" aria-hidden="true" />
         </button>
       </div>
-      <p>Busca, revisa y gestiona tus correos de Gmail.</p>
+      <p id="mailboxSubtitle">Busca, revisa y gestiona tus correos de Gmail.</p>
     </div>
   <div class="mailbox-header-actions"><span id="mailboxCount" class="muted" aria-label="Sin periodo seleccionado"></span><span id="mailboxSyncStatus" class="mailbox-sync-status muted" data-sync-state="idle" role="status" aria-live="polite">Selecciona un periodo</span><button id="mailboxRefreshButton" class="secondary-button" type="button" title="Actualizar ahora los mensajes de Gmail">Actualizar Gmail</button><button id="composeMessageButton" type="button">Nuevo correo</button></div>
   </div>
@@ -16,6 +16,7 @@
     <select id="messageMailbox" aria-label="Tipo de mensajes">
       <option value="inbox">Recibidos</option>
       <option value="sent">Enviados</option>
+      <option value="all">Recibidos y enviados</option>
       <option value="archived">Archivados en Gmail</option>
       <option value="appArchived">Archivados por Asistente Comercial</option>
       <option value="spam">Spam</option>
@@ -175,7 +176,8 @@
         <ul>
           <li><strong>Mostrar:</strong> se cargan 10 mensajes por página.</li>
           <li><strong>Buscar por fecha:</strong> elige este mes, un día concreto o un periodo.</li>
-          <li><strong>Mensajes y Clientes:</strong> aparecen después de aplicar el periodo y trabajan sobre esa misma selección.</li>
+          <li id="messageRangeInfoViews"><strong>Mensajes y Clientes:</strong> aparecen después de aplicar el periodo y trabajan sobre esa misma selección.</li>
+          <li id="messageRangeInfoClientPeriod"><strong>Periodo propio de Clientes:</strong> puedes cambiarlo sin modificar Mensajes y volver a alinearlo. «Ver mensajes» y «Analizar necesidades» abren el contacto con el periodo de su ficha.</li>
           <li><strong>Paginación:</strong> solo se carga la página que consultas.</li>
         </ul>
         <p class="message-range-info-subtle">Así se evita cargar todo el historial y se reduce el número de consultas a Gmail.</p>
@@ -292,10 +294,10 @@
   .message p { margin: 0; color: #4E4745; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
   .mailbox-permissions { margin: 14px 0 0; font-size: 12px; }
   .mailbox-archived-notice { margin: 10px 0 0; padding: 10px 12px; border-radius: 9px; background: var(--surface-ai); font-size: 12px; }
-  .compose-message { display: grid; gap: 10px; margin-top: 18px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-ai); }
+  .compose-message { display: grid; gap: 10px; margin: 18px 0 30px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-ai); }
   .compose-message[hidden] { display: none; }
   .compose-heading, .compose-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .compose-heading #composeTitle, .compose-heading .secondary-button, .compose-message label, .compose-actions #previewComposeButton { font-weight: 400; }
+  .compose-heading #composeTitle, .compose-heading .secondary-button, .compose-message label, .compose-actions #previewComposeButton, .compose-actions #confirmComposeButton { font-weight: 400; }
   .compose-message label { display: grid; gap: 5px; font-size: 12px; }
   .compose-message input, .compose-message textarea { width: 100%; margin: 0; padding: 10px 11px; border: 1px solid var(--border); border-radius: 9px; color: var(--ink); background: var(--surface-input); font: inherit; }
   .compose-message textarea { min-height: 130px; resize: vertical; }
@@ -314,8 +316,6 @@
   .message-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px; margin-left: 0; }
   .message-actions button { height: 34px; min-height: 34px; padding: 0 10px; border: 1px solid var(--border); color: var(--ink); background: var(--warm); font-family: var(--font-body); font-size: 12px; font-weight: 400; line-height: 1; }
   .message-actions button:hover, .message-actions button:focus-visible { color: var(--ink); background: var(--orange-light); }
-  .message-actions button.message-action-unread { color: var(--action-unread-fg); background: var(--action-unread-bg); border-color: var(--action-unread-border); }
-  .message-actions button.message-action-unread:hover, .message-actions button.message-action-unread:focus-visible { color: var(--action-unread-fg); background: var(--action-unread-hover); }
   .message-actions button.message-action-archive { color: var(--action-archive-fg); background: var(--action-archive-bg); border-color: var(--action-archive-border); }
   .message-actions button.message-action-archive:hover, .message-actions button.message-action-archive:focus-visible { color: var(--action-archive-fg); background: var(--action-archive-hover); }
   .message-actions button.message-action-trash, .message-actions button.danger { color: var(--action-trash-fg); background: var(--action-trash-bg); border-color: var(--action-trash-border); }

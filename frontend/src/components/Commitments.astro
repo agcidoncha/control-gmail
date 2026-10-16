@@ -2,8 +2,13 @@
   <div class="card commitments-overview">
     <div class="card-header">
       <div>
-        <h2>Compromisos detectados</h2>
-        <p>Posibles tareas identificadas en conversaciones; siempre requieren revisión.</p>
+        <div class="commitment-title-row">
+          <h2>Posibles compromisos detectados</h2>
+          <button id="commitmentInfoButton" class="commitment-info-button" type="button" aria-label="Cómo se detectan los compromisos" aria-haspopup="dialog">
+            <img src="/icons/home/question-mark.svg" alt="" aria-hidden="true" />
+          </button>
+        </div>
+        <p>Frases de los correos que sugieren una tarea, fecha, promesa o respuesta pendiente. Revísalos antes de actuar: no son compromisos confirmados.</p>
       </div>
       <span id="commitmentCount" class="muted">Sin periodo seleccionado</span>
     </div>
@@ -40,26 +45,51 @@
       <button id="applyCommitmentRange" type="submit">Aplicar</button>
       <button id="clearCommitmentRange" class="secondary-button" type="button" hidden>Limpiar fechas</button>
     </form>
-    <p class="commitment-range-help muted">Elige un periodo y pulsa «Aplicar» para consultar los compromisos. Solo se carga lo que pidas.</p>
+    <p id="commitmentPeriodPrompt" class="commitment-range-help muted">Elige un periodo y pulsa «Aplicar» para consultar los compromisos.</p>
 
-    <div class="commitment-tools">
-      <input id="commitmentSearch" type="search" placeholder="Buscar asunto, responsable o compromiso…" aria-label="Buscar compromisos" />
-      <select id="commitmentOwner" aria-label="Filtrar responsable">
-        <option value="all">Todos los responsables</option>
-        <option value="commercial">Adquiridos por el comercial</option>
-        <option value="client">Adquiridos por el cliente</option>
+    <div id="commitmentTools" class="commitment-tools" hidden>
+      <input id="commitmentSearch" type="search" placeholder="Buscar asunto, autor o compromiso…" aria-label="Buscar compromisos" />
+      <select id="commitmentOwner" aria-label="Filtrar por autor del mensaje">
+        <option value="all">Todos los autores</option>
+        <option value="commercial">En mensajes del comercial</option>
+        <option value="client">En mensajes del contacto</option>
       </select>
     </div>
   </div>
 
   <div id="commitments" class="commitments-list" aria-live="polite">
-    <p class="muted">Elige un periodo arriba y pulsa «Aplicar» para consultar los compromisos.</p>
+  </div>
+
+  <div id="commitmentInfoModal" class="commitment-info-modal" hidden role="dialog" aria-modal="true" aria-labelledby="commitmentInfoTitle" aria-describedby="commitmentInfoDescription">
+    <div class="commitment-info-dialog">
+      <div class="commitment-info-heading">
+        <img src="/icons/home/question-mark.svg" alt="" aria-hidden="true" />
+        <h2 id="commitmentInfoTitle" tabindex="-1">Cómo se detectan los compromisos</h2>
+      </div>
+      <div id="commitmentInfoDescription">
+        <p>La aplicación busca primero frases que pueden indicar una tarea, promesa, confirmación, fecha o respuesta pendiente y después las revisa con el proveedor y modelo de IA configurados.</p>
+        <ul>
+          <li>Después, la IA revisa el hilo disponible para comprobar si la frase representa realmente un compromiso.</li>
+          <li>Las frases se buscan en el contenido de los mensajes del periodo. La revisión incluye el resto del hilo para aportar contexto, también si hay respuestas posteriores.</li>
+          <li>Si el significado no está claro, aparece «Revisión humana». Puedes probar un modelo superior al configurado si necesitas una valoración más precisa.</li>
+          <li>Si la IA no está disponible, la señal se conserva para no ocultar un posible pendiente y se marca para revisión.</li>
+          <li>La aplicación muestra la frase y el hilo de origen para que puedas comprobar el contexto.</li>
+          <li>El filtro de autor indica quién escribió el mensaje. Esa persona puede estar pidiendo una acción a otra: revisa la frase para saber quién debe actuar.</li>
+          <li>Si la consulta alcanza un límite, se avisa de que el resultado es parcial. Acota el periodo para revisarlo.</li>
+        </ul>
+        <p class="commitment-info-subtle">Un posible compromiso no es una tarea confirmada, no se añade a ninguna agenda y no modifica Gmail. Revisa siempre el hilo completo antes de actuar.</p>
+      </div>
+      <div class="commitment-info-actions">
+        <button id="commitmentInfoClose" class="button-link" type="button">Entendido</button>
+      </div>
+    </div>
   </div>
 </section>
 
 <script is:inline src="/scripts/commitments.js"></script>
 
 <style is:global>
+  body.commitment-info-open { overflow: hidden; }
   .commitments-screen { display: grid; gap: 14px; margin-top: 18px; }
   .commitment-range { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin: 14px 0 4px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-ai); }
   .commitment-range [hidden] { display: none; }
@@ -79,6 +109,7 @@
   .commitment-range button:disabled { cursor: wait; opacity: .65; }
   .commitment-range-help { margin: 8px 0 0; font-size: 12px; }
   .commitment-tools { display: flex; gap: 12px; margin: 18px 0 4px; }
+  .commitment-tools[hidden] { display: none; }
   .commitment-tools input { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; background: var(--surface-input); color: var(--ink); }
   .commitment-tools select { width: 100%; min-width: 0; }
   .commitments-list { display: grid; gap: 12px; margin-top: 0; }
@@ -97,5 +128,27 @@
   .commitment-thread .thread-message strong, .commitment-thread .thread-message small, .commitment-thread .thread-message p { display: block; }
   .commitment-thread .thread-message small { margin-top: 3px; color: var(--muted); }
   .commitment-thread .thread-message p { margin: 7px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .commitment-title-row { display: flex; align-items: center; gap: 10px; }
+  .commitment-title-row h2 { margin: 0; }
+  .commitment-info-button { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; padding: 6px; border: 1px solid var(--border); border-radius: 50%; color: var(--muted); background: var(--surface-ai); cursor: pointer; }
+  .commitment-info-button:hover, .commitment-info-button:focus-visible { border-color: var(--orange-light); color: var(--orange-dark); background: var(--surface-hover); outline: none; }
+  .commitment-info-button img { display: block; width: 100%; height: 100%; }
+  .commitment-info-modal { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 24px; background: rgba(35, 31, 32, .34); }
+  .commitment-info-modal[hidden] { display: none; }
+  .commitment-info-dialog { width: min(680px, 100%); max-height: min(760px, calc(100vh - 48px)); overflow: auto; padding: 26px; border: 1px solid var(--border); border-radius: 18px; background: var(--panel); box-shadow: 0 20px 60px rgba(35, 31, 32, .22); }
+  .commitment-info-heading { display: flex; align-items: center; gap: 12px; }
+  .commitment-info-heading img { width: 26px; height: 26px; }
+  .commitment-info-heading h2 { margin: 0; font-size: 22px; }
+  .commitment-info-dialog p { margin: 16px 0 0; color: var(--body-copy); font-size: 14px; line-height: 1.55; }
+  .commitment-info-dialog ul { display: grid; gap: 9px; margin: 14px 0 0; padding-left: 22px; color: var(--body-copy); font-size: 14px; line-height: 1.5; }
+  .commitment-info-dialog li::marker { color: var(--orange-dark); }
+  .commitment-info-subtle { color: var(--muted) !important; font-size: 13px !important; }
+  .commitment-info-actions { display: flex; justify-content: flex-end; margin-top: 22px; }
   @media (max-width: 640px) { .commitment-range { align-items: stretch; flex-direction: column; } .commitment-range-control, .commitment-date-mode-control, .commitment-date-range .commitment-range-control { grid-template-columns: minmax(110px, auto) minmax(0, 1fr) auto; } .commitment-range-summary { grid-column: 1 / -1; white-space: normal; } .commitment-date-range { flex-direction: column; } .commitment-range button { width: 100%; } .commitment { grid-template-columns: 1fr; gap: 10px; } .commitment-side { align-items: flex-start; flex-direction: row; flex-wrap: wrap; } .commitment-status { align-self: center; } }
+  @media (max-width: 640px) { .commitment-info-modal { padding: 14px; } .commitment-info-dialog { max-height: calc(100vh - 28px); padding: 20px; border-radius: 14px; } .commitment-info-heading h2 { font-size: 19px; } }
+  @media (max-width: 420px) {
+    .commitment-range-control, .commitment-date-mode-control, .commitment-date-range .commitment-range-control { grid-template-columns: minmax(0, 1fr); }
+    .commitment-range-control input, .commitment-range-control select { width: 100%; }
+    .commitment-page-size-fixed { display: flex; flex-wrap: wrap; }
+  }
 </style>

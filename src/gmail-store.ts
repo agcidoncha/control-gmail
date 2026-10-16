@@ -36,6 +36,7 @@ export type StoredThreadMessage = {
 };
 
 export type GmailSyncState = {
+  queryVersion?: number;
   accountEmail: string;
   from: string;
   to: string;

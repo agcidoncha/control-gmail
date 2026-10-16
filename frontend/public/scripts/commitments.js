@@ -3,6 +3,8 @@
   const countNode = document.querySelector('#commitmentCount');
   const searchNode = document.querySelector('#commitmentSearch');
   const ownerNode = document.querySelector('#commitmentOwner');
+  const toolsNode = document.querySelector('#commitmentTools');
+  const periodPromptNode = document.querySelector('#commitmentPeriodPrompt');
   const rangeForm = document.querySelector('#commitmentRangeForm');
   const dateModeNode = document.querySelector('#commitmentDateMode');
   const exactDateField = document.querySelector('#commitmentExactDateField');
@@ -13,11 +15,42 @@
   const rangeSummaryNode = document.querySelector('#commitmentRangeSummary');
   const applyRangeButton = document.querySelector('#applyCommitmentRange');
   const clearRangeButton = document.querySelector('#clearCommitmentRange');
+  const infoButton = document.querySelector('#commitmentInfoButton');
+  const infoModal = document.querySelector('#commitmentInfoModal');
+  const infoCloseButton = document.querySelector('#commitmentInfoClose');
   if (!listNode || !countNode || !searchNode || !ownerNode || !rangeForm || !dateModeNode || !exactDateField || !exactDateNode || !dateRangeFields || !dateFromNode || !dateToNode || !rangeSummaryNode || !applyRangeButton || !clearRangeButton) return;
 
   let items = [];
   let hasAppliedRange = false;
   let loading = false;
+  let hasMore = false;
+  let resultsTruncated = false;
+
+  function closeInfoModal() {
+    if (!infoModal) return;
+    infoModal.hidden = true;
+    document.body.classList.remove('commitment-info-open');
+    infoButton?.focus();
+  }
+
+  function openInfoModal() {
+    if (!infoModal) return;
+    infoModal.hidden = false;
+    document.body.classList.add('commitment-info-open');
+    const heading = infoModal.querySelector('h2');
+    heading?.focus({ preventScroll: true });
+    const dialog = infoModal.querySelector('.commitment-info-dialog');
+    if (dialog) dialog.scrollTop = 0;
+  }
+
+  infoButton?.addEventListener('click', openInfoModal);
+  infoCloseButton?.addEventListener('click', closeInfoModal);
+  infoModal?.addEventListener('click', (event) => {
+    if (event.target === infoModal) closeInfoModal();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && infoModal && !infoModal.hidden) closeInfoModal();
+  });
 
   const text = (tag, value, className = '') => {
     const node = document.createElement(tag);
@@ -65,7 +98,7 @@
       if (!exactDateNode.value) throw new Error('Selecciona el día que quieres consultar.');
       return { from: exactDateNode.value, to: exactDateNode.value };
     }
-    if (!dateFromNode.value && !dateToNode.value) throw new Error('Indica al menos una fecha para buscar el periodo.');
+    if (!dateFromNode.value || !dateToNode.value) throw new Error('Indica las fechas «Desde» y «Hasta» para buscar el periodo.');
     if (dateFromNode.value && dateToNode.value && dateFromNode.value > dateToNode.value) {
       throw new Error('La fecha «Desde» no puede ser posterior a «Hasta».');
     }
@@ -96,16 +129,23 @@
   function renderPendingState() {
     loading = false;
     items = [];
+    hasMore = false;
+    resultsTruncated = false;
     countNode.textContent = 'Sin periodo seleccionado';
     countNode.removeAttribute('aria-label');
     rangeSummaryNode.textContent = 'Sin periodo seleccionado';
     listNode.removeAttribute('aria-hidden');
     listNode.removeAttribute('aria-busy');
     listNode.removeAttribute('aria-label');
-    listNode.replaceChildren(text('p', 'Elige un periodo arriba y pulsa «Aplicar» para consultar los compromisos.', 'muted'));
+    listNode.replaceChildren();
+    if (toolsNode) toolsNode.hidden = true;
+    if (periodPromptNode) periodPromptNode.hidden = false;
   }
 
   function render() {
+    if (!hasAppliedRange) return renderPendingState();
+    if (toolsNode) toolsNode.hidden = false;
+    if (periodPromptNode) periodPromptNode.hidden = true;
     listNode.removeAttribute('aria-hidden');
     listNode.removeAttribute('aria-busy');
     listNode.removeAttribute('aria-label');
@@ -120,7 +160,13 @@
       return matchesQuery && matchesOwner;
     });
     countNode.textContent = visible.length + (visible.length === 1 ? ' posible compromiso' : ' posibles compromisos');
+    if (hasMore || resultsTruncated) countNode.textContent += ' · resultado parcial';
     listNode.replaceChildren();
+    if (hasMore || resultsTruncated) {
+      listNode.append(text('p', hasMore
+        ? 'Hay más compromisos que los mostrados. Acota el periodo para revisarlos.'
+        : 'La consulta del periodo está limitada. Acota las fechas para revisar todos los candidatos.', 'muted'));
+    }
     if (!visible.length) {
       listNode.append(text('p', items.length ? 'No hay compromisos que coincidan con la búsqueda.' : 'No hay compromisos verificables en los hilos consultados.', 'muted'));
       return;
@@ -176,6 +222,8 @@
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'No se pudieron cargar los compromisos.');
       items = result.commitments || [];
+      hasMore = Boolean(result.hasMore);
+      resultsTruncated = Boolean(result.truncated);
       setRangeSummary(result.analysisWindow);
       const navCount = document.querySelector('#navCommitmentCount');
       if (navCount) { navCount.textContent = String(items.length); navCount.hidden = false; }

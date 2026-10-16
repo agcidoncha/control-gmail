@@ -59,6 +59,16 @@ test('las rutas privadas rechazan peticiones sin sesión', async () => {
   assert.equal(clientHistory.statusCode, 401);
 });
 
+test('mensajes, clientes, seguimientos y compromisos rechazan fechas inválidas antes de consultar Gmail', async () => {
+  for (const path of ['/gmail/messages', '/gmail/insights', '/gmail/follow-ups', '/gmail/commitments']) {
+    for (const query of ['from=2026-10-12&to=2026-10-01', 'from=2026-02-30&to=2026-03-01', 'to=2999-01-01']) {
+      const response = await app.inject({ method: 'GET', url: `${path}?${query}`, headers: { cookie: sessionCookieHeader('angel.cidoncha@gmail.com') } });
+      assert.equal(response.statusCode, 400, `${path}?${query}`);
+      assert.match(response.json().error, /fecha/i);
+    }
+  }
+});
+
 test('el administrador puede ver usuarios pero no contenido de correos', async () => {
   const response = await app.inject({
     method: 'GET',

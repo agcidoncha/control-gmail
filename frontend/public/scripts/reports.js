@@ -113,7 +113,7 @@
     statsNode.replaceChildren(
       renderStat('Correos revisados', insights.reviewedMessages, `${insights.inboxMessages} recibidos · ${insights.sentMessages} enviados`),
       renderStat('Clientes detectados', insights.clients.length, latestClient),
-      renderStat('Seguimientos pendientes', followUps.length, 'Mensajes enviados sin respuesta posterior'),
+      renderStat('Seguimientos pendientes', data.followUpTotal ?? followUps.length, data.followUpsTruncated ? 'Resultado parcial: acota el periodo para revisarlos todos' : 'Mensajes enviados sin respuesta posterior'),
       renderStat('Compromisos pendientes', commitments.length, latestDate),
     );
     renderBreakdown(activityNode, actionCounts, 'Todavía no hay acciones registradas desde la aplicación.');
@@ -123,7 +123,7 @@
       (() => { const card = document.createElement('div'); card.className = 'report-attention-card'; card.append(text('span', 'Acciones con error'), text('strong', actions.length - successCount)); return card; })(),
       (() => { const card = document.createElement('div'); card.className = 'report-attention-card'; card.append(text('span', 'Periodo consultado'), text('strong', data.analysisWindow.days + ' días')); return card; })(),
     );
-    windowNode.textContent = `Periodo: ${formatDate(data.analysisWindow.from)} – ${formatDate(data.analysisWindow.to)} · ${actions.length} acciones registradas.`;
+    windowNode.textContent = `Periodo: ${formatDate(data.analysisWindow.from)} – ${formatDate(data.analysisWindow.to)} · ${actions.length} acciones registradas.${insights.truncated ? ' Datos de correo parciales: acota el periodo para revisar más resultados.' : ''}`;
   }
 
   async function load() {
@@ -146,7 +146,7 @@
         const timestamp = new Date(action.createdAt);
         return timestamp >= from && timestamp <= to;
       });
-      render({ ...insights, followUps: followUps.followUps, commitments: commitments.commitments, actions: periodActions });
+      render({ ...insights, followUps: followUps.followUps, followUpTotal: followUps.total, followUpsTruncated: followUps.truncated, commitments: commitments.commitments, actions: periodActions });
     } catch (error) {
       statsNode.replaceChildren(text('p', error.message || 'No se pudo cargar el informe.', 'report-error'));
       activityNode.replaceChildren();
@@ -166,5 +166,4 @@
   refreshNode.addEventListener('click', load);
   printNode.addEventListener('click', () => window.print());
   updateCustomRange();
-  load();
 })();

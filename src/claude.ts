@@ -19,6 +19,18 @@ export type CommercialAnalysis = {
   fuentes: Array<{ mensaje_id: string; asunto: string; motivo: string }>;
 };
 
+export function validateAnalysisSources(analysis: CommercialAnalysis, messages: Array<{ id: string | null; subject: string | null }>): CommercialAnalysis {
+  if (!messages.length) return analysis;
+  const subjects = new Map(messages.flatMap((message) => message.id ? [[message.id, message.subject ?? 'Sin asunto'] as const] : []));
+  const sources = analysis.fuentes.filter((source) => subjects.has(source.mensaje_id))
+    .map((source) => ({ ...source, asunto: subjects.get(source.mensaje_id)! }));
+  if (sources.length && sources.length === analysis.fuentes.length) return { ...analysis, fuentes: sources };
+  const warning = sources.length
+    ? 'Se han descartado referencias del modelo que no corresponden a los mensajes analizados. Comprueba las conclusiones en los hilos originales.'
+    : 'El modelo no ha aportado referencias verificables a los mensajes analizados. Comprueba las conclusiones en los hilos originales antes de actuar.';
+  return { ...analysis, fuentes: sources, requiere_revision: true, respuesta: `${warning}\n\n${analysis.respuesta}` };
+}
+
 export async function askClaude(input: {
   apiKey: string;
   model: string;

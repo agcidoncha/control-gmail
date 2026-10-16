@@ -25,12 +25,12 @@
       <div id="assistantClientSection" class="assistant-client-picker">
         <div>
           <label for="assistantClient">Cliente a analizar</label>
-          <p class="analysis-help">Elige un cliente para analizar solo sus conversaciones. Si no eliges ninguno, se revisará el conjunto disponible.</p>
+          <p class="analysis-help">Selecciona un contacto para analizar sus conversaciones o elige «Todos los clientes» para revisar el conjunto disponible.</p>
         </div>
         <label class="assistant-client-search-label" for="assistantClientSearch">Buscar cliente</label>
         <input id="assistantClientSearch" type="search" placeholder="Escribe un correo para localizarlo…" autocomplete="off" />
         <div id="assistantClientResults" class="assistant-client-results" role="listbox" aria-label="Clientes encontrados" aria-live="polite" hidden></div>
-        <select id="assistantClient" class="assistant-client-native-select" aria-describedby="assistantClientStatus" tabindex="-1">
+        <select id="assistantClient" class="assistant-client-native-select" aria-describedby="assistantClientStatus">
           <option value="" selected disabled>Selecciona un cliente</option>
           <option value="__all__">Todos los clientes (análisis general)</option>
         </select>
@@ -184,8 +184,9 @@
   .assistant-answer p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
   .assistant-answer ul { margin: 0; padding-left: 20px; }
   .assistant-answer li { margin: 5px 0; overflow-wrap: anywhere; }
-  .assistant-answer .review-note { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding: 11px 13px; border-radius: 9px; color: var(--orange-dark); background: #FFF1E2; font-size: 15px; font-weight: 500; }
-  .assistant-answer .review-note img { width: 28px; height: 28px; flex: 0 0 28px; }
+  .assistant-answer .review-note { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding: 12px 14px; border: 1px solid var(--danger); border-radius: 9px; color: #FFFFFF; background: var(--danger); font-size: 15px; font-weight: 700; }
+  .assistant-answer .review-note img { width: 28px; height: 28px; flex: 0 0 28px; filter: brightness(0) invert(1); }
+  html[data-theme='dark'] .assistant-answer .review-note { color: #FFFFFF !important; background: var(--danger) !important; border-color: var(--danger) !important; }
   .assistant-answer .source { padding: 9px 0; border-bottom: 1px solid var(--border); }
   .assistant-answer .source:last-child { border-bottom: 0; }
   .assistant-answer .source strong, .assistant-answer .source small { display: block; }
@@ -218,7 +219,7 @@
     .assistant-answer h3, .assistant-answer h4, .assistant-answer p, .assistant-answer li, .assistant-answer strong { color: #111 !important; }
     .assistant-answer h3 { font-size: 20px !important; }
     .assistant-answer h4 { color: #9a5715 !important; }
-    .assistant-answer .review-note { color: #8b4c12 !important; background: #fff1e2 !important; break-inside: avoid; }
+    .assistant-answer .review-note { color: #fff !important; background: #A33C28 !important; border-color: #A33C28 !important; break-inside: avoid; }
     .assistant-answer .source { break-inside: avoid; border-color: #ccc !important; }
   }
   @media (prefers-reduced-motion: reduce) { .assistant-loading-spinner, .assistant-loading-dots::after { animation: none; } }

@@ -8,9 +8,9 @@ const navItems = [
   { href: '/mailbox', label: 'Bandeja comercial', icon: '/icons/home/bandeja.svg', key: '/mailbox' },
   { href: '/follow-ups', label: 'Seguimientos', icon: '/icons/home/seguimientos.svg', key: '/follow-ups' },
   { href: '/commitments', label: 'Compromisos', icon: '/icons/home/compromiso.svg', key: '/commitments' },
-  { href: '/activity', label: 'Actividad', icon: '/icons/home/reportes.svg', key: '/activity' },
   { href: '/mailbox?mailbox=trash', label: 'Papelera', icon: '/icons/home/trash.svg', key: '/mailbox-trash' },
   { href: '/reports', label: 'Informes', icon: '/icons/home/reportes.svg', key: '/reports' },
+  { href: '/activity', label: 'Actividad', icon: '/icons/home/reportes.svg', key: '/activity' },
   { href: '/consultar-ia', label: 'Consultar a la IA', icon: '/icons/home/consultar-ai.svg', key: '/consultar-ia' },
   { href: '/settings/ai', label: 'Configuración IA', icon: '/icons/home/settings-ai.svg', key: '/settings/ai' },
   { href: '/settings/users', label: 'Usuarios', icon: '/icons/home/usuarios.svg', key: '/settings/users', adminOnly: true },
@@ -65,7 +65,26 @@ const pageTitle = currentPath === '/settings/ai' ? 'Configuración de IA' : acti
         document.addEventListener('keydown', (event) => {
           const modal = document.querySelector('#appNoticeModal');
           if (modal && !modal.hidden && event.key === 'Escape') {
-            modal.hidden = true;
+            document.querySelector('#appNoticeClose')?.click();
+          }
+          if (event.key !== 'Tab') return;
+          const dialogs = [...document.querySelectorAll('[aria-modal="true"]')]
+            .filter((dialog) => dialog.getClientRects().length && getComputedStyle(dialog).visibility !== 'hidden');
+          const layer = (dialog) => {
+            let z = 0;
+            for (let node = dialog; node; node = node.parentElement) z = Math.max(z, Number.parseInt(getComputedStyle(node).zIndex, 10) || 0);
+            return z;
+          };
+          const activeDialog = dialogs.sort((left, right) => layer(left) - layer(right)).at(-1);
+          if (!activeDialog) return;
+          const controls = [...activeDialog.querySelectorAll('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')]
+            .filter((control) => control.getClientRects().length);
+          const first = controls[0];
+          const last = controls.at(-1);
+          if (!first) { event.preventDefault(); return; }
+          if (!controls.includes(document.activeElement) || (event.shiftKey && document.activeElement === first) || (!event.shiftKey && document.activeElement === last)) {
+            event.preventDefault();
+            (event.shiftKey ? last : first).focus();
           }
         });
       })();
@@ -180,4 +199,14 @@ const pageTitle = currentPath === '/settings/ai' ? 'Configuración de IA' : acti
   html[data-theme='dark'] { --skeleton-base: #383231; --skeleton-highlight: #514945; } html:not([data-theme='dark']) { --skeleton-base: #E6E0DB; --skeleton-highlight: #F8F5F2; } html[data-theme='dark'] .app-shell select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23F0A24F' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); } html[data-theme='dark'] .sidebar { border-right: 1px solid var(--border); } html[data-theme='dark'] .nav-link { color: #E8E1DD; } html[data-theme='dark'] .message p, html[data-theme='dark'] .follow-up p, html[data-theme='dark'] .commitment p { color: var(--body-copy); } html[data-theme='dark'] .message-tools input, html[data-theme='dark'] .message-tools select, html[data-theme='dark'] .follow-up-tools input, html[data-theme='dark'] .follow-up-tools select, html[data-theme='dark'] .commitment-tools input, html[data-theme='dark'] .ai-form input, html[data-theme='dark'] .ai-form select, html[data-theme='dark'] .admin-ai-provider select, html[data-theme='dark'] .user-form input, html[data-theme='dark'] .user-form select, html[data-theme='dark'] .assistant-form textarea { background: var(--surface-input); color: var(--ink); } html[data-theme='dark'] .filter-chip, html[data-theme='dark'] .connection-card.personal-connection, html[data-theme='dark'] .shared-ai-user { background: var(--panel); color: var(--ink); } html[data-theme='dark'] .filter-chip.active, html[data-theme='dark'] .filter-chip:hover, html[data-theme='dark'] .filter-chip:focus-visible, html[data-theme='dark'] .follow-up-age, html[data-theme='dark'] .commitment-status, html[data-theme='dark'] .assistant-answer .review-note, html[data-theme='dark'] .status-pill.status-warning { background: var(--surface-alt); color: var(--orange-light); } html[data-theme='dark'] .message.is-open { background: var(--surface-hover); } html[data-theme='dark'] .thread-inline, html[data-theme='dark'] .follow-up-thread, html[data-theme='dark'] .commitment-thread, html[data-theme='dark'] .assistant-answer, html[data-theme='dark'] .authorized-user { background: var(--surface-ai); } html[data-theme='dark'] .thread-button, html[data-theme='dark'] .follow-up-thread-button, html[data-theme='dark'] .commitment-thread-button { background: #FFFFFF; color: #231F20; } html[data-theme='dark'] .thread-button:hover, html[data-theme='dark'] .follow-up-thread-button:hover, html[data-theme='dark'] .commitment-thread-button:hover { background: var(--orange-dark); color: #FFFFFF; } html[data-theme='dark'] .admin-ai-controls, html[data-theme='dark'] .security-note { background: var(--surface-ai); } html[data-theme='dark'] .status-pill { color: var(--success); background: var(--success-bg); } html[data-theme='dark'] .status-pill.status-neutral { color: var(--muted); background: var(--neutral-bg); }
   @media (max-width: 900px) { .app-shell { --sidebar-width: 28%; } .main { padding: 0 24px 56px; } .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 640px) { .app-shell { display: block; } .sidebar-resizer { display: none; } .sidebar { position: sticky; height: auto; max-height: none; overflow: visible; gap: 14px; padding: 18px 14px; } .sidebar-nav { display: flex; overflow-x: auto; padding-bottom: 3px; } .nav-link { flex: 0 0 auto; } .sidebar-footer { display: none; } .main { padding: 0 14px 48px; } .topbar { align-items: flex-start; flex-direction: column; padding: 22px 0 18px; } .top-actions { width: 100%; min-width: 0; flex-wrap: wrap; } .top-session-bar { flex: 1 1 100%; width: 100%; min-width: 0; justify-content: flex-start; } .account-status { width: 100%; max-width: none; min-width: 0; } .account-status strong { flex: 1 1 auto; min-width: 0; max-width: none; } .top-divider { display: none; } .welcome { align-items: flex-start; flex-direction: column; padding: 20px; } .stats { grid-template-columns: 1fr 1fr; gap: 10px; } .stat { padding: 14px; } }
+  @media (max-width: 640px) {
+    .topbar { gap: 12px; }
+    .top-subtitle { margin-bottom: 0; }
+    .top-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; }
+    .top-session-bar { grid-column: 1; grid-row: 1; }
+    .top-actions > .help-panel-wrap { grid-column: 2; grid-row: 1; }
+    .top-actions > .theme-toggle { grid-column: 3; grid-row: 1; }
+    .account-status { padding-left: 8px; }
+    .account-status > span { display: none; }
+  }
 </style>
