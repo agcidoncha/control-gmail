@@ -43,7 +43,9 @@
   }
 
   function getParams() {
-    const params = new URLSearchParams({ max: '1000' });
+    // El resumen no necesita forzar el máximo absoluto de Gmail. El servidor
+    // respeta el límite de análisis configurado y marca los resultados parciales.
+    const params = new URLSearchParams({ max: '30' });
     if (periodNode.value === 'custom') {
       if (!fromNode.value || !toNode.value) throw new Error('Indica las fechas Desde y Hasta.');
       if (fromNode.value > toNode.value) throw new Error('La fecha Desde no puede ser posterior a Hasta.');
@@ -134,12 +136,12 @@
     try {
       const params = getParams();
       const suffix = params.toString();
-      const [insights, followUps, commitments, actions] = await Promise.all([
-        fetchJson('/gmail/insights?' + suffix),
-        fetchJson('/gmail/follow-ups?' + suffix),
-        fetchJson('/gmail/commitments?' + suffix),
-        fetchJson('/gmail/actions?max=1000&scope=organization'),
-      ]);
+      // No lanzar tres análisis de Gmail a la vez: cada uno puede refrescar
+      // contexto y consultar hilos. Escalonarlos reduce picos de cuota.
+      const insights = await fetchJson('/gmail/insights?' + suffix);
+      const followUps = await fetchJson('/gmail/follow-ups?' + suffix);
+      const commitments = await fetchJson('/gmail/commitments?' + suffix);
+      const actions = await fetchJson('/gmail/actions?max=1000&scope=organization');
       const from = new Date(`${insights.analysisWindow.from.replaceAll('/', '-')}T00:00:00`);
       const to = new Date(`${insights.analysisWindow.to.replaceAll('/', '-')}T23:59:59`);
       const periodActions = (actions.actions || []).filter((action) => {

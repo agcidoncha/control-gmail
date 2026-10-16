@@ -16,11 +16,8 @@
       <label>
         <span>Periodo</span>
         <select id="reportPeriod" aria-label="Periodo del informe">
-          <option value="30" selected>Últimos 30 días</option>
-          <option value="90">Últimos 3 meses</option>
-          <option value="180">Últimos 6 meses</option>
-          <option value="365">Último año</option>
-          <option value="custom">Rango personalizado</option>
+          <option value="30" selected>Último mes</option>
+          <option value="custom">Elegir un rango</option>
         </select>
       </label>
       <div id="reportCustomRange" class="report-custom-range" hidden>
@@ -79,6 +76,7 @@
 <style is:global>
   .reports-screen { display: grid; gap: 14px; margin-top: 18px; }
   .reports-overview { display: grid; gap: 18px; }
+  .reports-overview .eyebrow { font-weight: 600; }
   .reports-overview h2 { margin: 0 0 5px; }
   .reports-overview .card-header p { margin: 0; color: var(--muted); font-size: 13px; }
   .reports-header-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }

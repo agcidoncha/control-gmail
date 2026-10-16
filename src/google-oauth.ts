@@ -1094,7 +1094,10 @@ export async function listPendingFollowUps(email: string, maxResults = 10, analy
 async function getFreshThreadMessagesForFollowUps(email: string, threadIds: string[]) {
   if (!threadIds.length) return new Map<string, GmailThreadMessage[]>();
   const gmail = await getGmailClient(email);
-  const entries = await mapWithConcurrency(threadIds, 2, async (threadId) => {
+  // Las búsquedas amplias pueden reunir muchos hilos. Reducimos la presión
+  // sobre la cuota por usuario de Gmail cuando hay un lote grande.
+  const concurrency = threadIds.length > 20 ? 1 : 2;
+  const entries = await mapWithConcurrency(threadIds, concurrency, async (threadId) => {
     const cacheKey = `${email.toLowerCase()}:${threadId}`;
     const request = threadRequests.get(cacheKey) ?? getThreadMessagesFromGmailWithRetry(gmail, threadId);
     threadRequests.set(cacheKey, request);
@@ -1113,8 +1116,8 @@ async function getThreadMessagesFromGmailWithRetry(gmail: ReturnType<typeof goog
   try {
     return await getThreadMessagesFromGmail(gmail, threadId);
   } catch (error) {
-    if (!isGmailRateLimitError(error) || attempt >= 2) throw error;
-    await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
+    if (!isGmailRateLimitError(error) || attempt >= 3) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 1000 * (2 ** attempt)));
     return getThreadMessagesFromGmailWithRetry(gmail, threadId, attempt + 1);
   }
 }

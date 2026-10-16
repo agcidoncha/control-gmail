@@ -105,7 +105,6 @@ app.get('/', async (_request, reply) => {
               <a class="nav-link" href="#followUpsSection"><span><span class="nav-icon" aria-hidden="true">◷</span>Seguimientos</span> <b id="navFollowUpCount">—</b></a>
               <a class="nav-link" href="#commitmentsSection"><span><span class="nav-icon" aria-hidden="true">☑</span>Compromisos</span> <b id="navCommitmentCount">—</b></a>
               <a class="nav-link" href="#clientsSection"><span><span class="nav-icon" aria-hidden="true">♙</span>Clientes</span></a>
-              <a class="nav-link" href="#reportsSection"><span><span class="nav-icon" aria-hidden="true">▤</span>Informes</span></a>
               <a class="nav-link" href="#assistantSection"><span><span class="nav-icon" aria-hidden="true">✦</span>Consultar a la IA</span></a>
               <a class="nav-link" href="${frontendUrl}/settings/ai"><span><span class="nav-icon" aria-hidden="true">⚙</span>Configuración IA</span></a>
             </nav>
@@ -126,7 +125,6 @@ app.get('/', async (_request, reply) => {
               <section id="followUpsSection" data-screen="follow-ups" class="card section-card"><div class="card-header"><div><h2>Seguimientos pendientes</h2><p>Mensajes enviados sin una respuesta posterior, agrupados por hilo.</p></div><span id="followUpCount" class="muted"></span></div><div id="followUps" class="follow-ups-list">Cargando seguimientos…</div><button id="followUpMoreButton" class="list-toggle hidden" type="button"></button></section>
               <section id="commitmentsSection" data-screen="commitments" class="card section-card"><div class="card-header"><div><h2>Posibles compromisos detectados</h2><p>Frases de los correos que sugieren una tarea, fecha, promesa o respuesta pendiente. Revísalos antes de actuar: no son compromisos confirmados.</p></div><span id="commitmentCount" class="muted"></span></div><div id="commitments" class="follow-ups-list">Cargando compromisos…</div><button id="commitmentMoreButton" class="list-toggle hidden" type="button"></button></section>
               <section id="clientsSection" data-screen="clients" class="card section-card"><div class="card-header"><div><h2>Clientes</h2><p>Contactos detectados en los mensajes de la cuenta activa.</p></div></div><div id="clients" class="details-content">Cargando clientes…</div></section>
-              <section id="reportsSection" data-screen="reports" class="card section-card"><div class="card-header"><div><h2>Informes</h2><p>Resumen de actividad con los datos cargados de la cuenta.</p></div></div><div id="reports" class="details-content">Cargando informe…</div></section>
               <details id="accountSection" data-screen="dashboard" class="card section-card details-card"><summary><div><h2>Tu cuenta</h2><p>Identidad y permisos de la sesión actual.</p></div></summary><div class="details-content"><p id="account" class="status">Cargando…</p><p id="role" class="status"></p><p class="muted">Solo tú puedes consultar los mensajes de esta sesión.</p></div></details>
               <details id="adminPanel" data-screen="dashboard" class="card admin-panel details-card hidden"><summary><div><h2>Administración</h2><p>Gestión de usuarios y roles. El contenido de los correos no aparece aquí.</p></div></summary><div id="users" class="details-content">Cargando usuarios…</div></details>
             </div>
@@ -154,7 +152,6 @@ app.get('/', async (_request, reply) => {
           const navCommitmentCount = document.querySelector('#navCommitmentCount');
           const commitmentMoreButton = document.querySelector('#commitmentMoreButton');
           const clientsNode = document.querySelector('#clients');
-          const reportsNode = document.querySelector('#reports');
           const dashboardGrid = document.querySelector('.dashboard-grid');
           const screenNodes = [...document.querySelectorAll('[data-screen]')];
           let loadedMessages = [];
@@ -206,30 +203,6 @@ app.get('/', async (_request, reply) => {
               clientsNode.append(row);
             });
           }
-          function renderReports() {
-            reportsNode.replaceChildren();
-            const values = loadedInsights ? [
-              ['Mensajes recibidos revisados', loadedInsights.inboxMessages],
-              ['Mensajes enviados revisados', loadedInsights.sentMessages],
-              ['Clientes detectados', loadedInsights.clients.length],
-              ['Seguimientos pendientes', loadedFollowUps.length],
-              ['Compromisos para revisar', loadedCommitments.length],
-            ] : [
-              ['Mensajes cargados', loadedMessages.length],
-              ['Seguimientos pendientes', loadedFollowUps.length],
-              ['Compromisos para revisar', loadedCommitments.length],
-            ];
-            values.forEach(([label, value]) => {
-              const row = document.createElement('div');
-              row.className = 'user-row';
-              row.append(makeTextElement('span', label));
-              row.append(makeTextElement('strong', value));
-              reportsNode.append(row);
-            });
-            reportsNode.append(makeTextElement('p', loadedInsights
-              ? 'El informe revisa los mensajes recientes de recibidos y enviados de la cuenta activa; no modifica ni envía correos.'
-              : 'Este resumen refleja únicamente los datos cargados de la cuenta activa en esta sesión.', 'muted'));
-          }
           async function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -256,7 +229,6 @@ app.get('/', async (_request, reply) => {
               document.querySelector('#navMessageCount').textContent = String(loadedMessages.length);
               document.querySelector('#statMessageCount').textContent = String(loadedMessages.length);
               renderClients();
-              renderReports();
               return;
             }
             messagesNode.replaceChildren();
@@ -282,7 +254,6 @@ app.get('/', async (_request, reply) => {
             document.querySelector('#navMessageCount').textContent = String(loadedMessages.length);
             document.querySelector('#statMessageCount').textContent = String(loadedMessages.length);
             renderClients();
-            renderReports();
           }
           async function loadMessages() {
             messagesNode.textContent = 'Cargando mensajes…';
@@ -298,7 +269,6 @@ app.get('/', async (_request, reply) => {
             if (!response.ok) throw new Error(result.error || 'No se pudo preparar el informe.');
             loadedInsights = result.insights || null;
             renderClients();
-            renderReports();
           }
           function formatMessageDate(value) {
             if (!value) return 'Fecha desconocida';
@@ -329,7 +299,6 @@ app.get('/', async (_request, reply) => {
             });
             followUpMoreButton.classList.toggle('hidden', items.length <= 3);
             followUpMoreButton.textContent = showAllFollowUps ? 'Mostrar menos' : 'Mostrar ' + (items.length - 3) + ' más';
-            renderReports();
             if (messageFilter !== 'all') renderMessages();
           }
           async function loadFollowUps() {
@@ -363,7 +332,6 @@ app.get('/', async (_request, reply) => {
             });
             commitmentMoreButton.classList.toggle('hidden', items.length <= 3);
             commitmentMoreButton.textContent = showAllCommitments ? 'Mostrar menos' : 'Mostrar ' + (items.length - 3) + ' más';
-            renderReports();
             if (messageFilter !== 'all') renderMessages();
           }
           async function loadCommitments() {
@@ -405,7 +373,7 @@ app.get('/', async (_request, reply) => {
                 });
               }
               await loadMessages().catch(() => renderLoadError(messagesNode, 'No se pudieron cargar los mensajes ahora. Inténtalo de nuevo en unos segundos.'));
-              await loadInsights().catch(() => { loadedInsights = null; renderClients(); renderReports(); });
+              await loadInsights().catch(() => { loadedInsights = null; renderClients(); });
               await loadFollowUps().catch(() => {
                 followUpCount.textContent = 'No disponible';
                 navFollowUpCount.textContent = '—';
